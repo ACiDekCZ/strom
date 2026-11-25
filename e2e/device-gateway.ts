@@ -200,6 +200,34 @@ export function fakeFinds(since: string = new Date(Date.now() - 24 * 3600_000).t
     };
 }
 
+/**
+ * Waiting of a glance (spec 094 K3.13 §5) as `at(minutes ago)` dates it: seven items — a task to answer or mark sent,
+ * a growing branch, a hypothesis with two versions (the agent proposes A), a conflict, a task sent already, a task
+ * that can go back to the agent, a task only to answer.
+ */
+export function fakeWaiting(at: (min: number) => string): { n: number; items: Record<string, unknown>[] } {
+    const group = { key: 'archive:mlynky', name: 'Archiv Mlýnky', kind: 'archive' };
+    return {
+        n: 7,
+        items: [
+            { id: 'T0007', kind: 'archive', section: 'archive', phase: 'todo', what: 'Register N Mlýnky 1849–1860, fol. 12', at: at(30), group, person: 'P0001', line: 'G0001', do: ['answer', 'sent'] },
+            { id: 'W-B-P0003', kind: 'branch', section: 'branch', phase: 'todo', what: 'Descendants of Josef Pýchavka grow', on: '7 new people', at: at(26 * 60),
+                group: { key: 'branch', name: 'Branches', kind: 'branch' }, person: 'P0003', branch: 'B0002', do: ['line', 'keep', 'never'] },
+            { id: 'H0002', kind: 'hypothesis', section: 'hypothesis', phase: 'todo', what: 'Was Marie Bedlová born in Mlýnky?', at: at(3 * 24 * 60),
+                group: { key: 'hypothesis', name: 'Hypotheses', kind: 'hypothesis' }, person: 'P0002',
+                hypothesis: { variants: [{ label: 'A', claim: 'Born in Mlýnky 1855' }, { label: 'B', claim: 'Born elsewhere, moved 1870' }], proposal: { variant: 'A', decision: 'The register of Mlýnky names her.' } },
+                do: ['decide'] },
+            { id: 'C0001', kind: 'conflict', section: 'conflict', phase: 'todo', what: 'Birth of Jan Pýchavka', on: 'between two devices', at: at(100),
+                group: { key: 'conflict', name: 'Conflicts', kind: 'conflict' }, person: 'P0001', do: ['keep'] },
+            { id: 'T0011', kind: 'letter', section: 'letter', phase: 'sent', what: 'Letter to the parish of Mlýnky', at: at(5 * 24 * 60), sentAt: at(2 * 24 * 60),
+                group: { key: 'to:mlynky', name: 'Parish Mlýnky', kind: 'office' }, do: ['answer', 'unsent'] },
+            { id: 'T0012', kind: 'archive', section: 'archive', phase: 'todo', what: 'Images of the register Z Mlýnky 1890–1920', at: at(200), group,
+                retry: { can: true, says: '' }, do: ['answer', 'sent', 'retry'] },
+            { id: 'T0013', kind: 'web', section: 'web', phase: 'todo', what: 'Census 1921, Mlýnky 14', at: at(400), group: { key: 'web', name: 'Web', kind: 'web' }, do: ['answer'] },
+        ],
+    };
+}
+
 function readBody(req: IncomingMessage): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const parts: Buffer[] = [];

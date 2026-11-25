@@ -25,6 +25,7 @@
 import { deviceFetch } from './gateway-client';
 import { deviceConnection, onDeviceConnection, onDeviceEvent } from './device-connection';
 import { chosenTreeId, deviceTreeIdOk, findsSeenAt, loadResearchState, saveResearchState } from './device-store';
+import { noteResearchDeviceActions } from '../research-link.js';
 
 // ——— features ———
 
@@ -540,7 +541,11 @@ async function readJson(path: string, treeId: string, signal?: AbortSignal | nul
 
 /** The research's features for a tree (its `/status`); none when it gives no status. */
 export async function readDeviceResearchFeatures(treeId: string, signal?: AbortSignal | null): Promise<DeviceResearchFeatures> {
-    return deviceResearchFeatures(await readJson('status', treeId, signal));
+    const status = await readJson('status', treeId, signal);
+    // What the gateway lets this device decide (spec 094 §6): the screen draws its actions before the tree is here.
+    const device = asRecord(asRecord(status)?.device);
+    if (device) noteResearchDeviceActions(device.actions, device.others);
+    return deviceResearchFeatures(status);
 }
 
 /** A tree's glance (feature `glance`). */

@@ -23805,6 +23805,82 @@
         .phone-research__more:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         @media (hover: hover) { .phone-research__more:hover { background: var(--hover-bg); } }
         .phone-research__chev { flex: none; color: var(--text-faint); }
+        /* Waiting (§5): a row of tags, what waits, whom and since when, its actions (44 px) only as the research offers them. */
+        .phone-sec.is-none .phone-sec__head { display: none; }
+        .phone-sec.is-none .phone-sec__quiet { padding-top: 12px; }
+        .phone-wait { display: flex; flex-direction: column; gap: 2px; margin: 0 16px; padding: 10px 0; border-top: 1px solid var(--border); min-width: 0; }
+        .phone-sec__body > .phone-wait:first-child { border-top: 0; padding-top: 2px; }
+        .phone-wait__tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .phone-wait__tag {
+            display: inline-flex; align-items: center; padding: 0 6px; border-radius: var(--r-tag); background: var(--dir-icon-bg);
+            color: var(--text-light); font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap;
+        }
+        .phone-wait__tag.is-new { background: transparent; color: var(--accent-text); box-shadow: inset 0 0 0 1px var(--accent); }
+        .phone-wait__tag[hidden] { display: none; }
+        .phone-wait__text { margin: 2px 0 0; font-size: 14.5px; line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
+        .phone-wait__meta { display: flex; flex-wrap: wrap; align-items: center; column-gap: 4px; font-size: 12.5px; line-height: 1.35; color: var(--text-light); }
+        .phone-wait__meta-text { min-width: 0; overflow-wrap: anywhere; }
+        .phone-wait__person {
+            display: inline-flex; align-items: center; min-height: 44px; margin: -12px 0; padding: 0; border: 0; background: none;
+            color: var(--primary-dark); font: inherit; font-weight: 500; text-align: start; cursor: pointer; overflow-wrap: anywhere;
+        }
+        .phone-wait__person[hidden] { display: none; }
+        .phone-wait__person:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .phone-wait__note { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .phone-wait__acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+        .phone-wait__note[hidden], .phone-wait__acts[hidden], .phone-wait__problem[hidden] { display: none; }
+        .phone-wait__btn {
+            display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 14px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+            font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer;
+        }
+        .phone-wait__btn.is-link { border-color: transparent; background: none; padding: 0 4px; color: var(--primary-dark); font-weight: 600; }
+        .phone-wait__btn:disabled { opacity: 0.5; cursor: default; }
+        .phone-wait__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .phone-wait__problem { margin: 6px 0 0; font-size: 13px; line-height: 1.4; color: var(--warning-text); overflow-wrap: anywhere; }
+        @media (hover: hover) {
+            .phone-wait__btn:not(:disabled):hover { background: var(--hover-bg); }
+            .phone-wait__person:hover { text-decoration: underline; }
+        }
+        .phone-wait-more {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 48px; margin: 0;
+            padding: 0 16px; box-sizing: border-box; border: 0; border-top: 1px solid var(--divider); border-radius: 0;
+            background: none; color: var(--text); font: inherit; font-size: 15px; font-weight: 500; text-align: start; cursor: pointer;
+        }
+        .phone-wait-more:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) { .phone-wait-more:hover { background: var(--hover-bg); } }
+        /* The answer of a task on the Research screen: the task's line, the field, its files, Take photo | From gallery | File, Send answer. */
+        .phone-answer__meta { flex: none; margin: 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .phone-answer__files-head { flex: none; margin: 4px 0 0; font-size: 12.5px; font-weight: 600; color: var(--text-light); }
+        .phone-answer__files { flex: none; margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--text); }
+        .phone-answer__file { padding: 2px 0; overflow-wrap: anywhere; }
+        .phone-answer__files-head[hidden], .phone-answer__files[hidden] { display: none; }
+        .phone-answer__picks { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .phone-answer__pick {
+            position: relative; display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 12px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+            font-size: 14px; font-weight: 500; cursor: pointer;
+        }
+        .phone-answer__pick.is-wide { grid-column: 1 / -1; min-height: 48px; }
+        .phone-answer__input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+        .phone-answer__pick:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .phone-answer__foot { flex: none; padding: 8px 16px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--divider); }
+        .phone-answer .waiting-answer-sheet__body { padding-bottom: 8px; overflow-y: auto; }
+        .phone-answer__send {
+            width: 100%; min-height: 48px; border: 1px solid var(--primary); border-radius: var(--r-md); background: var(--primary);
+            color: var(--on-primary); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+        }
+        .phone-answer__send[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+        .phone-answer__send:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .phone-answer__pick:hover { background: var(--hover-bg); }
+            .phone-answer__send:not([aria-disabled="true"]):hover { background: var(--primary-dark); }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .phone-answer__picks { grid-template-columns: repeat(3, 1fr); }
+            .phone-answer__pick.is-wide { grid-column: auto; min-height: 44px; }
+            .phone-answer__send { min-height: 44px; }
+        }
         /* The dock (§6; its buttons: D6): Take a photo 48px across, From the gallery | File 44px under it. */
         .phone-dock {
             flex: none; grid-area: dock; background: var(--surface); border-top: 1px solid var(--border);

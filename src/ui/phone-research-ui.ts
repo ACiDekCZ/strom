@@ -25,12 +25,22 @@ import { retryDeviceConnection } from '../device/device-connection.js';
 import {
     heldResearchState, readDeviceResearch, readDeviceResearchFeatures, readFinds, watchDeviceResearch,
     type DeviceFindGroup, type DeviceFindLine, type DeviceFinds,
-    type DeviceGlance, type DeviceGlanceLine, type DeviceGlanceNow, type DeviceResearchFeatures, type DeviceResearchState, type DeviceWay,
+    type DeviceGlance, type DeviceGlanceLine, type DeviceGlanceNow, type DeviceGlanceWaiting, type DeviceResearchFeatures, type DeviceResearchState,
+    type DeviceWaitingDo, type DeviceWay,
 } from '../device/device-research-data.js';
 import { deviceBridgeBase, researchDeviceAllows } from '../research-link.js';
-import { setDirectionState, writeDirectionOrder, type BridgeWriteResult, type DirectionStateDo } from '../research-directions-write.js';
+import {
+    answerBranchWaiting, researchBridgeWrite, setDirectionState, writeDirectionOrder,
+    type BridgeWriteResult, type DirectionStateDo, type DirectionWriteRefused,
+} from '../research-directions-write.js';
+import {
+    WAITING_FILE_ACCEPT, answerWaiting, postWaitingSent, putWaitingFile, retryWaiting, waitingFileTaken,
+    type WaitingRetryRefused, type WaitingWriteRefused,
+} from '../research-waiting-write.js';
+import { WaitingAnswerForm, type WaitingAnswerOutcome } from './waiting-answer-form.js';
+import { deviceHypothesisBody, type DeviceHypothesisDo } from './device-decide-ui.js';
 import { postRunStop } from '../research-runs-write.js';
-import { formatLiveClock } from '../live-time.js';
+import { formatLiveClock, formatWaitingSince } from '../live-time.js';
 import type { ViewMode } from '../types.js';
 
 export const PHONE_RESEARCH_ID = 'phone-research';
@@ -73,7 +83,8 @@ export function phoneScreenFor(o: { features: DeviceResearchFeatures | null; hel
 export interface PhoneTreeTarget {
     view?: ViewMode;
     person?: string;
-    overview?: boolean;
+    /** The overview over the screen; 'waiting': with its Waiting open ("n more" of Waiting). */
+    overview?: boolean | 'waiting';
 }
 
 /** What opening the tree came to (`deviceOpenPhoneTree`). */
@@ -152,7 +163,7 @@ function sectionEl(screen: HTMLElement, key: PhoneSection): { sec: HTMLElement; 
 }
 
 /** The sections whose rows are kept by their keys across a render (only their texts change). */
-const KEYED_SECTIONS: ReadonlySet<PhoneSection> = new Set<PhoneSection>(['now', 'finds', 'lines']);
+const KEYED_SECTIONS: ReadonlySet<PhoneSection> = new Set<PhoneSection>(['now', 'waiting', 'finds', 'lines']);
 
 /** One quiet sentence in a section's body (an empty section, §8 point 8). */
 function quiet(body: HTMLElement, text: string): void {
@@ -398,12 +409,136 @@ export function findGroupSince(g: DeviceFindGroup, windowSince: string | null): 
     return Number.isFinite(w) && g.lines.every(l => isoMs(l.at) >= w) ? windowSince! : oldest;
 }
 
+// ——— Waiting (§5) ———
+
+/** At most this many items of Waiting on the screen; the rest is in the Research overview ("n more"). */
+export const PHONE_WAITING_MAX = 5;
+/** How long an item answered here stays as a row ("Sent 14:41 · 1 photo") after the research no longer lists it. */
+const WAITING_ANSWERED_KEEP_MS = 10 * 60_000;
+
+/** What an item of Waiting is (its tag and its actions). */
+export type PhoneWaitingKind = 'task' | 'branch' | 'hypothesis' | 'conflict';
+
+/** An item's kind by what the research says of it (its kind or section, else its ID: T…, W-B-…, H…). */
+export function phoneWaitingKind(w: Pick<DeviceGlanceWaiting, 'id' | 'kind' | 'section' | 'hypothesis'>): PhoneWaitingKind {
+    const k = `${w.kind}|${w.section}`;
+    if (w.hypothesis || /(^|\|)hypothesis(\||$)/.test(k) || /^H\d/.test(w.id)) return 'hypothesis';
+    if (/(^|\|)branch(\||$)/.test(k) || w.id.startsWith('W-B-')) return 'branch';
+    if (/(^|\|)conflict(\||$)/.test(k)) return 'conflict';
+    return /^T\d/.test(w.id) ? 'task' : 'conflict';
+}
+
+/** The items shown (at most PHONE_WAITING_MAX) and how many more wait (`n`: all of them, the research's count). */
+export function phoneWaitingShown<T>(items: readonly T[], n: number): { items: T[]; more: number } {
+    const shown = items.slice(0, PHONE_WAITING_MAX);
+    return { items: shown, more: Math.max(0, Math.max(n, items.length) - shown.length) };
+}
+
+/** The order of an item's actions by its kind; only those its `do` offers are drawn. */
+const WAITING_ACTION_ORDER: Record<PhoneWaitingKind, readonly DeviceWaitingDo[]> = {
+    task: ['answer', 'sent', 'unsent', 'retry'],
+    branch: ['line', 'keep', 'never'],
+    hypothesis: ['decide'],
+    conflict: ['keep'],
+};
+
+/**
+ * The actions of an item, only those its `do` offers, in the order of its kind: a task's Sent while it is to do,
+ * Back to To do once sent, Retry with the agent when the research says it can go back; a hypothesis decided
+ * here has none. `allows`: what this device may do (§6; absent: everything).
+ */
+export function phoneWaitingActions(w: Pick<DeviceGlanceWaiting, 'id' | 'kind' | 'section' | 'phase' | 'retry' | 'hypothesis' | 'do'>,
+    o: { decided?: boolean; allows?: (d: DeviceWaitingDo) => boolean } = {}): DeviceWaitingDo[] {
+    const kind = phoneWaitingKind(w);
+    if (o.decided) return [];
+    return WAITING_ACTION_ORDER[kind].filter((d) => {
+        if (!w.do.includes(d)) return false;
+        if (d === 'sent' && w.phase !== 'todo') return false;
+        if (d === 'unsent' && w.phase !== 'sent') return false;
+        if (d === 'retry' && !w.retry?.can) return false;
+        return o.allows ? o.allows(d) : true;
+    });
+}
+
+/** Whether an item is new here: after the finds last seen here; nothing seen yet, within the last 24 hours. */
+export function waitingIsNew(at: string, seenAt: string | null, now: number = Date.now()): boolean {
+    const t = isoMs(at);
+    if (!Number.isFinite(t)) return false;
+    const seen = isoMs(seenAt);
+    return Number.isFinite(seen) ? t > seen : now - t < 24 * 3600_000;
+}
+
+/** A sent item's meta: "Sent 14:41 · 1 photo", without files "Sent 14:41". */
+export function phoneWaitingSentMeta(t: string, files: number): string {
+    const r = strings.deviceResearch;
+    return files > 0 ? r.waitingSent(t, files) : r.waitingSentAt(t);
+}
+
+/** A version of a hypothesis as said ("version A"), or "no version holds" for none. */
+function hypoChoiceText(p: { variant?: string; abandon?: true } | undefined): string {
+    if (!p) return '';
+    if (p.abandon) return strings.research.hypoNoneWord;
+    return p.variant ? strings.deviceResearch.hypoVersion(p.variant) : '';
+}
+
+/** What a refused write of a task says at its row. */
+function waitingRefusedText(r: WaitingWriteRefused | WaitingRetryRefused): string {
+    const W = strings.live.waitingWrite;
+    switch (r.code) {
+        case 'busy': return W.busy;
+        case 'locked': return W.locked;
+        case 'app-only': return W.appOnly;
+        case 'bad-body': case 'bad': return W.badBody;
+        case 'not-sendable': return W.notSendable;
+        case 'changed': return strings.live.waitingRetry.errChanged;
+        case 'not': return strings.live.waitingRetry.errNot;
+        case 'limit': return strings.live.waitingRetry.errNot;
+        case 'held': return (r as WaitingWriteRefused).held?.said || W.writeFailed;
+        case 'network': case 'down': case 'failed': return W.failed;
+        default: return W.writeFailed;
+    }
+}
+
+/** What a refused answer to a branch says at its row (as the overview's directions say it). */
+function branchRefusedText(r: DirectionWriteRefused): string {
+    const L = strings.live;
+    switch (r.code) {
+        case 'busy': return L.dirBusy;
+        case 'network': return L.dirBridgeDown;
+        case 'held': return r.held?.said || (r.reason ? L.dirNotSavedSaid(r.reason) : L.dirNotSaved);
+        default: return r.reason ? L.dirNotSavedSaid(r.reason) : L.dirNotSaved;
+    }
+}
+
 /** A stop asked here for a run, until the research says it finishes (or it is gone). */
 const stopsAsked = new Set<string>();
 /** A move of the order of work on its way (the list shown in it at once); null: none. */
 let orderMoving: string[] | null = null;
 /** The research refused the last write of the lines as being written just now: "linesBusy" until a write goes. */
 let linesBusy = false;
+
+/** What a write here did to an item of Waiting, shown until the research says the same (its next glance). */
+interface WaitingHere {
+    /** Marked sent (its moment) or back to do here. */
+    phase?: 'todo' | 'sent';
+    sentAt?: string;
+    /** Answered here: when and with how many files (the row says "Sent 14:41 · 1 photo"). */
+    answered?: { at: string; files: number };
+    /** A hypothesis decided here: what holds ('' none said). */
+    decided?: string;
+    /** Done here (a branch answered, a task back to the agent, a conflict kept): the row goes. */
+    gone?: boolean;
+    /** The item as last seen, its place in the list (an answered one stays a while after the research drops it). */
+    item: DeviceGlanceWaiting;
+    index: number;
+    /** When it was done here (ms). */
+    set: number;
+}
+const waitingHere = new Map<string, WaitingHere>();
+/** A write of an item on its way (its buttons wait). */
+const waitingWriting = new Set<string>();
+/** The research refused an item's last write: its quiet sentence at the row until a write of it goes. */
+const waitingProblems = new Map<string, string>();
 
 /** The finds' window of each tree for this page's life: since they were last seen when the screen first read them (null: the last 24 hours). */
 const findsWindow = new Map<string, string | null>();
@@ -499,6 +634,203 @@ function fillLineRow(row: HTMLElement, o: { n?: number; way: DeviceWay; name: st
     row.classList.toggle('is-off', !!o.off);
     const more = row.querySelector<HTMLElement>('.phone-line__more');
     if (more && more.getAttribute('aria-label') !== o.menu) more.setAttribute('aria-label', o.menu);
+}
+
+// ——— Waiting's rows (§5) ———
+
+/** The answer's sheet of a task on the screen. */
+const PHONE_ANSWER_ID = 'phone-waiting-answer';
+
+function waitingHereKey(treeId: string, id: string): string {
+    return `${treeId}|${id}`;
+}
+
+/** What a write did here to an item (shown at once, until the research says the same). */
+function setWaitingHere(item: DeviceGlanceWaiting, what: Omit<WaitingHere, 'item' | 'index' | 'set'>): void {
+    const treeId = phoneResearchTreeId();
+    if (!treeId) return;
+    const items = shownState?.glance?.waiting.items ?? [];
+    const key = waitingHereKey(treeId, item.id);
+    const was = waitingHere.get(key);
+    const index = Math.max(0, items.findIndex(x => x.id === item.id));
+    waitingHere.set(key, { ...what, item, index: was?.index ?? index, set: Date.now() });
+}
+
+/** Whether the research says what was done here (the overlay can go). */
+function waitingSettled(item: DeviceGlanceWaiting, here: WaitingHere, now: number): boolean {
+    if (now - here.set > WAITING_ANSWERED_KEEP_MS) return true;
+    if (here.answered || here.gone || here.decided !== undefined) return false;
+    return here.phase !== undefined && item.phase === here.phase;
+}
+
+/**
+ * The items of Waiting as shown: the research's, each with what was done here; those done here (gone) left out;
+ * an item answered here stays at its place a while after the research no longer lists it.
+ */
+function phoneWaitingList(g: DeviceGlance, treeId: string, now: number = Date.now()): { item: DeviceGlanceWaiting; here?: WaitingHere }[] {
+    const ids = new Set(g.waiting.items.map(i => i.id));
+    const out: { item: DeviceGlanceWaiting; here?: WaitingHere }[] = [];
+    for (const item of g.waiting.items) {
+        const key = waitingHereKey(treeId, item.id);
+        let here = waitingHere.get(key);
+        if (here && waitingSettled(item, here, now)) {
+            waitingHere.delete(key);
+            here = undefined;
+        }
+        if (!here?.gone) out.push(here ? { item, here } : { item });
+    }
+    for (const [key, here] of waitingHere) {
+        if (!key.startsWith(`${treeId}|`) || ids.has(here.item.id)) continue;
+        if (here.answered && now - here.set <= WAITING_ANSWERED_KEEP_MS) out.splice(Math.min(here.index, out.length), 0, { item: here.item, here });
+        else waitingHere.delete(key);
+    }
+    return out;
+}
+
+/** How many items the research still lists that are done here (not counted in the heading). */
+function phoneWaitingHidden(g: DeviceGlance, treeId: string): number {
+    return g.waiting.items.filter(i => waitingHere.get(waitingHereKey(treeId, i.id))?.gone).length;
+}
+
+/** An item shown now by its ID. */
+function phoneWaitingFind(id: string): { item: DeviceGlanceWaiting; here?: WaitingHere } | null {
+    const g = shownState?.glance;
+    const treeId = phoneResearchTreeId();
+    if (!g || !treeId) return null;
+    return phoneWaitingList(g, treeId).find(x => x.item.id === id) ?? null;
+}
+
+/** What a row of Waiting shows. */
+interface WaitingRowData {
+    id: string;
+    tag: string;
+    isNew: boolean;
+    text: string;
+    /** Whom it is about (P…) and the name its link says. */
+    person?: string;
+    personName?: string;
+    meta: string;
+    /** The quiet sentence of what is decided on the computer (a conflict). */
+    note?: string;
+    acts: { do: DeviceWaitingDo; label: string; cls: string }[];
+    busy: boolean;
+    problem?: string;
+}
+
+const WAITING_TAGS: Record<PhoneWaitingKind, () => string> = {
+    task: () => strings.deviceResearch.kindTask,
+    branch: () => strings.deviceResearch.kindBranch,
+    hypothesis: () => strings.deviceResearch.kindHypothesis,
+    conflict: () => strings.deviceResearch.kindConflict,
+};
+
+/** A button's words and look by the action. */
+function waitingActLabel(d: DeviceWaitingDo): { label: string; cls: string } {
+    const r = strings.deviceResearch;
+    const L = strings.live;
+    switch (d) {
+        case 'answer': return { label: strings.research.answer, cls: 'is-outline' };
+        case 'sent': return { label: L.waitingWrite.sent, cls: 'is-link' };
+        case 'unsent': return { label: L.waitingWrite.unsent, cls: 'is-link' };
+        case 'retry': return { label: L.waitingRetry.action, cls: 'is-outline' };
+        case 'line': return { label: L.dirCreate, cls: 'is-outline' };
+        case 'keep': return { label: r.waitingKeep, cls: 'is-outline' };
+        case 'never': return { label: L.offModeCap.never, cls: 'is-link' };
+        case 'decide': return { label: r.waitingDecide, cls: 'is-outline' };
+    }
+}
+
+/** A row's data from the item and what was done here. */
+function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | undefined, o: {
+    g: DeviceGlance; lang: string; now: number; seen: string | null; pc: string; allows: (d: DeviceWaitingDo) => boolean;
+}): WaitingRowData {
+    const r = strings.deviceResearch;
+    const kind = phoneWaitingKind(item);
+    const clock = (iso: string): string => formatLiveClock(Date.parse(iso), o.now, o.lang);
+    const since = formatWaitingSince(Date.parse(item.at), o.now, o.lang, { justNow: strings.research.justNow, yesterday: strings.live.waitingSinceYesterday });
+    const phase = here?.phase ?? item.phase;
+    const sentAt = here?.phase === 'sent' ? here.sentAt : item.sentAt;
+    const decided = here?.decided !== undefined;
+    let meta: string;
+    let personShown = true;
+    if (here?.answered) {
+        meta = phoneWaitingSentMeta(clock(here.answered.at), here.answered.files);
+        personShown = false;
+    } else if (decided) {
+        meta = [r.waitingDecided, here!.decided].filter(Boolean).join(' · ');
+    } else if (kind === 'task' && phase === 'sent') {
+        meta = sentAt ? phoneWaitingSentMeta(clock(sentAt), 0) : strings.live.waitingWrite.sent;
+        personShown = false;
+    } else if (kind === 'hypothesis') {
+        const proposed = hypoChoiceText(item.hypothesis?.proposal);
+        meta = [proposed ? r.waitingProposal(proposed) : '', since].filter(Boolean).join(' · ');
+    } else {
+        meta = [kind === 'task' ? '' : item.on ?? '', since].filter(Boolean).join(' · ');
+    }
+    const person = personShown && item.person && o.g.people[item.person] ? item.person : undefined;
+    const acts = here?.answered ? [] : phoneWaitingActions({ ...item, phase }, { decided, allows: o.allows });
+    return {
+        id: item.id,
+        tag: WAITING_TAGS[kind](),
+        isNew: !here && waitingIsNew(item.at, o.seen, o.now),
+        text: item.what,
+        ...(person ? { person, personName: o.g.people[person].name } : {}),
+        meta,
+        ...(kind === 'conflict' ? { note: phoneComputerOnlyNote('conflict', o.pc) } : {}),
+        acts: acts.map(d => ({ do: d, ...waitingActLabel(d) })),
+        busy: waitingWriting.has(item.id),
+        ...(waitingProblems.has(item.id) ? { problem: waitingProblems.get(item.id) } : {}),
+    };
+}
+
+/** A row of Waiting: tags, what waits, whom and since when, the quiet note, the actions, the refusal. */
+function makeWaitingRow(): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'phone-wait';
+    row.innerHTML = '<div class="phone-wait__tags"><span class="phone-wait__tag"></span><span class="phone-wait__tag is-new"></span></div>'
+        + '<p class="phone-wait__text"></p>'
+        + '<div class="phone-wait__meta"><button type="button" class="phone-wait__person" data-act="waiting-person"></button><span class="phone-wait__meta-text"></span></div>'
+        + '<p class="phone-wait__note"></p><div class="phone-wait__acts"></div><p class="phone-wait__problem" role="status"></p>';
+    return row;
+}
+
+function fillWaitingRow(row: HTMLElement, d: WaitingRowData): void {
+    row.dataset.id = d.id;
+    const [tag, fresh] = Array.from(row.querySelectorAll<HTMLElement>('.phone-wait__tag'));
+    setText(tag, d.tag);
+    setText(fresh, strings.deviceResearch.findNew);
+    fresh.hidden = !d.isNew;
+    setText(row.querySelector('.phone-wait__text'), d.text);
+    const person = row.querySelector<HTMLElement>('.phone-wait__person')!;
+    setText(person, d.personName ?? '');
+    person.hidden = !d.person;
+    if (d.person) person.dataset.person = d.person;
+    else delete person.dataset.person;
+    setText(row.querySelector('.phone-wait__meta-text'), d.person && d.meta ? `· ${d.meta}` : d.meta);
+    const note = row.querySelector<HTMLElement>('.phone-wait__note')!;
+    setText(note, d.note ?? '');
+    note.hidden = !d.note;
+    const acts = row.querySelector<HTMLElement>('.phone-wait__acts')!;
+    const sig = d.acts.map(a => `${a.do}:${a.label}`).join('|');
+    if (acts.dataset.sig !== sig) {
+        acts.dataset.sig = sig;
+        acts.replaceChildren(...d.acts.map((a) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = `phone-wait__btn ${a.cls}`;
+            b.dataset.act = 'waiting-do';
+            b.dataset.do = a.do;
+            b.dataset.id = d.id;
+            b.textContent = a.label;
+            return b;
+        }));
+    }
+    acts.hidden = !d.acts.length;
+    for (const b of Array.from(acts.children) as HTMLButtonElement[]) b.disabled = d.busy;
+    row.classList.toggle('is-busy', d.busy);
+    const problem = row.querySelector<HTMLElement>('.phone-wait__problem')!;
+    setText(problem, d.problem ?? '');
+    problem.hidden = !d.problem;
 }
 
 /** A find's words into `el`: its quiet prefix, the record's words, its quiet suffix. */
@@ -743,6 +1075,9 @@ export const phoneResearchMethods = uiModule({
             else if (act === 'find-group' && at?.dataset.group) this.openPhoneFindGroup(at.dataset.group, at.dataset.older === '1');
             else if (act === 'finds-older') void this.phoneFindsOlder();
             else if (act === 'finds-new') this.phoneScrollToFinds();
+            else if (act === 'waiting-do' && at?.dataset.id && at.dataset.do) this.phoneWaitingDo(at.dataset.id, at.dataset.do as DeviceWaitingDo);
+            else if (act === 'waiting-person' && at?.dataset.person) void this.phoneOpenTree({ person: at.dataset.person });
+            else if (act === 'waiting-more') void this.phoneOpenTree({ overview: 'waiting' });
         });
         const tabbar = document.getElementById('bottom-bar');
         if (tabbar?.parentElement) tabbar.parentElement.insertBefore(screen, tabbar);
@@ -878,13 +1213,299 @@ export const phoneResearchMethods = uiModule({
         syncRows(el.body, rows);
     },
 
-    /** Waiting (§5; its rows: D5). Nothing waits: the section goes, one sentence said in its place. */
-    appendPhoneWaiting(el: { sec: HTMLElement; head: HTMLElement; sum: HTMLElement; body: HTMLElement }, state: DeviceResearchState): void {
+    /**
+     * Waiting (§5): at most PHONE_WAITING_MAX items, then "n more" to the Research overview's Waiting. Each item: its
+     * kind's tag (and "new"), what waits, whom and since when, and only the actions its `do` offers (44 px, through
+     * the bridge, no mark; nothing that starts an agent). A write shows at once and keeps the row (its texts change,
+     * nothing flashes); a refusal says the research's quiet sentence at the row. Nothing waits: the section's
+     * heading goes, one quiet sentence stays.
+     */
+    appendPhoneWaiting(el: PhoneSectionEl, state: DeviceResearchState): void {
         const r = strings.deviceResearch;
-        const n = state.glance?.waiting.n ?? 0;
-        el.head.textContent = r.waitingTitle(n);
+        const g = state.glance;
+        const treeId = phoneResearchTreeId() ?? '';
+        const list = g ? phoneWaitingList(g, treeId) : [];
+        const n = Math.max(0, (g?.waiting.n ?? 0) - (g ? phoneWaitingHidden(g, treeId) : 0));
+        setText(el.head, r.waitingTitle(n));
         el.sec.dataset.count = String(n);
-        if (!n) quiet(el.body, r.waitingNone);
+        const none = !n && !list.length;
+        el.sec.classList.toggle('is-none', none);
+        if (none) {
+            syncRows(el.body, [quietRow('none', r.waitingNone)]);
+            return;
+        }
+        const shown = phoneWaitingShown(list, n);
+        const lang = getCurrentLanguage();
+        const now = Date.now();
+        const seen = treeId ? findsWindow.get(treeId) ?? null : null;
+        const pc = computerName();
+        const allows = (d: DeviceWaitingDo): boolean => researchDeviceAllows(d === 'decide' ? 'hypothesis' : 'waiting-answer');
+        const rows: KeyedRow[] = shown.items.map(({ item, here }) => ({
+            key: `w:${item.id}`,
+            make: makeWaitingRow,
+            fill: (row: HTMLElement) => fillWaitingRow(row, phoneWaitingRowData(item, here, { g: g!, lang, now, seen, pc, allows })),
+        }));
+        if (shown.more) {
+            rows.push({
+                key: 'more',
+                make: () => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'phone-wait-more';
+                    b.dataset.act = 'waiting-more';
+                    b.innerHTML = `<span class="phone-wait-more__text"></span>${CHEVRON}`;
+                    return b;
+                },
+                fill: (b: HTMLElement) => setText(b.querySelector('.phone-wait-more__text'), r.waitingMore(shown.more)),
+            });
+        }
+        syncRows(el.body, rows);
+    },
+
+    /** An action of an item of Waiting (its `do`). */
+    phoneWaitingDo(id: string, d: DeviceWaitingDo): void {
+        const found = phoneWaitingFind(id);
+        if (!found) return;
+        const { item } = found;
+        const kind = phoneWaitingKind(item);
+        const L = strings.live;
+        if (d === 'answer') {
+            this.openPhoneWaitingAnswer(item);
+            return;
+        }
+        if (d === 'decide') {
+            this.openPhoneHypothesis(item);
+            return;
+        }
+        if (d === 'sent' || d === 'unsent') {
+            void this.phoneWaitingWrite(item, async (base) => {
+                const res = await postWaitingSent(base, item.id, d);
+                return res.ok ? { ok: true } : res.code === 'none' ? { ok: false, none: true } : { ok: false, text: waitingRefusedText(res) };
+            }, () => setWaitingHere(item, d === 'sent' ? { phase: 'sent', sentAt: new Date().toISOString() } : { phase: 'todo' }));
+            return;
+        }
+        if (d === 'retry') {
+            void this.phoneWaitingWrite(item, async (base) => {
+                const res = await retryWaiting(base, item.id, { expect: item.at });
+                return res.ok ? { ok: true } : res.code === 'none' ? { ok: false, none: true } : { ok: false, text: waitingRefusedText(res) };
+            }, () => {
+                setWaitingHere(item, { gone: true });
+                const working = !!shownState?.glance?.now.length;
+                this.showToast(working ? L.waitingRetry.doneRunning : L.waitingRetry.doneIdle, 6000);
+            });
+            return;
+        }
+        if (kind === 'branch' && (d === 'line' || d === 'keep' || d === 'never')) {
+            void this.phoneWaitingWrite(item, async (base) => {
+                const res = await answerBranchWaiting(base, item.id, d);
+                return res.ok ? { ok: true } : res.code === 'none' ? { ok: false, none: true } : { ok: false, text: branchRefusedText(res) };
+            }, () => {
+                setWaitingHere(item, { gone: true });
+                this.showToast(d === 'line' ? L.dirToastAdded : d === 'never' ? L.dirToastBranchOff : L.dirToastSaved, 6000);
+            });
+            return;
+        }
+        if (kind === 'conflict' && d === 'keep') {
+            void this.phoneWaitingWrite(item, async (base) => {
+                const res = await researchBridgeWrite(base, 'POST', `waiting/${encodeURIComponent(item.id)}`, { do: 'keep' }, () => ({}));
+                return res.ok ? { ok: true } : res.code === 'none' ? { ok: false, none: true } : { ok: false, text: branchRefusedText(res) };
+            }, () => setWaitingHere(item, { gone: true }));
+        }
+    },
+
+    /**
+     * One write of an item through the bridge: its buttons wait meanwhile; taken, `done` says what changed here (the
+     * row at once) and the research is read again; gone meanwhile (404), the row goes; refused, the quiet sentence at
+     * the row until a write of it goes.
+     */
+    async phoneWaitingWrite(item: DeviceGlanceWaiting, write: (base: string) => Promise<{ ok: boolean; none?: boolean; text?: string }>,
+        done: () => void): Promise<boolean> {
+        const treeId = phoneResearchTreeId();
+        if (!treeId || waitingWriting.has(item.id)) return false;
+        waitingWriting.add(item.id);
+        waitingProblems.delete(item.id);
+        this.renderPhoneResearch();
+        let res: { ok: boolean; none?: boolean; text?: string };
+        try {
+            res = await write(deviceBridgeBase(treeId));
+        } finally {
+            waitingWriting.delete(item.id);
+        }
+        if (res.ok) done();
+        else if (res.none) setWaitingHere(item, { gone: true });
+        else waitingProblems.set(item.id, res.text || strings.live.waitingWrite.failed);
+        this.renderPhoneResearch();
+        if (res.ok || res.none) void this.refreshPhoneResearch();
+        return res.ok;
+    },
+
+    /**
+     * Decide… of a hypothesis (§5, 5.4): its versions ("Version A holds", the claim, the agent's proposal at its
+     * version), No version holds, Leave open and As the agent proposes, each through the gateway's own
+     * `device/hypothesis/<H>`. Decided: "Decided in the research" at the row, its buttons gone.
+     */
+    openPhoneHypothesis(item: DeviceGlanceWaiting): void {
+        const r = strings.deviceResearch;
+        const R = strings.research;
+        const h = item.hypothesis;
+        const proposal = h?.proposal;
+        const rows: { label: string; run: () => void; sub?: string; id?: string }[] = [];
+        for (const v of h?.variants ?? []) {
+            const sub = [v.claim, proposal?.variant === v.label ? r.agentProposal : ''].filter(Boolean).join(' · ');
+            rows.push({ label: r.hypoHolds(v.label), sub, id: `phone-hypo-${v.label}`, run: () => { void this.phoneDecideHypothesis(item, 'decide', v.label); } });
+        }
+        rows.push({ label: R.hypoNone, id: 'phone-hypo-none', run: () => { void this.phoneDecideHypothesis(item, 'abandon'); } });
+        rows.push({ label: R.hypoLeave, id: 'phone-hypo-open', run: () => { void this.phoneDecideHypothesis(item, 'keep-open'); } });
+        if (proposal && (proposal.variant || proposal.abandon)) {
+            rows.push({ label: r.hypoByProposal, sub: hypoChoiceText(proposal), id: 'phone-hypo-proposed', run: () => { void this.phoneDecideHypothesis(item, 'proposed'); } });
+        }
+        const since = formatWaitingSince(Date.parse(item.at), Date.now(), getCurrentLanguage(), { justNow: R.justNow, yesterday: strings.live.waitingSinceYesterday });
+        this.presentMenuSheet(item.what, [{ rows }], { subtitle: `${r.kindHypothesis} · ${since}`, overlayClass: 'phone-sheet-overlay' });
+    },
+
+    /** A hypothesis decided through the gateway (`device/hypothesis/<H>`); decided already elsewhere: said, the row goes. */
+    async phoneDecideHypothesis(item: DeviceGlanceWaiting, what: DeviceHypothesisDo, variant?: string): Promise<void> {
+        const D = strings.device;
+        const body = deviceHypothesisBody(what, variant);
+        if (!body || !researchDeviceAllows('hypothesis')) return;
+        let gone = false;
+        const ok = await this.phoneWaitingWrite(item, async (base) => {
+            const res = await researchBridgeWrite(base, 'POST', `device/hypothesis/${encodeURIComponent(item.id)}`, body, () => ({}));
+            if (res.ok) return { ok: true };
+            gone = res.status === 409 && res.errorCode === 'hypothesis.gone';
+            return gone ? { ok: false, none: true } : { ok: false, text: D.hypoFailed };
+        }, () => {
+            const holds = what === 'decide' ? { variant } : what === 'abandon' ? { abandon: true as const } : what === 'proposed' ? item.hypothesis?.proposal : undefined;
+            if (what === 'keep-open') setWaitingHere(item, { gone: true });
+            else setWaitingHere(item, { decided: hypoChoiceText(holds) });
+        });
+        if (ok) this.showToast(D.hypoDecided, 3000);
+        else if (gone) this.showToast(D.hypoGone, 3000);
+    },
+
+    /**
+     * Answer of a task (§5, 5.2) on the screen: the answer's form full screen (the tree's sheet needs the tree; this
+     * one only the bridge), Take photo / From gallery / File for the task, "Send answer". The files go to the task
+     * first, then the answer; taken, the row says "Sent 14:41 · 1 photo".
+     */
+    openPhoneWaitingAnswer(item: DeviceGlanceWaiting): void {
+        const treeId = phoneResearchTreeId();
+        if (!treeId || !researchDeviceAllows('waiting-answer')) return;
+        document.getElementById(PHONE_ANSWER_ID)?.remove();
+        const T = strings.live.waitingTask;
+        const r = strings.deviceResearch;
+        const R = strings.research;
+        const node = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] => {
+            const n = document.createElement(tag);
+            n.className = cls;
+            if (text !== undefined) n.textContent = text;
+            return n;
+        };
+        const sheet = node('div', 'modal-overlay active waiting-answer-sheet phone-answer');
+        sheet.id = PHONE_ANSWER_ID;
+        sheet.dataset.id = item.id;
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+        sheet.setAttribute('aria-labelledby', `${PHONE_ANSWER_ID}-title`);
+        const head = node('div', 'waiting-answer-sheet__head');
+        const cancel = node('button', 'waiting-answer-sheet__cancel', T.cancel);
+        cancel.type = 'button';
+        const title = node('h2', 'waiting-answer-sheet__title', R.answer);
+        title.id = `${PHONE_ANSWER_ID}-title`;
+        head.append(cancel, title, node('span', 'phone-answer__spacer'));
+        const what = node('p', 'waiting-answer-sheet__task', item.what);
+        const person = item.person ? shownState?.glance?.people[item.person]?.name : '';
+        const since = formatWaitingSince(Date.parse(item.at), Date.now(), getCurrentLanguage(), { justNow: R.justNow, yesterday: strings.live.waitingSinceYesterday });
+        const meta = node('p', 'phone-answer__meta', [r.kindTask, person, since].filter(Boolean).join(' · '));
+        const body = node('div', 'waiting-answer-sheet__body');
+        const files: File[] = [];
+        let sentFiles = 0;
+        const filesHead = node('p', 'phone-answer__files-head');
+        const filesList = node('ul', 'phone-answer__files');
+        const drawFiles = (): void => {
+            filesHead.textContent = r.answerFiles(files.length);
+            filesHead.hidden = !files.length;
+            filesList.replaceChildren(...files.map(f => node('li', 'phone-answer__file', f.name || r.file)));
+            filesList.hidden = !files.length;
+        };
+        const pick = (label: string, cls: string, accept: string, capture: boolean): HTMLElement => {
+            const lab = node('label', `phone-answer__pick ${cls}`);
+            const input = node('input', 'phone-answer__input');
+            input.type = 'file';
+            input.accept = accept;
+            if (capture) input.setAttribute('capture', 'environment');
+            else input.multiple = true;
+            input.addEventListener('change', () => {
+                for (const f of Array.from(input.files ?? [])) if (waitingFileTaken(f)) files.push(f);
+                input.value = '';
+                drawFiles();
+            });
+            lab.append(input, node('span', 'phone-answer__pick-text', label));
+            return lab;
+        };
+        const picks = node('div', 'phone-answer__picks');
+        picks.append(pick(T.takePhoto, 'is-wide', 'image/*', true), pick(T.fromGallery, '', 'image/*', false), pick(r.file, '', WAITING_FILE_ACCEPT, false));
+        const send = node('button', 'phone-answer__send', T.answerSend);
+        send.type = 'button';
+        const foot = node('div', 'phone-answer__foot');
+        foot.append(send);
+        const close = (): void => {
+            form.keepDraftNow();
+            sheet.remove();
+        };
+        const form: WaitingAnswerForm = new WaitingAnswerForm({
+            treeId, task: item.id, idPrefix: `phone-answer-${item.id}`, buttons: false,
+            send: async (text): Promise<WaitingAnswerOutcome> => {
+                const base = deviceBridgeBase(treeId);
+                // The files first (each once), then the answer: an answer never goes without what it speaks of.
+                while (sentFiles < files.length) {
+                    const res = await putWaitingFile(base, item.id, files[sentFiles]);
+                    if (!res.ok) return res.code === 'busy' || res.code === 'locked' ? 'busy' : res.code === 'none' ? 'gone' : 'fail';
+                    sentFiles++;
+                }
+                const res = await answerWaiting(base, item.id, { text, expect: item.at });
+                if (res.ok) {
+                    setWaitingHere(item, { answered: { at: new Date().toISOString(), files: sentFiles } });
+                    this.showToast(T.answerSaved, 6000);
+                    return 'saved';
+                }
+                switch (res.code) {
+                    case 'none': setWaitingHere(item, { gone: true }); return 'gone';
+                    case 'changed': return 'changed';
+                    case 'no-answer': return 'no-answer';
+                    case 'busy': case 'locked': return 'busy';
+                    default: return 'fail';
+                }
+            },
+            cancel: close,
+            done: () => {
+                sheet.remove();
+                this.renderPhoneResearch();
+                void this.refreshPhoneResearch();
+            },
+            onChange: (f) => {
+                send.setAttribute('aria-disabled', String(!f.canSend));
+                send.textContent = f.error ? T.retry : T.answerSend;
+                send.classList.toggle('is-sending', f.sending);
+            },
+        });
+        cancel.onclick = () => form.cancel();
+        send.onclick = () => {
+            if (send.getAttribute('aria-disabled') === 'true') return;
+            void form.submit();
+        };
+        sheet.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.stopPropagation();
+                form.cancel();
+            }
+        });
+        body.append(meta, form.root, filesHead, filesList, picks);
+        sheet.append(head, what, body, foot);
+        drawFiles();
+        document.body.append(sheet);
+        send.setAttribute('aria-disabled', String(!form.canSend));
+        form.focus();
     },
 
     /**
@@ -1304,7 +1925,7 @@ export const phoneResearchMethods = uiModule({
             treesOpened.add(treeId);
             if (target.overview) {
                 this.renderPhoneDock();
-                this.openResearchOverview();
+                this.openResearchOverview(target.overview === 'waiting' ? { showWaiting: true } : {});
                 return true;
             }
             if (phoneResearchShown()) {
@@ -1387,6 +2008,9 @@ export function resetPhoneResearchForTests(): void {
     stopsAsked.clear();
     orderMoving = null;
     linesBusy = false;
+    waitingHere.clear();
+    waitingWriting.clear();
+    waitingProblems.clear();
     findsWindow.clear();
     findsSeen = null;
     findsSeenOf = null;

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { seedResearchPromoSeen, seedWhatsNewSeen } from './helpers.js';
-import { startDeviceGateway, fakeGlance, fakeFinds, type FakeGateway, type TunnelReply } from './device-gateway.js';
+import { startDeviceGateway, fakeGlance, fakeFinds, fakeWaiting, type FakeGateway, type TunnelReply } from './device-gateway.js';
 
 /**
  * A phone's Research screen (spec 094 K3.13, §1, §7, §8 points 6–7) through
@@ -551,5 +551,130 @@ test.describe('Finds (en)', () => {
         await expect(screen(page).locator('.phone-sec[data-sec="finds"]')).toBeInViewport();
         await expect(pill).toBeHidden();
         await noMarks(page);
+    });
+});
+
+/** The research's other answers as before; GET status says the gateway decides hypotheses; `answer` gives the writes. */
+function waitingResearch(gw: FakeGateway, waiting: unknown, answer: (req: { p: string; m: string; b?: unknown }) => TunnelReply | undefined = () => undefined): void {
+    research(gw);
+    gw.glance = () => fakeGlance({ id: PYCH, name: NAME }, { waiting });
+    const before = gw.onTunnel;
+    gw.onTunnel = async (req, device) => {
+        if (req.p === 'status' && req.m === 'GET') {
+            return { s: 200, body: { ok: true, features: ['device.gateway', 'glance', 'finds', 'finds.person'], tree: { id: PYCH, name: NAME },
+                device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair', 'hypothesis.decide'], others: 0 } } };
+        }
+        return answer(req) ?? before(req, device);
+    };
+}
+
+const waitRows = (page: Page) => screen(page).locator('.phone-sec[data-sec="waiting"] .phone-wait');
+const waitRow = (page: Page, id: string) => screen(page).locator(`.phone-sec[data-sec="waiting"] .phone-wait[data-id="${id}"]`);
+
+test.describe('Waiting (en)', () => {
+    test.use({ locale: 'en-US', timezoneId: 'UTC' });
+    const at = (min: number): string => new Date(T - min * 60_000).toISOString();
+
+    test.beforeEach(async ({ page }) => {
+        await page.clock.setFixedTime(T);
+        gw.clockOffsetMs = T - Date.now();
+    });
+
+    test('seven items: five, then "2 more"; each its kind and only the actions its do offers; a conflict only Keep with the quiet sentence', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        waitingResearch(gw, fakeWaiting(at));
+        await seeds(page);
+        await pairedOnScreen(page, gw);
+        const sec = screen(page).locator('.phone-sec[data-sec="waiting"]');
+        await expect(sec.locator('.phone-sec__title')).toHaveText('Waiting · 7');
+        await expect(waitRows(page)).toHaveCount(5);
+        const shown = await waitRows(page).evaluateAll(rs => rs.map(r => ({
+            id: (r as HTMLElement).dataset.id,
+            tags: Array.from(r.querySelectorAll('.phone-wait__tag')).filter(t => !(t as HTMLElement).hidden).map(t => t.textContent),
+            acts: Array.from(r.querySelectorAll('.phone-wait__btn')).map(b => b.textContent),
+            note: (r.querySelector('.phone-wait__note') as HTMLElement).hidden ? null : r.querySelector('.phone-wait__note')!.textContent,
+        })));
+        expect(shown).toEqual([
+            { id: 'T0007', tags: ['Task', 'new'], acts: ['Answer', 'Sent'], note: null },
+            { id: 'W-B-P0003', tags: ['Branch'], acts: ['Create direction', 'Keep', 'Never'], note: null },
+            { id: 'H0002', tags: ['Hypothesis'], acts: ['Decide…'], note: null },
+            { id: 'C0001', tags: ['Conflict', 'new'], acts: ['Keep'], note: 'It is decided on Pracovna.' },
+            { id: 'T0011', tags: ['Task'], acts: ['Answer', 'Back to To do'], note: null },
+        ]);
+        await expect(waitRow(page, 'T0007').locator('.phone-wait__meta')).toHaveText(/^Jan Pýchavka· 30 min/);
+        await expect(waitRow(page, 'H0002').locator('.phone-wait__meta-text')).toHaveText(/^agent’s proposal: version A · /);
+        await expect(waitRow(page, 'T0011').locator('.phone-wait__meta')).toHaveText(/^Sent /);
+        for (const b of await screen(page).locator('.phone-wait__btn').all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await expect(sec.locator('.phone-wait-more')).toHaveText('2 more');
+        await noMarks(page);
+        await expect(screen(page).locator('.phone-sec[data-sec="waiting"]')).not.toContainText(/agent:|Discuss|Leave to the agent/i);
+        await shot(page, 'vyzkum-ceka-390');
+    });
+
+    test('Answer: the form full screen, sent through the gateway; the row says it was sent', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        waitingResearch(gw, fakeWaiting(at), req => (req.p === 'waiting/T0007' && req.m === 'POST' ? { s: 200, body: { task: 'T0007', head: '4d8b0f2a16c3' } } : undefined));
+        await seeds(page);
+        await pairedOnScreen(page, gw);
+        await waitRow(page, 'T0007').getByRole('button', { name: 'Answer' }).click();
+        const sheet = page.locator('#phone-waiting-answer');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.phone-answer__pick')).toHaveText(['Take photo', 'From gallery', 'File']);
+        await sheet.locator('textarea').fill('Found on fol. 12, baptised 3 March 1851.');
+        await sheet.getByRole('button', { name: 'Send answer' }).click();
+        await expect(sheet).toHaveCount(0);
+        expect(writes('waiting/T0007').map(w => w.b)).toEqual([{ do: 'answer', text: 'Found on fol. 12, baptised 3 March 1851.', expect: at(30) }]);
+        await expect(waitRow(page, 'T0007').locator('.phone-wait__meta')).toHaveText(/^Sent 11:00/);
+        await expect(waitRow(page, 'T0007').locator('.phone-wait__btn')).toHaveCount(0);
+        // The tree was never asked for.
+        expect(gw.tunnelled.filter(r => r.p === 'tree.ged')).toHaveLength(0);
+    });
+
+    test('a branch: Keep sends its answer, the row goes; a refusal says the quiet sentence at the row', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        let refuse = true;
+        waitingResearch(gw, fakeWaiting(at), (req) => {
+            if (req.p !== 'waiting/W-B-P0003' || req.m !== 'POST') return undefined;
+            if (refuse) {
+                refuse = false;
+                return { s: 503, body: { code: 'busy' } };
+            }
+            return { s: 200, body: { branch: 'B0002', answer: 'keep', head: '4d8b0f2a16c3' } };
+        });
+        await seeds(page);
+        await pairedOnScreen(page, gw);
+        const row = waitRow(page, 'W-B-P0003');
+        await row.getByRole('button', { name: 'Keep' }).click();
+        await expect(row.locator('.phone-wait__problem')).toHaveText('Not saved, the research is busy.');
+        await row.getByRole('button', { name: 'Keep' }).click();
+        await expect(row).toHaveCount(0);
+        expect(writes('waiting/W-B-P0003').map(w => w.b)).toEqual([{ do: 'keep' }, { do: 'keep' }]);
+        await expect(screen(page).locator('.phone-sec[data-sec="waiting"] .phone-sec__title')).toHaveText('Waiting · 6');
+    });
+
+    test('a hypothesis: Decide… offers its versions; one sends device/hypothesis/<H>, the row says it is decided', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        waitingResearch(gw, fakeWaiting(at), req => (req.p === 'device/hypothesis/H0002' && req.m === 'POST' ? { s: 200, body: {} } : undefined));
+        await seeds(page);
+        await pairedOnScreen(page, gw);
+        await waitRow(page, 'H0002').getByRole('button', { name: 'Decide…' }).click();
+        await expect(sheet(page).locator('.bottom-sheet-menu-title')).toContainText('Was Marie Bedlová born in Mlýnky?');
+        await expect(sheet(page)).toContainText('Version B holds');
+        await expect(sheet(page)).toContainText('As the agent proposes');
+        await sheet(page).getByText('Version A holds').click();
+        await expect(waitRow(page, 'H0002').locator('.phone-wait__meta')).toHaveText('Decided in the research · version A');
+        await expect(waitRow(page, 'H0002').locator('.phone-wait__btn')).toHaveCount(0);
+        expect(writes('device/hypothesis/H0002').map(w => w.b)).toEqual([{ variant: 'A' }]);
+    });
+
+    test('nothing waits: the heading goes, one quiet sentence', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        waitingResearch(gw, { n: 0, items: [] });
+        await seeds(page);
+        await pairedOnScreen(page, gw);
+        const sec = screen(page).locator('.phone-sec[data-sec="waiting"]');
+        await expect(sec.locator('.phone-sec__quiet')).toHaveText('Nothing is waiting.');
+        await expect(sec.locator('.phone-sec__head')).toBeHidden();
+        await expect(sec.locator('.phone-wait')).toHaveCount(0);
     });
 });
