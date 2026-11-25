@@ -216,6 +216,9 @@ test.describe('files of a book\'s inbox set aside in Awaiting action', () => {
         await expect(problem).toHaveText('Number 5 already has another scan.');
         // The item stays, the number kept for another try.
         await expect(field).toHaveValue('5');
+        // The refused answer's working state ends on the redrawn Save (at least 300 ms once shown, on a slow
+        // runner): a click before that is swallowed by its lock.
+        await expect(save).not.toHaveAttribute('data-busy', /^(lock|busy)$/);
         await field.fill('7');
         await save.click();
         await expect(sec(page).locator(`.research-overview__waiting-item[data-id="${OTHER}"]`)).toHaveCount(0);
