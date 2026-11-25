@@ -874,6 +874,12 @@ export const bottomSheetMethods = uiModule({
                 text.className = 'research-sheet-state-text';
                 text.id = 'research-sheet-state-text';
                 text.textContent = st.title;
+                line.append(dot, text);
+                list.appendChild(line);
+            }
+            if (group.state?.action) {
+                const st = { ...group.state, action: group.state.action };
+                const line = list.querySelector<HTMLElement>('#research-sheet-state')!;
                 const act = document.createElement('button');
                 act.type = 'button';
                 act.className = st.action.asLink ? 'research-sync-link' : 'primary btn-sm research-sync-btn';
@@ -885,11 +891,17 @@ export const bottomSheetMethods = uiModule({
                     this.hideBottomSheet();
                     st.action.run();
                 });
-                line.append(dot, text, act);
-                list.appendChild(line);
+                line.appendChild(act);
             }
             for (const row of group.rows) {
-                list.appendChild(makeButton({ label: row.label, run: row.run, badge: row.count, warnBadge: true, ai: row.ai, ext: row.ext, ariaLabel: row.ariaLabel, value: row.value, id: row.id }));
+                const btn = makeButton({ label: row.label, run: row.run, badge: row.count, warnBadge: true, ai: row.ai, ext: row.ext, ariaLabel: row.ariaLabel, value: row.value, id: row.id });
+                if (row.disabled) {
+                    // Grey and still read by a screen reader (a disabled button would be skipped).
+                    btn.classList.add('is-disabled');
+                    btn.setAttribute('aria-disabled', 'true');
+                    btn.addEventListener('click', (e) => e.stopImmediatePropagation(), { capture: true });
+                }
+                list.appendChild(btn);
             }
             allRow = document.createElement('button');
             allRow.type = 'button';

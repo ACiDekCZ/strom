@@ -90,6 +90,7 @@ export const deviceModeMethods = uiModule({
     refreshDeviceModeUi(): void {
         const on = inDeviceMode();
         document.body.classList.toggle('device-mode', on);
+        this.refreshDeviceOffline();
         const el = document.getElementById(CONN_ID);
         if (!el) return;
         if (!on) {

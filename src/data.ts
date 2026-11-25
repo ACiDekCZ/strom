@@ -620,6 +620,7 @@ class DataManagerClass {
      * the tree index or the undo history of this window.
      */
     private windowSink: WindowEditSink | null = null;
+    private heldReadOnly: (() => boolean) | null = null;
     /** Called after every save of the open tree (and every undo/redo); see onTreeSaved(). */
     private saveListeners = new Set<() => void>();
     private embeddedEnvelope: EmbeddedDataEnvelope | null = null;
@@ -821,10 +822,20 @@ class DataManagerClass {
      */
     isTreeLocked(opts: LockCheck = {}): boolean {
         if (this.windowSink?.readOnly()) return true;
+        if (this.heldReadOnly?.()) return true;
         if (!opts.exceptFollow && this.isLiveFollowing()) return true;
         if (this.isNewerData()) return true;
         const meta = TreeManager.getActiveTreeMetadata();
         return meta?.isLocked === true;
+    }
+
+    /**
+     * A further reason the open tree is read-only now: a device of the home
+     * network away from the computer with the research shows the tree as last
+     * known, nothing edited until it is back (spec 094 §7). Null: none.
+     */
+    setHeldReadOnly(check: (() => boolean) | null): void {
+        this.heldReadOnly = check;
     }
 
     /** Mark the tree that follows a live research (null = none). */

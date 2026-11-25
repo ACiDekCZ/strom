@@ -403,6 +403,11 @@ export function deviceConnection(): DeviceConnection | null {
     return controller ? controller.current() : null;
 }
 
+/** Try the connection again now (the person's "Try again"); nothing outside the device mode. */
+export function retryDeviceConnection(): void {
+    controller?.retryNow();
+}
+
 /** Each change of the connection's state; returns the unsubscribe (nothing outside the device mode). */
 export function onDeviceConnection(cb: (c: DeviceConnection) => void): () => void {
     return controller ? controller.onChange(cb) : () => undefined;

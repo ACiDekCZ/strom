@@ -33,6 +33,7 @@ import { researchOpenMark, researchActionLabel, researchActionMark, researchMark
 import { researchOpenSvg } from '../history-symbols.js';
 import { overviewInWindow } from '../windows/overview-window.js';
 import { inDeviceMode } from './device-mode-ui.js';
+import { deviceDownNow } from './device-offline-ui.js';
 
 export { researchOpenMark } from './research-open-mark.js';
 
@@ -146,12 +147,14 @@ export interface ResearchSheetRow {
     /** A quiet value at the end ("1 284"). */
     value?: string;
     id?: string;
+    /** Grey, not run (a device without its computer, spec 094 §7). */
+    disabled?: boolean;
 }
 
 /** The More sheet's research group (a narrow window with a mouse): the state in one line and the frequent actions. */
 export interface ResearchSheetGroup {
     /** The state, when its block offers something: its title and first action. */
-    state?: { tone: string; title: string; action: { label: string; asLink: boolean; research?: boolean; ai?: boolean; run: () => void } };
+    state?: { tone: string; title: string; action?: { label: string; asLink: boolean; research?: boolean; ai?: boolean; run: () => void } };
     rows: ResearchSheetRow[];
 }
 
@@ -557,8 +560,12 @@ export const researchActionsMethods = uiModule({
         const blocks = (syncBlock || followingBlock) + this.researchOlderBlockHtml();
         // On a device (spec 094 §6) only what it does through the bridge; one quiet sentence says where the rest is.
         const onlyComputer = device ? strings.device.onlyComputerAll(researchDeviceState()?.computer ?? '') : undefined;
+        // A device without its computer (spec 094 §7, 7.3): all grey but "Add materials…" (its photos wait here).
+        const away = (list: SubmenuItem[]): SubmenuItem[] => device && deviceDownNow()
+            ? list.map(i => i.id === 'research-item-batch' ? i : { ...i, disabled: true })
+            : list;
         return {
-            foot: !!ctx, blocks, first: first.filter(itemAllowed), more: more.filter(itemAllowed), moreQuiet: moreQuiet.filter(itemAllowed),
+            foot: !!ctx, blocks, first: away(first.filter(itemAllowed)), more: away(more.filter(itemAllowed)), moreQuiet: away(moreQuiet.filter(itemAllowed)),
             moreAttention: device ? '' : moreAttention, note, waiting, tools: device ? [] : tools, ...(onlyComputer ? { onlyComputer } : {}),
         };
     },
@@ -926,13 +933,16 @@ export const researchActionsMethods = uiModule({
             items.push({ id: 'research-item-waiting', label: strings.research.waiting, method: 'researchActionWaiting' });
         }
         const order = (i: SubmenuItem): number => device ? frequent.indexOf(i.id) : 0;
-        const rows: ResearchSheetRow[] = items.filter(i => frequent.includes(i.id) && !i.disabled).sort((a, b) => order(a) - order(b)).map(i => ({
+        const away = device && deviceDownNow() !== null;
+        const rows: ResearchSheetRow[] = items.filter(i => frequent.includes(i.id) && (!i.disabled || away)).sort((a, b) => order(a) - order(b)).map(i => ({
             label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i), value: i.val, id: `sheet-${i.id}`,
+            ...(away && i.id !== 'research-item-batch' ? { disabled: true } : {}),
             run: () => ui[i.method](...(i.args ?? [])),
         }));
         // A batch going on (its sheet closed): its row first, back to its list.
         const sending = this.batchSheetRow();
         if (sending) rows.unshift({ ...sending, ariaLabel: `${sending.label} · ${sending.value}`, id: 'sheet-batch-sending' });
+        if (away) return { rows, state: { tone: 'warn', title: this.deviceDownStateLine() } };
         const block = this.researchSyncBlockData();
         const first = block?.actions[0];
         return {

@@ -23611,6 +23611,72 @@
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .device-home-line { top: var(--toolbar-h); left: var(--side-bar-w, 0px); }
         }
+        /* A device without its computer (spec 094 §7): the quiet line over the content — no box, no stripe —
+           in the home line's place (it gives way meanwhile), and the tree as last known, read only, its cards dimmed. */
+        .qline {
+            display: flex; align-items: center; gap: 8px; padding: 8px 12px; box-sizing: border-box;
+            background: var(--toolbar-bg, var(--surface)); border-bottom: 1px solid var(--border);
+            font-size: 13px; color: var(--text-light); line-height: 1.35;
+        }
+        .qline b { color: var(--text); font-weight: 600; }
+        .device-qline { position: fixed; top: var(--toolbar-h, 56px); left: 0; right: 0; z-index: 99; }
+        .qline-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; overflow-wrap: anywhere; }
+        .qline-link {
+            padding: 2px 0; border: 0; background: none; color: var(--primary-dark); font: inherit; font-weight: 600;
+            text-align: start; cursor: pointer; border-radius: var(--r-sm, 4px); overflow-wrap: anywhere; -webkit-tap-highlight-color: transparent;
+        }
+        .qline-act {
+            flex: none; padding: 6px 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+            font: inherit; font-weight: 500; border-radius: var(--r-md); cursor: pointer; white-space: nowrap;
+        }
+        .qline-act:disabled { color: var(--text-faint); cursor: default; }
+        @media (hover: hover) {
+            .qline-link:hover { text-decoration: underline; }
+            .qline-act:not(:disabled):hover { background: var(--hover-bg); }
+        }
+        .qline-link:focus-visible, .qline-act:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) {
+            .qline-link { min-height: 44px; }
+            .qline-act { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            body.has-focus-panel:not(.descendants-view):not(.standalone-view) .device-qline { top: calc(var(--toolbar-h) + 48px); }
+            body.has-focus-panel.focus-steppers-open:not(.descendants-view):not(.standalone-view) .device-qline { top: calc(var(--toolbar-h) + 100px); }
+            .device-qline { padding: 6px 12px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .device-qline { top: var(--toolbar-h); left: var(--side-bar-w, 0px); padding: 4px 12px; }
+            .device-qline .qline-body { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 12px; }
+        }
+        body.device-down #tree-container .person-card { opacity: .62; }
+        /* What waits on this device (7.4): the photos' thumbnails, the persons edited, save and discard. */
+        .device-waiting { display: flex; flex-direction: column; gap: 14px; }
+        .device-waiting--sheet { padding: 4px 16px 16px; }
+        .device-waiting-note { margin: 0; font-size: 13px; color: var(--text-light); line-height: 1.4; }
+        .device-waiting-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+        .device-waiting-th {
+            aspect-ratio: 1; overflow: hidden; background: var(--avatar-bg, var(--hover-bg));
+            border: 1px solid var(--border); border-radius: var(--r-md);
+        }
+        .device-waiting-th img { display: block; width: 100%; height: 100%; object-fit: cover; }
+        .device-waiting-count { margin: 6px 0 0; font-size: 12.5px; color: var(--text-faint); }
+        .device-waiting-rows { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+        .device-waiting-row { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+        .device-waiting-name { font-size: 15px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
+        .device-waiting-kinds { font-size: 12.5px; color: var(--text-faint); overflow-wrap: anywhere; }
+        .device-waiting-actions { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+        .device-waiting-save { min-height: 40px; padding: 8px 14px; border-radius: var(--r-md); }
+        .device-waiting-discard {
+            align-self: center; padding: 6px 12px; border: 0; background: none; color: var(--error-text);
+            font: inherit; font-weight: 500; cursor: pointer; border-radius: var(--r-md);
+        }
+        @media (hover: hover) { .device-waiting-discard:hover { text-decoration: underline; } }
+        .device-waiting-discard:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) { .device-waiting-discard, .device-waiting-save { min-height: 44px; } }
+        @media (min-width: 641px) { .device-waiting-dialog { width: min(480px, calc(100vw - 32px)); } }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .device-waiting-thumbs { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
+        }
         /* "How" of the home-screen icon (2.6, 2.7): this system first. */
         .device-home-dialog { width: min(440px, calc(100vw - 32px)); }
         .device-home-content { display: flex; flex-direction: column; gap: 12px; }
