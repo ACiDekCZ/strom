@@ -479,7 +479,8 @@ describe('K1.8 storage an older app reads', () => {
         const data = family();
         data.personLists = [stored()];
         const back = migrateData(JSON.parse(JSON.stringify(data)));
-        expect(back.personLists?.[0]).toEqual(stored());
+        // The people of an automatic list are worked out as it is read (N4a).
+        expect(back.personLists?.[0]).toEqual(stored({ personIds: [id('viktor'), id('konst'), id('ada')] }));
         expect(sanitizePersonLists(JSON.parse(JSON.stringify([stored({ origin: { by: 'agent', at: '2026-11-16T10:30:00.000Z', agent: 'x' } })]))))
             .toEqual([stored({ origin: { by: 'agent', at: '2026-11-16T10:30:00.000Z', agent: 'x' } })]);
     });
@@ -535,16 +536,25 @@ describe('Findings of the check of spec 136 (N3, N4)', () => {
         expect(listOriginText(near)).toMatch(/^From template “From a place and surroundings” · /);
     });
 
-    it('N4a: an automatic custom list read without its people has them at once; people it came with stay until a save', () => {
+    it('N4a: an automatic custom list read without its people, with none or with old ones has them at once', () => {
         const data = family();
         const { personIds: _p, ...bare } = stored();
+        const read = () => migrateData(JSON.parse(JSON.stringify(data))).personLists?.map(l => l.personIds);
         data.personLists = [bare as PersonList];
-        expect(migrateData(JSON.parse(JSON.stringify(data))).personLists?.[0].personIds).toEqual(['viktor', 'konst', 'ada']);
+        expect(read()).toEqual([['viktor', 'konst', 'ada']]);
+        // An empty array (an agent, another app) is not "nobody": the rule says who.
+        data.personLists = [{ ...bare, personIds: [] } as PersonList];
+        expect(read()).toEqual([['viktor', 'konst', 'ada']]);
         data.personLists = [stored()];
-        expect(migrateData(JSON.parse(JSON.stringify(data))).personLists?.[0].personIds).toEqual(['konst']);
-        // A fixed custom list or a rule this app cannot read is not worked out.
-        data.personLists = [{ ...bare, custom: { ...custom, auto: false } } as PersonList, { ...bare, id: 'c2', name: 'Newer', custom: newer } as unknown as PersonList];
-        expect(migrateData(JSON.parse(JSON.stringify(data))).personLists?.map(l => l.personIds)).toEqual([[], []]);
+        expect(read()).toEqual([['viktor', 'konst', 'ada']]);
+        // A fixed or frozen custom list and a rule this app cannot read keep their people, empty or not.
+        data.personLists = [
+            { ...bare, custom: { ...custom, auto: false }, personIds: ['konst'] } as PersonList,
+            { ...bare, id: 'c4', custom: { ...custom, auto: false }, personIds: [] } as PersonList,
+            { ...bare, id: 'c2', name: 'Newer', custom: newer, personIds: [] } as unknown as PersonList,
+            { ...bare, id: 'c3', name: 'Newer kept', custom: newer, personIds: ['ada'] } as unknown as PersonList,
+        ];
+        expect(read()).toEqual([['konst'], [], [], ['ada']]);
     });
 
     it('N4b: a rule of a newer app is kept as it came, the list fixed with its people; an app that reads it takes it back', () => {

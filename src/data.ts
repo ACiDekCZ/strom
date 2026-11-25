@@ -488,8 +488,6 @@ export function migrateData(data: unknown): StromData {
     // v22: the lists of people and the ready-made lists deleted (src/person-lists-data.ts).
     const personLists = sanitizePersonLists(d.personLists);
     if (personLists) result.personLists = personLists;
-    // Automatic custom lists that came without their people (an agent, another app; spec 136 K1.8).
-    const unsnapped = personLists ? listsWithoutPeople(d.personLists) : null;
     const personListsDropped = sanitizePersonListsDropped(d.personListsDropped);
     if (personListsDropped) result.personListsDropped = personListsDropped;
 
@@ -527,35 +525,27 @@ export function migrateData(data: unknown): StromData {
     pruneMedia(result);
     // A pooled image's reference only where an image may be (validation.ts dropStrayPoolRefs).
     dropStrayPoolRefs(result);
-    if (unsnapped?.size) snapshotCustomLists(result, unsnapped);
+    // The people of the automatic custom lists as the tree is read (spec 136 K1.8).
+    snapshotCustomLists(result);
 
     return result;
 }
 
-/** Ids of the stored lists that carry no `personIds` at all. */
-function listsWithoutPeople(raw: unknown): Set<string> {
-    const out = new Set<string>();
-    if (!Array.isArray(raw)) return out;
-    for (const r of raw) {
-        if (r && typeof r === 'object' && typeof (r as { id?: unknown }).id === 'string' && !Array.isArray((r as { personIds?: unknown }).personIds)) {
-            out.add((r as { id: string }).id);
-        }
-    }
-    return out;
-}
-
 /**
- * The people of the automatic custom lists (of `ids`) worked out as the tree
- * is read, so an export right after carries them for an older app (spec 136
- * K1.8) without waiting for a save; a save refreshes them anyway. Only in
- * the data read: nothing is stored here. Mutates `data`.
+ * The people of every automatic custom list worked out as the tree is read,
+ * so an export right after carries them for an older app (spec 136 K1.8)
+ * without waiting for a save. Whatever came in their place (none, an empty
+ * array from an agent or another app, an old snapshot) is only a snapshot of
+ * the rule, so nothing is lost. A fixed or frozen list and a rule kept as it
+ * came (customUnknown) keep their people. Nothing is stored here; a save
+ * refreshes them anyway. Mutates `data`.
  */
-function snapshotCustomLists(data: StromData, ids: ReadonlySet<string>): void {
+function snapshotCustomLists(data: StromData): void {
     const lists = data.personLists;
-    if (!lists?.some(l => ids.has(l.id) && l.custom?.auto)) return;
+    if (!lists?.some(l => l.custom?.auto)) return;
     try {
         const index = buildLineages(data);
-        data.personLists = lists.map(l => (ids.has(l.id) ? withCustomSnapshot(index, l) ?? l : l));
+        data.personLists = lists.map(l => withCustomSnapshot(index, l) ?? l);
     } catch (e) {
         console.warn('Custom list snapshot failed', e);
     }
