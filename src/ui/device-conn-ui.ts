@@ -254,6 +254,7 @@ export const deviceConnMethods = uiModule({
         else if (act === 'disconnect-cancel') this.renderDeviceConnMain();
         else if (act === 'disconnect-ok') void this.disconnectThisDevice();
         else if (act === 'save-photos') void photoSaver?.();
+        else if (act === 'discard-photos') void this.discardDevicePhotosHere();
     },
 
     /** Rename: the name in a field in place, Save / Cancel. */
@@ -330,8 +331,12 @@ export const deviceConnMethods = uiModule({
         const pending = waiting.photos + waiting.edits > 0
             ? `<p class="device-conn-quiet">${esc(`${d.pending(waiting.photos, waiting.edits)}. ${d.pendingStay}`)}</p>`
             : '';
-        const save = waiting.photos > 0 && photoSaver
-            ? `<button type="button" class="device-conn-link" data-act="save-photos">${esc(d.savePhotos)}</button>`
+        // Save photos to the device (when the photos' part gives a saver) · Discard… (confirmed; the edits stay)
+        const save = waiting.photos > 0
+            ? '<div class="device-conn-keep">'
+                + (photoSaver ? `<button type="button" class="device-conn-link" data-act="save-photos">${esc(d.savePhotos)}</button>` : '')
+                + `<button type="button" class="device-conn-link device-conn-discard" data-act="discard-photos">${esc(strings.batch.discardDevice)}</button>`
+                + '</div>'
             : '';
         this.deviceConnTitle(d.disconnectAsk);
         const cancel = `<button type="button" class="secondary" data-act="disconnect-cancel">${esc(strings.buttons.cancel)}</button>`;
@@ -344,6 +349,15 @@ export const deviceConnMethods = uiModule({
         const buttons = host.closest('.modal')?.querySelector<HTMLElement>('.device-conn-buttons');
         if (buttons) buttons.innerHTML = cancel + ok;
         (buttons ?? host).querySelector<HTMLElement>('[data-act="disconnect-cancel"]')?.focus();
+    },
+
+    /** Discard… in the disconnect confirmation: once confirmed, the confirmation counts again. */
+    async discardDevicePhotosHere(): Promise<void> {
+        const host = this.deviceConnHost();
+        if (!host) return;
+        const gone = await this.askDiscardDevicePhotos();
+        if (gone > 0 && this.deviceConnHost() === host) await this.showDeviceDisconnect();
+        else host.querySelector<HTMLElement>('[data-act="discard-photos"]')?.focus();
     },
 
     async disconnectThisDevice(): Promise<void> {

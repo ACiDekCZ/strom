@@ -256,14 +256,19 @@ export function queueEntryIsPhoto(entry: unknown): boolean {
         || (typeof Blob !== 'undefined' && (e.blob instanceof Blob || e.file instanceof Blob));
 }
 
-/** The photos and edits waiting on this device (the queue kept over an unpairing). */
+/**
+ * The photos and edits waiting on this device (the queue kept over an
+ * unpairing). A kept batch (`batch:<tree>`, its `photos`) counts each photo.
+ */
 export async function queueCounts(): Promise<{ photos: number; edits: number }> {
     let photos = 0;
     let edits = 0;
     for (const id of await deviceQueue.ids().catch(() => [] as string[])) {
         const entry = await deviceQueue.get(id).catch(() => undefined);
         if (entry === undefined) continue;
-        if (queueEntryIsPhoto(entry)) photos++;
+        const kept = entry && typeof entry === 'object' ? (entry as { photos?: unknown }).photos : undefined;
+        if (Array.isArray(kept)) photos += kept.length;
+        else if (queueEntryIsPhoto(entry)) photos++;
         else edits++;
     }
     return { photos, edits };

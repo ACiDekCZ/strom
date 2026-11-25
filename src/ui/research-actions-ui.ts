@@ -930,6 +930,9 @@ export const researchActionsMethods = uiModule({
             label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i), value: i.val, id: `sheet-${i.id}`,
             run: () => ui[i.method](...(i.args ?? [])),
         }));
+        // A batch going on (its sheet closed): its row first, back to its list.
+        const sending = this.batchSheetRow();
+        if (sending) rows.unshift({ ...sending, ariaLabel: `${sending.label} · ${sending.value}`, id: 'sheet-batch-sending' });
         const block = this.researchSyncBlockData();
         const first = block?.actions[0];
         return {

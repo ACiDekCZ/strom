@@ -138,6 +138,21 @@ const fetcher = (): typeof fetch => options.fetch ?? ((...a: Parameters<typeof f
 const sleep = (ms: number): Promise<void> => (options.sleep ?? (m => new Promise(r => setTimeout(r, m))))(ms);
 const url = (path: string, base = options.base ?? ''): string => `${base.replace(/\/+$/, '')}${path}`;
 
+/** The gateway's clock said by a 409 device.clock `{now}`: this device's evened out to it (PUT /device/media too). */
+export function evenGatewayClock(now: number): void {
+    clockSkew = now - nowMs();
+}
+
+/** An outcome of a request made outside `tunnel` (PUT /device/media): told to the connection's state as the tunnel's are. */
+export function reportGatewayOutcome(o: GatewayOutcome): void {
+    report(o);
+}
+
+/** The address of a path of the gateway (its origin from the options, '' = this page's). */
+export function gatewayUrl(path: string): string {
+    return url(path);
+}
+
 /** The device's time for a request: its clock evened out to the gateway's. */
 export function gatewayTime(): number {
     return Math.round(nowMs() + clockSkew);

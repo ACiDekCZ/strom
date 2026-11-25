@@ -23,6 +23,8 @@ import { Person, PersonId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { researchLinkMark } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
+import { deviceBlobUrl, openBridgeFile } from '../device/device-bridge.js';
+import { parseDeviceBridge } from '../research-link.js';
 import {
     MaterialItem, cachedMaterialList, materialFileItem, materialType, materialKindLabel, materialFolder,
     materialFromKey, fileExt, fileUrl, thumbUrl, materialSystemLink, getCachedThumb, researchMakesThumb,
@@ -252,7 +254,19 @@ function viewerCard(letters: string, text: string, buttons: CardButton[], previe
         const img = h('img');
         img.alt = '';
         img.onerror = () => { tile.textContent = letters; };
-        img.src = preview;
+        if (parseDeviceBridge(preview)) {
+            // A preview of the bridge on a device (spec 094 P3): its bytes through the tunnel, never asked of
+            // the device base itself (the gateway does not serve it); the viewer lets the URL go when it closes.
+            const held = viewer;
+            void deviceBlobUrl(preview).then((url) => {
+                if (!url) { tile.textContent = letters; return; }
+                if (held && viewer === held) held.urls.push(url);
+                else setTimeout(() => URL.revokeObjectURL(url), 60_000);
+                img.src = url;
+            });
+        } else {
+            img.src = preview;
+        }
         tile.appendChild(img);
     } else {
         tile.textContent = letters;
@@ -294,7 +308,7 @@ export const materialViewerMethods = uiModule({
         const ctx = this.materialsContext();
         const sha = materialItemSha(item);
         if (!item.file || !ctx?.caps.bridgeUp || !ctx.base || !sha || !item.here) return false;
-        window.open(fileUrl(ctx.base, sha), '_blank', 'noopener');
+        openBridgeFile(fileUrl(ctx.base, sha));
         return true;
     },
 
@@ -643,7 +657,7 @@ export const materialViewerMethods = uiModule({
         }
         if (type === 'pdf') {
             if (pdf) slots.card(viewerCard('PDF', m.pdfText, [{ label: m.openPdf, run: () => openPdfBlob(pdf), primary: true }]));
-            else if (up && sha) slots.card(viewerCard('PDF', m.pdfText, [{ label: m.openPdf, run: () => { window.open(fileUrl(ctx!.base!, sha), '_blank', 'noopener'); }, primary: true }]));
+            else if (up && sha) slots.card(viewerCard('PDF', m.pdfText, [{ label: m.openPdf, run: () => openBridgeFile(fileUrl(ctx!.base!, sha)), primary: true }]));
             else slots.card(viewerCard('PDF', m.opensWhenRunning, [...start, ...openSystem]));
             return;
         }

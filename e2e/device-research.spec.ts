@@ -24,6 +24,10 @@ const TREE = '7c3e1f20-5a4b-4d6e-9f80-1a2b3c4d5e6f';
 const HEAD = '5d2e8a7c1b94';
 const PNG = readFileSync('e2e/fixtures/avatar.png');
 const SHA = createHash('sha256').update(PNG).digest('hex');
+/** A PDF of the bridge (opened in a new tab) and a HEIC (the viewer's card with the research's preview). */
+const PDF = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n');
+const PDF_SHA = createHash('sha256').update(PDF).digest('hex');
+const HEIC_SHA = createHash('sha256').update('nahrobek.heic').digest('hex');
 const ACCEPTS = {
     mode: 'research', sync: { auto: 'off' }, sources: true, verified: true,
     media: { max: 500 * 1024 * 1024, region: true, tasks: 'open', batch: { files: 5000, bytes: 20 * 1024 * 1024 * 1024, zip: true } },
@@ -62,11 +66,18 @@ function bridge(req: DeviceRequest, device: { id: string; name: string; kind: st
     if (req.p === 'material') {
         return { s: 200, body: {
             files: [{ id: 'I0001', name: 'svatba-1924.png', sha: SHA, mime: 'image/png', bytes: PNG.length, at: '2026-11-20T10:00:00Z',
-                persons: ['P0001'], state: 'processed', kind: 'photo', title: 'Svatba 1924' }],
+                persons: ['P0001'], state: 'processed', kind: 'photo', title: 'Svatba 1924' },
+            { id: 'I0002', name: 'kronika-mlynky.pdf', sha: PDF_SHA, mime: 'application/pdf', bytes: PDF.length, at: '2026-11-20T10:05:00Z',
+                persons: ['P0001'], state: 'processed', kind: 'document', title: 'Kronika Mlýnků' },
+            { id: 'I0003', name: 'nahrobek.heic', sha: HEIC_SHA, mime: 'image/heic', bytes: 2_400_000, at: '2026-11-20T10:10:00Z',
+                persons: ['P0001'], state: 'processed', kind: 'photo', title: 'Náhrobek v Mlýnkách' }],
             batches: [], people: { P0001: 'Bonifác Pýchavka' },
         } };
     }
     if (req.p === `media/${SHA}`) return { s: 200, h: { 'Content-Type': 'image/png' }, body: new Uint8Array(PNG) };
+    if (req.p === `media/${PDF_SHA}`) return { s: 200, h: { 'Content-Type': 'application/pdf' }, body: new Uint8Array(PDF) };
+    // The research's preview of the HEIC (a PNG here).
+    if (req.p === `media/${HEIC_SHA}` && req.q?.thumb) return { s: 200, h: { 'Content-Type': 'image/png' }, body: new Uint8Array(PNG) };
     return undefined;
 }
 
@@ -276,6 +287,55 @@ test.describe('the research through the gateway', () => {
         await expect(overlay).not.toHaveClass(/is-card/);
         await expect(image).toBeVisible();
 
+        expect(direct).toEqual([]);
+        expect(gw.requests.filter(r => r.includes('/__device/'))).toEqual([]);
+    });
+    test('a PDF of the bridge opens in a new tab from the bytes read through the tunnel, never from the address itself', async ({ page }) => {
+        const direct = watchDirect(page);
+        await pairedTree(page, { lang: 'en', width: 1440, dark: false });
+        await page.locator('#research-menu-btn').click();
+        await page.locator('#research-item-more').click();
+        await page.locator('#research-item-materials').click();
+        const tile = page.locator('#materials-modal .mw-canvas .mw-tile', { hasText: 'Kronika Mlýnků' });
+        await expect(tile).toBeVisible();
+        // The new tab recorded (a headless browser saves a PDF instead of showing it): opened empty within the
+        // click, then sent to a blob URL of the bytes the tunnel brought.
+        await page.evaluate(() => {
+            const w = window as unknown as { __opened: string[]; open: (u?: string) => unknown };
+            w.__opened = [];
+            w.open = (u?: string) => {
+                w.__opened.push(u ?? '');
+                return { closed: false, close() { this.closed = true; }, location: { set href(v: string) { w.__opened.push(v); }, get href() { return ''; } } };
+            };
+        });
+        await tile.click();
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)).toEqual(['', expect.stringMatching(/^blob:/)]);
+        const blob = await page.evaluate(async () => {
+            const url = (window as unknown as { __opened: string[] }).__opened[1];
+            const b = await (await fetch(url)).blob();
+            return { type: b.type, head: (await b.text()).slice(0, 8) };
+        });
+        expect(blob).toEqual({ type: 'application/pdf', head: '%PDF-1.4' });
+        expect(gw.tunnelled.some(r => r.p === `media/${PDF_SHA}` && r.q?.file === '1')).toBe(true);
+        expect(direct).toEqual([]);
+        expect(gw.requests.filter(r => r.includes('/__device/'))).toEqual([]);
+    });
+
+    test('the viewer\'s card of a file the browser does not show has the research\'s preview as a blob URL', async ({ page }) => {
+        const direct = watchDirect(page);
+        await pairedTree(page, { lang: 'en', width: 1440, dark: false });
+        await page.locator('#research-menu-btn').click();
+        await page.locator('#research-item-more').click();
+        await page.locator('#research-item-materials').click();
+        const tile = page.locator('#materials-modal .mw-canvas .mw-tile', { hasText: 'Náhrobek v Mlýnkách' });
+        await expect(tile).toBeVisible();
+        await tile.click();
+        const overlay = page.locator('#attachment-overlay');
+        await expect(overlay).toHaveClass(/is-card/);
+        const preview = overlay.locator('.mv-card-tile img');
+        await expect(preview).toHaveAttribute('src', /^blob:/);
+        await expect.poll(() => preview.evaluate(el => (el as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+        expect(gw.tunnelled.some(r => r.p === `media/${HEIC_SHA}` && !!r.q?.thumb)).toBe(true);
         expect(direct).toEqual([]);
         expect(gw.requests.filter(r => r.includes('/__device/'))).toEqual([]);
     });

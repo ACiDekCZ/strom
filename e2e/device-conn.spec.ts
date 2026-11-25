@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { seedResearchPromoSeen, seedWhatsNewSeen } from './helpers.js';
 import { startDeviceGateway, type FakeGateway } from './device-gateway.js';
@@ -84,6 +84,38 @@ async function queue(page: Page, entries: Record<string, unknown>): Promise<void
         });
         db.close();
     }, entries);
+}
+
+/** Photos kept on the device for the tree (a batch not handed over yet: `batch:<tree>` in the queue, its files as Blobs). */
+async function keptPhotos(page: Page, names: string[]): Promise<void> {
+    await page.evaluate(async ({ tree, names }) => {
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+            const req = indexedDB.open('strom-device', 1);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        const photos = names.map((name, i) => {
+            const blob = new File([new Uint8Array([0xff, 0xd8, 0xff, i, 0xff, 0xd9])], name, { type: 'image/jpeg' });
+            return { id: `p${i}`, blob, name, type: 'image/jpeg', size: blob.size };
+        });
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction('queue', 'readwrite');
+            tx.objectStore('queue').put({ treeId: tree, name: '', personId: '', note: '', photos }, `batch:${tree}`);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+    }, { tree: PYCH, names });
+}
+
+/** The keys of the device's queue. */
+async function queueKeys(page: Page): Promise<string[]> {
+    return page.evaluate(async () => {
+        const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device', 1); r.onsuccess = () => resolve(r.result); });
+        const keys = await new Promise<IDBValidKey[]>((resolve) => { const r = db.transaction('queue').objectStore('queue').getAllKeys(); r.onsuccess = () => resolve(r.result); });
+        db.close();
+        return keys.map(String).sort();
+    });
 }
 
 /** The Connection: the top block of the dropdown on a computer and a tablet, the sheet on a phone (its switcher's second line). */
@@ -214,15 +246,16 @@ test.describe('en', () => {
         await seeds(page);
         research(gw);
         await pairedApp(page, gw);
-        await queue(page, { 'photo-1': { kind: 'photo', name: 'svatba-1924.jpg' }, 'photo-2': { kind: 'photo', name: 'mlyn.jpg' }, 'edit-1': { kind: 'edit', changes: 1 } });
+        await keptPhotos(page, ['svatba-1924.jpg', 'mlyn.jpg']);
+        await queue(page, { 'edit-1': { kind: 'edit', changes: 1 } });
         await openConnection(page);
         const dialog = page.locator('#device-conn-modal');
         await dialog.getByRole('button', { name: 'Disconnect this device' }).click();
         await expect(dialog.getByRole('heading', { name: 'Disconnect this device?' })).toBeVisible();
         await expect(dialog).toContainText('The device will no longer see the research on Pracovna.');
         await expect(dialog).toContainText('Waiting to be sent: 2 photos, 1 edit. They stay on this device; they can be saved now and sent after pairing again.');
-        // saving the photos comes with the photos' part: not offered before
-        await expect(dialog.getByRole('button', { name: 'Save photos to the device' })).toHaveCount(0);
+        await expect(dialog.getByRole('button', { name: 'Save photos to the device' })).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'Discard…' })).toBeVisible();
         await dialog.getByRole('button', { name: 'Cancel' }).click();
         await expect(dialog.getByRole('heading', { name: 'Connection' })).toBeVisible();
         expect(gw.tunnelled.some(r => r.p === 'device/unpair')).toBe(false);
@@ -242,18 +275,97 @@ test.describe('en', () => {
         await expect(page.locator('.toast', { hasText: 'This device is no longer paired with Pracovna.' })).toBeVisible();
         await expect(page.locator('.toast', { hasText: 'To pair again: scan the QR code' })).toBeVisible();
         expect(await page.evaluate(() => 'strom-device-paired' in localStorage)).toBe(false);
-        // the queue stays on the device
-        const kept = await page.evaluate(async () => {
-            const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device', 1); r.onsuccess = () => resolve(r.result); });
-            const keys = await new Promise<IDBValidKey[]>((resolve) => { const r = db.transaction('queue').objectStore('queue').getAllKeys(); r.onsuccess = () => resolve(r.result); });
-            db.close();
-            return keys.length;
-        });
-        expect(kept).toBe(3);
+        // the queue stays on the device: the photos and the edit
+        expect(await queueKeys(page)).toEqual([`batch:${PYCH}`, 'edit-1']);
         // the device has left the gateway's bridge: no Connection offered any more (the unpaired state is §7's)
         await page.locator('.tree-switcher-btn').click();
         await expect(page.locator('#tree-switcher-dropdown')).toHaveClass(/active/);
         await expect(page.locator('#tree-switcher-conn-top')).toHaveCount(0);
+    });
+
+    test('the photos waiting on the device: saved as one ZIP, Discard… asked first, the edits kept', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seeds(page);
+        research(gw);
+        await pairedApp(page, gw);
+        await keptPhotos(page, ['svatba-1924.jpg', 'svatba-1924.jpg', 'mlyn.jpg']);
+        await queue(page, { 'edit-1': { kind: 'edit', changes: 1 } });
+        await openConnection(page);
+        const dialog = page.locator('#device-conn-modal');
+        await dialog.getByRole('button', { name: 'Disconnect this device' }).click();
+        await expect(dialog).toContainText('Waiting to be sent: 3 photos, 1 edit.');
+
+        // Save: one ZIP of the three, each name once; the photos stay
+        const [zip] = await Promise.all([
+            page.waitForEvent('download'),
+            dialog.getByRole('button', { name: 'Save photos to the device' }).click(),
+        ]);
+        expect(zip.suggestedFilename()).toBe('strom-photos.zip');
+        const text = readFileSync((await zip.path())!, 'latin1');
+        expect(text).toContain('svatba-1924.jpg');
+        expect(text).toContain('svatba-1924 (2).jpg');
+        expect(text).toContain('mlyn.jpg');
+        expect(await queueKeys(page)).toEqual([`batch:${PYCH}`, 'edit-1']);
+
+        // Discard…: asked first; Cancel keeps everything
+        const confirm = page.locator('#confirmation-modal');
+        await dialog.getByRole('button', { name: 'Discard…' }).click();
+        await expect(confirm.locator('#confirm-title')).toHaveText('Discard what is waiting on this device?');
+        await expect(confirm.locator('#confirm-message')).toHaveText('3 photos will be deleted from this device and will not reach the research. This cannot be undone.');
+        await confirm.getByRole('button', { name: 'Cancel' }).click();
+        await expect(confirm).toBeHidden();
+        await expect(dialog).toContainText('Waiting to be sent: 3 photos, 1 edit.');
+        expect(await queueKeys(page)).toEqual([`batch:${PYCH}`, 'edit-1']);
+
+        // confirmed: the photos gone, the edit stays; the confirmation counts again
+        await dialog.getByRole('button', { name: 'Discard…' }).click();
+        await confirm.getByRole('button', { name: 'Discard', exact: true }).click();
+        await expect(dialog).toContainText('Waiting to be sent: 1 edit.');
+        await expect(dialog.getByRole('button', { name: 'Save photos to the device' })).toHaveCount(0);
+        await expect(dialog.getByRole('button', { name: 'Discard…' })).toHaveCount(0);
+        expect(await queueKeys(page)).toEqual(['edit-1']);
+        await expect(dialog.getByRole('heading', { name: 'Disconnect this device?' })).toBeVisible();
+    });
+
+    test('a phone: one photo saved as it is, discarded from the sheet, nothing past the edge', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        research(gw);
+        await pairedApp(page, gw);
+        await keptPhotos(page, ['hrbitov-mlynky.jpg']);
+        for (const scheme of ['light', 'dark'] as const) {
+            await page.emulateMedia({ colorScheme: scheme });
+            await openConnection(page);
+            const sheet = page.locator('.device-conn-sheet');
+            await sheet.getByRole('button', { name: 'Disconnect this device' }).click();
+            await expect(sheet).toContainText('Waiting to be sent: 1 photo.');
+            const save = sheet.getByRole('button', { name: 'Save photos to the device' });
+            const discard = sheet.getByRole('button', { name: 'Discard…' });
+            await expect(save).toBeVisible();
+            await expect(discard).toBeVisible();
+            await expectNoOverflow(page, '.device-conn');
+            expect(overlaps(await save.boundingBox(), await discard.boundingBox())).toBe(false);
+            await shot(page, `d6c-odpojit-fotky-en-390-${themeWord(scheme)}`);
+            await closeConnection(page);
+        }
+        await openConnection(page);
+        const sheet = page.locator('.device-conn-sheet');
+        await sheet.getByRole('button', { name: 'Disconnect this device' }).click();
+        const [one] = await Promise.all([
+            page.waitForEvent('download'),
+            sheet.getByRole('button', { name: 'Save photos to the device' }).click(),
+        ]);
+        expect(one.suggestedFilename()).toBe('hrbitov-mlynky.jpg');
+
+        await sheet.getByRole('button', { name: 'Discard…' }).click();
+        const confirm = page.locator('#confirmation-modal');
+        await expect(confirm.locator('#confirm-message')).toHaveText('1 photo will be deleted from this device and will not reach the research. This cannot be undone.');
+        await confirm.getByRole('button', { name: 'Discard', exact: true }).click();
+        await expect(sheet).not.toContainText('Waiting to be sent');
+        await expect(sheet.getByRole('button', { name: 'Discard…' })).toHaveCount(0);
+        expect(await queueKeys(page)).toEqual([]);
+        // disconnecting still offered
+        await expect(sheet.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
     });
 
     test('a gateway that announces neither rename nor unpair: neither offered', async ({ page }) => {
@@ -297,7 +409,8 @@ test.describe('de', () => {
         gw.computer = { name: 'Pracovna', label: LONG_PC };
         research(gw, { name: LONG_TREE });
         await pairedApp(page, gw);
-        await queue(page, { 'photo-1': { kind: 'photo', name: 'svatba-1924.jpg' }, 'edit-1': { kind: 'edit', changes: 2 }, 'edit-2': { kind: 'edit', changes: 1 } });
+        await keptPhotos(page, ['svatba-1924.jpg']);
+        await queue(page, { 'edit-1': { kind: 'edit', changes: 2 }, 'edit-2': { kind: 'edit', changes: 1 } });
 
         // the phone: renamed to 60 characters in the sheet
         await openConnection(page);
@@ -343,7 +456,10 @@ test.describe('de', () => {
                 await expect(ask).toContainText('Dieses Gerät trennen?');
                 await expect(ask).toContainText(`Das Gerät sieht die Forschung auf ${LONG_PC} nicht mehr.`);
                 await expect(ask).toContainText('Wartet auf das Senden: 1 Foto, 2 Änderungen');
+                await expect(ask.getByRole('button', { name: 'Fotos auf dem Gerät speichern' })).toBeVisible();
+                await expect(ask.getByRole('button', { name: 'Verwerfen…' })).toBeVisible();
                 await expectNoOverflow(page, '.device-conn');
+                expect(overlaps(await ask.getByRole('button', { name: 'Fotos auf dem Gerät speichern' }).boundingBox(), await ask.getByRole('button', { name: 'Verwerfen…' }).boundingBox())).toBe(false);
                 if (width === 390 || width === 1440) await shot(page, `d4d-odpojit-de-${width}-${themeWord(scheme)}`);
                 await ask.getByRole('button', { name: 'Abbrechen' }).click();
                 await expect(ask).toContainText('Dieses Gerät trennen');
@@ -351,5 +467,23 @@ test.describe('de', () => {
             }
         }
         expect(gw.devices).toHaveLength(1);
+
+        // Verwerfen… asked first (one photo; the edits stay), at 1440
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openConnection(page);
+        const dialog = page.locator('#device-conn-modal');
+        await dialog.getByRole('button', { name: 'Dieses Gerät trennen' }).click();
+        const [file] = await Promise.all([
+            page.waitForEvent('download'),
+            dialog.getByRole('button', { name: 'Fotos auf dem Gerät speichern' }).click(),
+        ]);
+        expect(file.suggestedFilename()).toBe('svatba-1924.jpg');
+        await dialog.getByRole('button', { name: 'Verwerfen…' }).click();
+        const confirm = page.locator('#confirmation-modal');
+        await expect(confirm.locator('#confirm-title')).toHaveText('Verwerfen, was auf diesem Gerät wartet?');
+        await expect(confirm.locator('#confirm-message')).toHaveText('1 Foto wird von diesem Gerät gelöscht und erreicht die Forschung nicht. Das lässt sich nicht rückgängig machen.');
+        await confirm.getByRole('button', { name: 'Verwerfen', exact: true }).click();
+        await expect(dialog).toContainText('Wartet auf das Senden: 2 Änderungen');
+        expect(await queueKeys(page)).toEqual(['edit-1', 'edit-2']);
     });
 });
