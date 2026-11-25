@@ -983,6 +983,8 @@ export const personListRuleMethods = uiModule({
     /** Close the builder's open menu (true: one was open). */
     closeRuleMenu(): boolean {
         if (closePersonPick) { closePersonPick(); return true; }
+        // A phone's sheet of the builder (a row's ⋯, the catalog, a choice): Escape closes it, not the dialog under it.
+        if ((this.bottomSheet as HTMLElement | null)?.querySelector('.plr-sheet')) { this.hideBottomSheet(); return true; }
         if (!menuClose) return false;
         const f = menuClose;
         menuClose = null;

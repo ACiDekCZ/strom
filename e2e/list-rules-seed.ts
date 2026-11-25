@@ -11,7 +11,8 @@
  * from a template), "To look up" (automatic, its person deleted), "Neighbours"
  * (automatic, Another list: Mlýnky branch), "Loop A" / "Loop B" (each the
  * other's list, a loop in the stored data), "From the agent" (fixed, made by
- * the agent) and "Wedding 2027" (fixed, by hand). Invented names only.
+ * the agent) "Ostrovidová-Quellmayerová family…"
+ * (three levels, the long name and place) and "Wedding 2027" (fixed, by hand). Invented names only.
  */
 
 import { expect, Page } from '@playwright/test';
@@ -21,6 +22,7 @@ export const NOW = new Date('2026-11-16T10:30:00Z');
 
 export const LONG_PLACE = 'Horní Vranice u Trnové Lhoty nad Mlýnským potokem';
 export const LONG_NAME = 'Bětka Ostrovidová-Quellmayerová';
+export const LONG_KEY = 'horni vranice u trnove lhoty nad mlynskym potokem';
 
 interface Seed { firstName: string; lastName: string; gender?: 'male' | 'female'; parents?: string[]; partners?: string[]; [k: string]: unknown }
 
@@ -37,7 +39,7 @@ const PEOPLE: Record<string, Seed> = {
 const PLACES = {
     'mlynky': { lat: 49.5, lon: 15.0 },
     'vrbatin': { lat: 49.554, lon: 15.0 },
-    [LONG_PLACE.toLowerCase()]: { lat: 49.52, lon: 15.01 },
+    [LONG_KEY]: { lat: 49.52, lon: 15.01 },
 };
 
 const cond = (c: string, p: Record<string, unknown>, not = false) => ({ t: 'cond', c, p, ...(not ? { not: true } : {}) });
@@ -83,6 +85,18 @@ export const LISTS = [
     {
         id: 'l-agent', name: 'From the agent', dynamic: false, personIds: ['a', 'd'], sort: 'old', updated: '2026-11-14T09:00:00.000Z',
         origin: { by: 'agent', at: '2026-11-14T09:00:00.000Z' },
+    },
+    {
+        // Three levels with the long name and the long place: the responsive checks.
+        id: 'l-wide', name: 'Ostrovidová-Quellmayerová family around Horní Vranice u Trnové Lhoty', dynamic: false, personIds: [], sort: 'old', updated: '2026-11-15T09:00:00.000Z',
+        custom: custom(group('all',
+            cond('family', { personId: 'k', personName: LONG_NAME, via: 'both', width: 'line', spouses: 'none', up: 2, down: 2 }),
+            group('any',
+                cond('near', { placeKey: LONG_KEY, placeName: LONG_PLACE, events: ['birth', 'death'], km: 25 }),
+                group('all', cond('born', { from: 1800, to: 1860 }), cond('gender', { value: 'female' })),
+            ),
+        )),
+        origin: { by: 'template', template: 'nearPlace', name: 'From a place and surroundings', at: '2026-11-15T09:00:00.000Z' },
     },
     { id: 'l-plain', name: 'Wedding 2027', dynamic: false, personIds: ['b', 'e'], sort: 'old', updated: '2026-11-13T09:00:00.000Z' },
 ];
