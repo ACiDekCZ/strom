@@ -147,8 +147,7 @@ embedded in the app's HTML (a comment in `<head>`):
 - Some interface icons come from or are based on **Lucide** (ISC License,
   Copyright (c) Lucide Icons and Contributors) and **Feather** (MIT License,
   Copyright (c) 2013-2023 Cole Bemis).
-- The cipher of a device of the home network (ChaCha20-Poly1305, HKDF, HMAC,
-  SHA-256) is **@noble/ciphers** and **@noble/hashes** 2.4.0 (MIT License,
+- Cryptography (ChaCha20-Poly1305, HKDF, HMAC, SHA-256) is **@noble/ciphers** and **@noble/hashes** 2.4.0 (MIT License,
   Copyright (c) 2022 Paul Miller; @noble/ciphers also Copyright (c) 2016
   Thomas Pornin), bundled into the app.
 - The person page's map draws country outlines from **Natural Earth**
