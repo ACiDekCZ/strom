@@ -298,6 +298,10 @@ test.describe('en', () => {
         await expect(line.locator('[data-act="hide"]')).toHaveAttribute('aria-label', 'Skrýt');
         await expect(page.locator('#current-tree-conn')).toHaveText('na počítači Pracovna');
         await expectNoOverflow(page, '#device-home-line');
+        // German: a tap of a finger ("Fingertipp"; a "Tipp" alone reads as a hint).
+        await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+        await expect(line.locator('.device-home-line-text')).toHaveText('Ein Symbol auf dem Startbildschirm öffnet die Forschung mit einem Fingertipp.');
+        await expectNoOverflow(page, '#device-home-line');
         // and back: the same line, not a second one
         await page.evaluate(() => window.Strom.UI.setLanguage('en'));
         await expect(line.locator('.device-home-line-text')).toHaveText('A home-screen icon opens the research with one tap.');

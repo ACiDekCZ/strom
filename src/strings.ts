@@ -33477,7 +33477,7 @@ const stringsDE: StringsType = {
         persons: (n: number) => nDe(n, 'Person', 'Personen'),
         treeWorking: 'arbeitet',
         treeWaiting: 'wartet',
-        homeLine: 'Ein Symbol auf dem Startbildschirm öffnet die Forschung mit einem Tipp.',
+        homeLine: 'Ein Symbol auf dem Startbildschirm öffnet die Forschung mit einem Fingertipp.',
         homeHow: 'Wie',
         homeHide: 'Ausblenden',
         homeTitle: 'Symbol auf dem Startbildschirm',
