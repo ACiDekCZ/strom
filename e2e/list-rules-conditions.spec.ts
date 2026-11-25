@@ -207,6 +207,8 @@ test.describe('Conditions: a computer', () => {
         await expect(row(page, '1').locator('.plr-zero')).toHaveCount(0);
         await expect(total(page)).toHaveText('2 people match');
         await ctl(page, '1', 'km', '10').click();
+        // The phone's one "within N km" control stays hidden beside the segments on a computer.
+        await expect(ctl(page, '1', 'kmpick')).toBeHidden();
         await expect(count(page, '1')).toHaveText('3 people');
         await expect(row(page, '1').locator('.plr-sx')).toContainText('Within 10 km: 2 places');
         await row(page, '1').locator('.plr-sx [data-pc="unfold"]').click();
