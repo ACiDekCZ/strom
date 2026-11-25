@@ -6,7 +6,7 @@ const cntPl = (n: number, one: string, few: string, many: string): string => `${
 
 export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree' | 'embeddedMode' | 'importFromOffline'
     | 'lock' | 'auditLog' | 'undo' | 'actions' | 'privacy' | 'personSources' | 'story' | 'poster' | 'otherResearch'
-    | 'phone' | 'phoneDevices' | 'device' | 'deviceResearch' | 'read' | 'researchLive'> = {
+    | 'phone' | 'phoneDevices' | 'device' | 'deviceResearch' | 'deviceAgent' | 'read' | 'researchLive'> = {
     cardDensity: {
         cardShow: 'Na karcie pokazuj',
         cardGroupState: 'Stan osoby',
@@ -686,7 +686,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         newToast: (name: string) => `Połączono nowe urządzenie: ${name}`,
         newToastLink: 'Urządzenia…',
         onlyComputer: 'Tylko na komputerze z badaniem.',
-        onlyComputerAll: (pc: string) => `Zgody, uruchamianie agenta i ustawienia badania są na komputerze ${pc}.`,
+        onlyComputerAll: (pc: string) => `Zgody i ustawienia badania są na komputerze ${pc}.`,
         writeUnsure: 'Odpowiedź na ostatnią zmianę zaginęła po drodze; stan badania jest wczytywany ponownie.',
         connecting: (pc: string) => `Łączenie z komputerem ${pc}…`,
         connectingAny: 'Łączenie z komputerem…',
@@ -734,7 +734,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         thisDevice: 'To urządzenie',
         othersConnected: (n: number) => `Połączone jeszcze ${nPl(n, 'urządzenie', 'urządzenia', 'urządzeń')}`,
         renameFailed: 'Nazwa nie została zapisana.',
-        notHere: 'Zgody i uruchamianie agenta są tylko na komputerze z badaniem. Nowego drzewa, importu, usuwania drzewa, połączonego pliku i kopii przeglądarki tu nie ma: drzewo należy do badania na komputerze. Eksport pliku działa.',
+        notHere: 'Zgody są tylko na komputerze z badaniem. Nowego drzewa, importu, usuwania drzewa, połączonego pliku i kopii przeglądarki tu nie ma: drzewo należy do badania na komputerze. Eksport pliku działa.',
         dirWorkOnComputer: (pc: string) => `„Pracuj nad tą linią” (agent) jest na komputerze ${pc}.`,
         fromDevice: (name: string) => `z urządzenia ${name}`,
         fromComputer: (name: string) => `z komputera ${name}`,
@@ -863,6 +863,27 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         stateNotHere: 'Stanu badania nie ma jeszcze na tym urządzeniu.',
         archiveRead: 'Archiwum · tylko do odczytu',
         switchNoLoad: 'Przełączenie drzewa na ekranie Badanie nie pobiera drzewa.',
+    },
+    deviceAgent: {
+        startOn: (pc: string) => `Uruchom na komputerze ${pc}`,
+        openOn: (pc: string) => `Otwórz na komputerze ${pc}`,
+        back: 'Wstecz',
+        where: (pc: string) => `Na komputerze ${pc} otworzy się terminal badania z agentem.`,
+        whereLine: (pc: string) => `Agent sam bierze zadania tej linii w nowym oknie terminala na komputerze ${pc}.`,
+        whereChat: (pc: string) => `Rozmowa z agentem toczy się w terminalu na komputerze ${pc}; odpowiada się tam.`,
+        cost: 'Zużywa subskrypcję lub kredyt AI.',
+        stopHow: 'Zatrzymać można tutaj w Teraz (⋯ → Zatrzymaj przebieg) lub Ctrl-C w terminalu.',
+        queueSub: (tree: string, n: number) => `${tree} · ${nPl(n, 'zadanie', 'zadania', 'zadań')} w kolejce`,
+        startingSub: (pc: string) => `Agent uruchomi się w nowym oknie terminala na komputerze ${pc}.`,
+        noConfirm: (pc: string) => `Bez potwierdzenia (ustawienie komputera ${pc}) · zużywa subskrypcję AI.`,
+        waitPc: (pc: string) => `Czeka na komputerze ${pc}: terminal prosi o potwierdzenie.`,
+        waitPcSub: 'Szacunek kosztu lub zgodę potwierdza się przy komputerze, nie na urządzeniu.',
+        notStartedTitle: 'Praca nad kolejką się nie rozpoczęła',
+        down: (pc: string) => `Komputer ${pc} jest niedostępny; agent się nie uruchomił.`,
+        noTerminal: (pc: string) => `Na komputerze ${pc} nie można otworzyć terminala. Nic nie zostało uruchomione.`,
+        researchNewer: 'Badanie zapisała ostatnio nowsza wersja Strom Research; agent się nie uruchomił.',
+        queueRunRow: 'Kolejka · agent',
+        sortWhere: (pc: string) => `Działa w badaniu na komputerze ${pc}, bez terminala.`,
     },
     read: {
         menu: 'Odczytaj dokument…',

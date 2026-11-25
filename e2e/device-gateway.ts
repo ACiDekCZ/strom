@@ -47,7 +47,19 @@ import { MEDIA_BLOCK } from '../src/device/device-crypto';
  * - GET status says the tree asked (`tree: {id, name}`, its name from
  *   `trees`) and `device.others` (U9d),
  * - refusals the test asks for (refuseNext: 401/404/409 clock/410/503), and
- *   `unreachable` (each connection closed without an answer).
+ *   `unreachable` (each connection closed without an answer),
+ * - the agent's work started from the device (spec 094 K3.15): `agent` set, GET
+ *   status says the feature `device.agent` and the device actions `agent.start`
+ *   / `agent.bridge`; POST device/agent `{link, yes?}` (the gateway's own action,
+ *   never the bridge's) checks the body (400 device.body) and the link (400
+ *   device.link: the research's scheme, `tree=` the envelope's tree, ≤ 2048),
+ *   keeps it in `agentRequests` and answers by `agentSteps` (one per request)
+ *   or `agentScenario`: `ask` (an ask with a one-time `yes` for that link, its
+ *   yes starts), `started` (run.confirm no), `computer` (the question waits in
+ *   the terminal), `said`, `noterminal` (503), `expired` (a yes refused 410
+ *   agent.yes-expired, without it an ask), `locked` (409 research.locked),
+ *   `recent` (409 agent.recent), `computer-only` (403 {action: link.<action>});
+ *   `onAgentStarted` is told each start (a test adds its run to the glance).
  *
  * Fictional data only (Pýchavkovi z Mlýnků, the computer "Pracovna").
  */
@@ -74,6 +86,17 @@ export interface FakeMediaRequest {
     blocks: number[];
     /** The open headers (lower-case). */
     headers: Record<string, string>;
+}
+
+/** How the fake gateway answers POST device/agent (K3.15); see the header. */
+export type FakeAgentStep = 'ask' | 'started' | 'computer' | 'said' | 'noterminal' | 'expired' | 'locked' | 'recent' | 'computer-only';
+
+/** One POST device/agent as it came: its link, its yes, the device and the tree of the envelope. */
+export interface FakeAgentRequest {
+    link: string;
+    yes?: string;
+    device: string;
+    tree: string;
 }
 
 export interface FakeDevice {
@@ -126,6 +149,21 @@ export interface FakeGateway {
     glance: unknown | ((tree: string) => unknown) | null;
     /** As `glance`, for GET finds (feature `finds`): by the tree and the query (`since`, `lang`) when a function. */
     finds: unknown | ((tree: string, q: Record<string, string>) => unknown) | null;
+    /**
+     * The agent from the device (spec 094 K3.15): set, GET status says `device.agent` and the device actions
+     * `agent.start` (start) and `agent.bridge` (bridge); null: a gateway without it (device/agent: 404).
+     */
+    agent: { start?: boolean; bridge?: boolean } | null;
+    /** How POST device/agent answers when `agentSteps` is empty (default `ask`). */
+    agentScenario: FakeAgentStep;
+    /** How the next POSTs device/agent answer, one per request (first first); empty: `agentScenario`. */
+    agentSteps: FakeAgentStep[];
+    /** The question of an `ask` (the research's language); absent: an invented one about the queue. */
+    agentAsk: { what: string; note: string[]; said?: string[] } | null;
+    /** Every POST device/agent whose body and link held, in order. */
+    agentRequests: FakeAgentRequest[];
+    /** Told each start: `started` answered (with a yes, or run.confirm no), or `computer` (the terminal opened, asking). */
+    onAgentStarted: (link: string, device: FakeDevice) => void;
     /** Each connection closed at once without an answer. */
     unreachable: boolean;
     /** The gateway's own paths (/device/*) held without an answer (the app's request times out: connecting meanwhile). */
@@ -271,6 +309,12 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         others: 0,
         glance: null,
         finds: null,
+        agent: null,
+        agentScenario: 'ask',
+        agentSteps: [],
+        agentAsk: null,
+        agentRequests: [],
+        onAgentStarted: () => undefined,
         unreachable: false,
         stall: false,
         clockOffsetMs: 0,
@@ -302,6 +346,53 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
             for (const s of sockets) s.destroy();
             server.close(() => resolve());
         }),
+    };
+
+    /** The `yes` tokens of the asks given, each for its link and device, once. */
+    const agentYes = new Map<string, { link: string; device: string }>();
+
+    /** POST device/agent (K3.15): the gateway's own action, answered by the test's scenario. */
+    const agentReply = (r: DeviceRequest, device: FakeDevice): TunnelReply => {
+        const b = r.b as Record<string, unknown> | undefined;
+        if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some(k => k !== 'link' && k !== 'yes')
+            || typeof b.link !== 'string' || (b.yes !== undefined && typeof b.yes !== 'string')) {
+            return { s: 400, body: { code: 'device.body', text: 'The request is not {link, yes?}.' } };
+        }
+        const link = b.link;
+        const m = /^strom-research(?:-[a-z0-9-]{1,32})?:\/\/([a-z-]+)\?(.*)$/.exec(link);
+        if (!m || link.length > 2048 || new URLSearchParams(m[2]).get('tree') !== r.tree) {
+            return { s: 400, body: { code: 'device.link', text: 'The link cannot be read.' } };
+        }
+        const yes = typeof b.yes === 'string' ? b.yes : undefined;
+        gw.agentRequests.push({ link, ...(yes ? { yes } : {}), device: device.id, tree: r.tree });
+        const ask = (): TunnelReply => {
+            const token = b64url(randomBytes(12));
+            agentYes.set(token, { link, device: device.id });
+            const said = gw.agentAsk ?? { what: 'Spustit agenta na 5 úkolech fronty?', note: ['Odhad: asi 40 minut, čerpá předplatné (odhad 6 % denního přídělu).'] };
+            const tree = gw.trees.find(t => t.id === r.tree)?.name ?? r.tree;
+            return { s: 200, body: { state: 'ask', yes: token, expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(), ask: { tree, ...said } } };
+        };
+        const started = (): TunnelReply => {
+            gw.onAgentStarted(link, device);
+            return { s: 200, body: { state: 'started' } };
+        };
+        const expired: TunnelReply = { s: 410, body: { code: 'agent.yes-expired', text: 'The answer is no longer valid.' } };
+        switch (gw.agentSteps.shift() ?? gw.agentScenario) {
+            case 'ask': {
+                if (!yes) return ask();
+                const held = agentYes.get(yes);
+                agentYes.delete(yes);
+                return held && held.link === link && held.device === device.id ? started() : expired;
+            }
+            case 'started': return started();
+            case 'computer': gw.onAgentStarted(link, device); return { s: 200, body: { state: 'computer', why: 'price' } };
+            case 'said': return { s: 200, body: { state: 'said', text: 'Fronta je prázdná, agent nemá na čem pracovat.' } };
+            case 'noterminal': return { s: 503, body: { code: 'agent.noterminal', text: 'Na počítači nejde otevřít terminál. Spustit na počítači.' } };
+            case 'expired': return yes ? expired : ask();
+            case 'locked': return { s: 409, body: { code: 'research.locked', text: 'The research was written by a newer Strom.' } };
+            case 'recent': return { s: 409, body: { code: 'agent.recent', text: 'The terminal opened a moment ago.' } };
+            case 'computer-only': return { s: 403, body: { code: 'device.computer-only', action: `link.${m[1]}`, text: `only on the computer: ${m[1]}` } };
+        }
     };
 
     const pair = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -353,9 +444,11 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         if (!reply) {
             if (r.p === 'status' && r.m === 'GET') {
                 const tree = gw.trees.find(x => x.id === r.tree);
-                const features = [...STATUS.features, ...(gw.glance ? ['glance'] : []), ...(gw.finds ? ['finds', 'finds.person'] : [])];
+                const features = [...STATUS.features, ...(gw.glance ? ['glance'] : []), ...(gw.finds ? ['finds', 'finds.person'] : []),
+                    ...(gw.agent ? ['device.agent'] : [])];
+                const actions = ['device.rename', 'device.unpair', ...(gw.agent?.start ? ['agent.start'] : []), ...(gw.agent?.bridge ? ['agent.bridge'] : [])];
                 reply = { s: 200, body: { ...STATUS, features, tree: { id: r.tree, name: tree?.name ?? 'Pýchavkovi z Mlýnků' },
-                    device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair'], others: gw.others } } };
+                    device: { id: device.id, name: device.name, kind: device.kind, actions, others: gw.others } } };
             }
             else if (r.p === 'glance' && r.m === 'GET' && gw.glance) {
                 reply = { s: 200, body: typeof gw.glance === 'function' ? (gw.glance as (tree: string) => unknown)(r.tree) : gw.glance };
@@ -371,6 +464,8 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
                     device.name = name;
                     reply = { s: 200, body: { device: { id: device.id, name, kind: device.kind } } };
                 }
+            } else if (r.p === 'device/agent' && r.m === 'POST' && gw.agent) {
+                reply = agentReply(r, device);
             } else if (r.p === 'device/unpair' && r.m === 'POST') {
                 // the whole row goes: the next request is 401 device.unpaired
                 gw.devices = gw.devices.filter(d => d.id !== device.id);

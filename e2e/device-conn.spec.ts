@@ -208,7 +208,7 @@ test.describe('en', () => {
         const me = dialog.locator('.device-conn-me');
         await expect(me).toContainText('This device');
         await expect(me.locator('.device-conn-name')).toHaveText(gw.devices[0].name);
-        await expect(dialog).toContainText('Approvals and starting the agent are only on the computer with the research.');
+        await expect(dialog).toContainText('Approvals are only on the computer with the research.');
         // the count of other devices waits for a gateway that tells it; no home-screen row in the dialog
         await expect(dialog).not.toContainText('more device');
         await expect(dialog.locator('[data-act="home"]')).toHaveCount(0);

@@ -13,7 +13,7 @@ import path from 'node:path';
 const SRC = path.resolve(__dirname, '..');
 
 /** The modules of the Research screen (paths under src/). */
-const SCREEN_MODULES = ['device/device-research-data.ts', 'ui/phone-research-ui.ts', 'ui/phone-person-search.ts'];
+const SCREEN_MODULES = ['device/device-research-data.ts', 'device/device-agent.ts', 'ui/phone-research-ui.ts', 'ui/phone-person-search.ts'];
 
 /** Modules the screen must never load. */
 const FORBIDDEN_FILES = ['data.ts', 'renderer.ts', 'person-picker.ts'];

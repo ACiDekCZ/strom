@@ -136,8 +136,9 @@ export function researchMarkFlags(mark: ResearchActionMark): { research: boolean
 
 /** A toast's or a sheet's action that launches a ready link: its flags by the link's group (a link not known: the terminal). */
 export function researchLinkFlags(url: string): { research: boolean; ai: boolean } {
-    // A device (spec 094 §6): what it draws goes through the bridge, never with a mark.
-    return researchMarkFlags(researchDeviceState() ? 'none' : researchUrlMark(url) ?? 'terminal');
+    // A device (spec 094 §6): what it draws goes through the bridge, no mark — but the agent's work the gateway starts
+    // on the computer (K3.15, `agent.start`) carries the mark it has there.
+    return researchMarkFlags(researchUrlMark(url) ?? (researchDeviceState() ? 'none' : 'terminal'));
 }
 
 /** A note's link (a refused write, a switched-off search): its label, what it runs, and the group of the link it launches. */

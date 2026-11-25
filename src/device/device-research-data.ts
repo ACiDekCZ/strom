@@ -88,6 +88,19 @@ export interface DeviceGlanceNow {
     run?: string;
 }
 
+/** What waits for a person at the computer (spec 094 K3.15): a consent window, or a question in the terminal. */
+export type DeviceOnComputerKind = 'consent' | 'question';
+
+/** A question or a consent waiting at the computer (`glance.onComputer[]`, K3.15). */
+export interface DeviceOnComputer {
+    kind: DeviceOnComputerKind;
+    since: string;
+    /** The run that asks (run-…). */
+    run?: string;
+    /** The device whose terminal asks (dv_…): this one or another. */
+    device?: string;
+}
+
 export interface DeviceGlanceRun {
     id: string;
     /** The line it holds (G…); null: the whole queue. */
@@ -97,6 +110,10 @@ export interface DeviceGlanceRun {
     state: DeviceRunState;
     paused?: DevicePaused;
     task?: string;
+    /** The run waits for a person at the computer (K3.15). */
+    onComputer?: { kind: DeviceOnComputerKind; since: string };
+    /** The device that started it (K3.15): who started it. */
+    device?: { id: string; name?: string };
 }
 
 export interface DeviceGlanceLine {
@@ -152,6 +169,8 @@ export interface DeviceGlance {
     day?: { persons: number; sources: number; saves: number; since: string };
     now: DeviceGlanceNow[];
     runs: DeviceGlanceRun[];
+    /** Questions and consents waiting for a person at the computer (K3.15); absent: nothing waits there. */
+    onComputer?: DeviceOnComputer[];
     /** When anybody worked on it last (nobody at work now). */
     lastWorked?: string;
     lines: DeviceGlanceLine[];
@@ -307,6 +326,37 @@ function cleanNow(v: unknown): DeviceGlanceNow | null {
     };
 }
 
+const ON_COMPUTER_KINDS: readonly DeviceOnComputerKind[] = ['consent', 'question'];
+
+/** A run's wait at the computer: its kind (a newer research's other kind: a question) and since when. */
+function runOnComputer(v: unknown): { onComputer?: { kind: DeviceOnComputerKind; since: string } } {
+    const r = asRecord(v);
+    if (!r) return {};
+    return { onComputer: { kind: oneOf(r.kind, ON_COMPUTER_KINDS) ?? 'question', since: time(r.since) ?? '' } };
+}
+
+/** The device that started a run: its ID (dv_…) and its name. */
+function runDevice(v: unknown): { device?: { id: string; name?: string } } {
+    const r = asRecord(v);
+    const deviceId = id(r?.id, 80);
+    if (!r || !deviceId) return {};
+    const name = optText(r.name, MAX_NAME);
+    return { device: { id: deviceId, ...(name ? { name } : {}) } };
+}
+
+function cleanOnComputer(v: unknown): DeviceOnComputer | null {
+    const r = asRecord(v);
+    if (!r) return null;
+    const run = id(r.run);
+    const device = id(r.device, 80);
+    return {
+        kind: oneOf(r.kind, ON_COMPUTER_KINDS) ?? 'question',
+        since: time(r.since) ?? '',
+        ...(run ? { run } : {}),
+        ...(device ? { device } : {}),
+    };
+}
+
 function cleanRun(v: unknown): DeviceGlanceRun | null {
     const r = asRecord(v);
     const runId = id(r?.id);
@@ -320,6 +370,8 @@ function cleanRun(v: unknown): DeviceGlanceRun | null {
         state: oneOf(r.state, RUN_STATES) ?? 'working',
         ...paused(r.paused),
         ...(task ? { task } : {}),
+        ...runOnComputer(r.onComputer),
+        ...runDevice(r.device),
     };
 }
 
@@ -423,6 +475,7 @@ export function sanitizeGlance(value: unknown): DeviceGlance | null {
     const d = asRecord(r.day);
     const day = d ? { persons: count(d.persons), sources: count(d.sources), saves: count(d.saves), since: time(d.since) ?? '' } : undefined;
     const lastWorked = time(r.lastWorked);
+    const onComputer = list(r.onComputer, MAX_NOW).map(cleanOnComputer).filter((x): x is DeviceOnComputer => !!x);
     const w = asRecord(r.waiting);
     const items = list(w?.items, MAX_WAITING).map(cleanWaiting).filter((x): x is DeviceGlanceWaiting => !!x);
     const people: DeviceGlance['people'] = {};
@@ -442,6 +495,7 @@ export function sanitizeGlance(value: unknown): DeviceGlance | null {
         ...(day ? { day } : {}),
         now: list(r.now, MAX_NOW).map(cleanNow).filter((x): x is DeviceGlanceNow => !!x),
         runs: list(r.runs, MAX_NOW).map(cleanRun).filter((x): x is DeviceGlanceRun => !!x),
+        ...(onComputer.length ? { onComputer } : {}),
         ...(lastWorked ? { lastWorked } : {}),
         lines: list(r.lines, MAX_LINES).map(cleanLine).filter((x): x is DeviceGlanceLine => !!x),
         waiting: { n: Math.max(count(w?.n), items.length), items },

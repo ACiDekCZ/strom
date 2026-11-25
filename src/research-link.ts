@@ -113,8 +113,16 @@ export interface ResearchLinkMarkParams {
 
 /** The mark of an action of the research, by its link (see `ResearchActionMark`). */
 export function researchLinkMark(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): ResearchActionMark {
-    // A device of the home network (spec 094 §6): what it draws goes through the bridge, never a terminal.
-    if (deviceState) return 'none';
+    const own = computerLinkMark(action, p);
+    // A device of the home network (spec 094 §6): what it draws goes through the bridge, never a terminal — except
+    // the agent's work, which the gateway starts in the research's terminal on the computer (K3.15, `agent.start`):
+    // the same mark as on the computer.
+    if (deviceState) return own === 'agent' && deviceState.actions.includes(DEVICE_AGENT_START) ? 'agent' : 'none';
+    return own;
+}
+
+/** The mark of a link as the app on the computer with the research draws it. */
+function computerLinkMark(action: ResearchLinkAction, p: ResearchLinkMarkParams): ResearchActionMark {
     // A conversation about a task or a conflict is the agent's; an experiment switched off goes at once.
     if (action === 'task' && p.taskDo === 'chat') return 'agent';
     if (action === 'conflict' && p.conflictDo === 'agent') return 'agent';
@@ -163,12 +171,26 @@ export function researchUrlMark(url: string): ResearchActionMark | null {
     return researchLinkMark(action, { taskDo: what, conflictDo: what, experimentDo: what, fixDo: what });
 }
 
-/** The mark of an action asked through the bridge: its own (RESEARCH_BRIDGE_MARKS), none on a device (spec 094 §6). */
+/**
+ * The mark of an action asked through the bridge: its own (RESEARCH_BRIDGE_MARKS); on a device (spec 094 §6) none,
+ * unless the gateway lets it ask the bridge's actions with an agent (K3.15, `agent.bridge`): then its own too.
+ */
 export function researchBridgeMark(action: ResearchBridgeAction): ResearchBridgeMark {
-    return deviceState ? 'none' : RESEARCH_BRIDGE_MARKS[action];
+    return deviceState && !deviceState.actions.includes(DEVICE_AGENT_BRIDGE) ? 'none' : RESEARCH_BRIDGE_MARKS[action];
 }
 
 // ==================== A DEVICE OF THE HOME NETWORK (spec 094 P3) ====================
+
+/**
+ * The device action (`status.device.actions`) by which the gateway lets a device start the agent's work in the
+ * research's terminal on the computer (`POST device/agent {link}`, spec 094 K3.15): only a research where an agent
+ * works (not an archive, not one waiting for the agent).
+ */
+export const DEVICE_AGENT_START = 'agent.start';
+/** The device action by which the gateway lets a device ask the bridge's actions where an agent works without a terminal (K3.15). */
+export const DEVICE_AGENT_BRIDGE = 'agent.bridge';
+/** The feature of `/status` (only with the devices on) saying the gateway knows `device/agent` (K3.15). */
+export const DEVICE_AGENT_FEATURE = 'device.agent';
 
 /**
  * The app opened from the research's gateway on another device and paired
@@ -281,13 +303,19 @@ const DEVICE_ALLOWS: Readonly<Record<ResearchDeviceAction, boolean | string>> = 
     conflict: 'conflict.decide', hypothesis: 'hypothesis.decide', hypotheses: 'hypothesis.decide', 'sync-undo-this': 'sync.undo',
     // Asked through the bridge without an agent.
     'fact-confirm': true, 'verify-stop': true, 'sources-split': true, 'run-stop': true, 'waiting-answer': true,
-    // The terminal, an agent, the research's settings and approvals: only on the computer.
-    open: false, chat: false, task: false, review: false, research: false, new: false, update: false, sessions: false,
+    // The agent's work in the research's terminal on the computer, started by the gateway (K3.15 `device/agent`): the
+    // queue, a line's run or a conversation about it, a task or a conflict left to the agent, the places and a place's
+    // history searched, a paid fix. Only their agent's links: `researchDeviceLinkAllows` refines them by `do=`.
+    work: DEVICE_AGENT_START, chat: DEVICE_AGENT_START, task: DEVICE_AGENT_START, places: DEVICE_AGENT_START,
+    history: DEVICE_AGENT_START, fixes: DEVICE_AGENT_START, 'direction-work': DEVICE_AGENT_START, 'conflict-agent': DEVICE_AGENT_START,
+    // An agent through the bridge, no terminal (K3.15): verifying, sorting files, reading a record or a source.
+    verify: DEVICE_AGENT_BRIDGE, 'verify-bulk': DEVICE_AGENT_BRIDGE, 'material-sort': DEVICE_AGENT_BRIDGE,
+    'read-document': DEVICE_AGENT_BRIDGE,
+    // The terminal for a person, the research's settings and approvals: only on the computer.
+    open: false, review: false, research: false, new: false, update: false, sessions: false,
     story: false, 'sync-undo': false, setup: false, finish: false, archive: false, seal: false, experiment: false,
-    history: false, fixes: false, doctor: false, places: false, 'history-kinds': false, 'history-align': false, work: false,
-    verify: false, 'verify-bulk': false, 'material-sort': false, 'run-limit': false,
-    'read-document': false, devices: false, 'research-tools': false, 'tree-settings': false, 'load-version': false,
-    'direction-new': false, 'direction-work': false, 'conflict-agent': false,
+    doctor: false, 'history-kinds': false, 'history-align': false, 'run-limit': false,
+    devices: false, 'research-tools': false, 'tree-settings': false, 'load-version': false, 'direction-new': false,
 };
 
 /** Whether `action` may be drawn on a device by what §6 allows and what the gateway announced (`actions`). */
@@ -299,6 +327,35 @@ export function deviceAllows(action: ResearchDeviceAction, actions: readonly str
 /** Whether an action of the research is drawn here: always outside the device mode, on a device only what §6 allows. */
 export function researchDeviceAllows(action: ResearchDeviceAction): boolean {
     return deviceState ? deviceAllows(action, deviceState.actions) && !refusedOnDevice.has(action) : true;
+}
+
+/**
+ * Whether a link of the research is drawn here, by its action and what it asks (`do=`): always outside the device
+ * mode; on a device the agent's link (its mark on the computer `agent`) when the gateway announced `agent.start`
+ * (K3.15), any other link by what §6 allows — never a link of an `agent.start` action that only asks in the terminal
+ * (a fix that is not paid, a task not talked over).
+ */
+export function researchDeviceLinkAllows(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): boolean {
+    if (!deviceState) return true;
+    if (refusedOnDevice.has(action)) return false;
+    if (computerLinkMark(action, p) === 'agent') return deviceState.actions.includes(DEVICE_AGENT_START);
+    return DEVICE_ALLOWS[action] !== DEVICE_AGENT_START && deviceAllows(action, deviceState.actions);
+}
+
+/**
+ * Whether a ready link (`strom-research…://<action>?…`) goes from this device to the computer through the gateway
+ * (`POST device/agent`, K3.15): a device whose gateway announced `agent.start`, and a link of the agent's work
+ * (false outside the device mode: the computer opens its links itself).
+ */
+export function researchDeviceAgentLink(url: string, extra: Pick<ResearchLinkMarkParams, 'fixPaid'> = {}): boolean {
+    if (!deviceState || !deviceState.actions.includes(DEVICE_AGENT_START)) return false;
+    const m = /^strom-research(?:-[a-z0-9-]{1,32})?:\/\/([a-z-]+)(?:\?(.*))?$/.exec(url.trim());
+    if (!m || !(RESEARCH_LINK_ACTIONS as readonly string[]).includes(m[1])) return false;
+    const action = m[1] as ResearchLinkAction;
+    const what = new URLSearchParams(m[2] ?? '').get('do') ?? undefined;
+    // A fix's link does not say it is paid: the app that drew it does (`extra.fixPaid`).
+    const p: ResearchLinkMarkParams = { taskDo: what, conflictDo: what, experimentDo: what, fixDo: what, ...extra };
+    return computerLinkMark(action, p) === 'agent' && researchDeviceLinkAllows(action, p);
 }
 
 /** Said on the page when the gateway refused an action as the computer's only (its button goes; spec 094 §4). */
@@ -321,6 +378,11 @@ export function deviceActionOfBridgeWrite(method: string, path: string, task = f
     if (p.startsWith('device/sync/')) return 'sync-undo-this';
     if (p.startsWith('waiting/') || (p.startsWith('media/') && task)) return 'waiting-answer';
     if (p.startsWith('directions/')) return 'direction';
+    // An agent through the bridge (K3.15, `agent.bridge`).
+    if (p === 'verify') return 'verify';
+    if (p === 'verify/bulk') return 'verify-bulk';
+    if (p === 'material/sort' || p.startsWith('material/sort/')) return 'material-sort';
+    if (p === 'read' || p.startsWith('read/') || p === 'sources/read' || /^sources\/[^/]+\/read\//.test(p)) return 'read-document';
     if (p === 'sync') return 'send';
     if (p.startsWith('media/')) return 'media';
     return null;
@@ -333,7 +395,7 @@ export function noteResearchDeviceRefused(action: ResearchDeviceAction): void {
 
 /** The mark an action is drawn with here, or `hidden` (a device: only on the computer with the research). */
 export function researchDeviceMark(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): ResearchActionMark | 'hidden' {
-    return researchDeviceAllows(action) ? researchLinkMark(action, p) : 'hidden';
+    return researchDeviceLinkAllows(action, p) ? researchLinkMark(action, p) : 'hidden';
 }
 
 /** A group of the research tools, in this order: look, assign work, run the agent (from free to paid). */

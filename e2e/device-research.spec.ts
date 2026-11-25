@@ -146,12 +146,12 @@ const LABELS = {
     en: {
         first: ['Research overview', 'Follow live', 'Awaiting action', 'Send changes', 'Other actions'],
         more: ['Materials', 'Add materials…'],
-        only: 'Approvals, starting the agent and research settings are on Pracovna.',
+        only: 'Approvals and research settings are on Pracovna.',
     },
     de: {
         first: ['Forschungsübersicht', 'Live verfolgen', 'Wartet auf Bearbeitung', 'Änderungen senden', 'Weitere Aktionen'],
         more: ['Materialien', 'Materialien hinzufügen…'],
-        only: 'Zustimmungen, Start des Agenten und Forschungseinstellungen sind auf Pracovna.',
+        only: 'Zustimmungen und Forschungseinstellungen sind auf Pracovna.',
     },
 } as const;
 
