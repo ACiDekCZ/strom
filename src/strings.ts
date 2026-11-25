@@ -2667,7 +2667,8 @@ const stringsEN = {
         savePhotos: 'Save photos to the device',
         discardDevice: 'Discard…',
         discardDeviceAsk: 'Discard what is waiting on this device?',
-        discardDeviceText: (n: number, m: number) => `${nEn(n, 'photo', 'photos')} and ${nEn(m, 'edit', 'edits')} will be deleted from this device and will not reach the research. This cannot be undone.`,
+        discardDeviceText: (n: number, m: number) => `${nEn(n, 'photo', 'photos')}${m ? ` and ${nEn(m, 'edit', 'edits')}` : ''} will be deleted from this device and will not reach the research. This cannot be undone.`,
+        discardDeviceOk: 'Discard',
     },
 
     // Changes per person since the research's version (A2)
@@ -14654,7 +14655,8 @@ const stringsCZ: StringsType = {
         savePhotos: 'Uložit fotky do zařízení',
         discardDevice: 'Zahodit…',
         discardDeviceAsk: 'Zahodit, co čeká v zařízení?',
-        discardDeviceText: (n: number, m: number) => `${nCs(n, 'fotka', 'fotky', 'fotek')} a ${nCs(m, 'úprava', 'úpravy', 'úprav')} se smaže z tohoto zařízení a do výzkumu se nedostane. Vrátit to nejde.`,
+        discardDeviceText: (n: number, m: number) => `${nCs(n, 'fotka', 'fotky', 'fotek')}${m ? ` a ${nCs(m, 'úprava', 'úpravy', 'úprav')}` : ''} se smaže z tohoto zařízení a do výzkumu se nedostane. Vrátit to nejde.`,
+        discardDeviceOk: 'Zahodit',
     },
 
     changes: {
@@ -26411,7 +26413,8 @@ const stringsDE: StringsType = {
         savePhotos: 'Fotos auf dem Gerät speichern',
         discardDevice: 'Verwerfen…',
         discardDeviceAsk: 'Verwerfen, was auf diesem Gerät wartet?',
-        discardDeviceText: (n: number, m: number) => `${nDe(n, 'Foto', 'Fotos')} und ${nDe(m, 'Änderung', 'Änderungen')} werden von diesem Gerät gelöscht und erreichen die Forschung nicht. Das lässt sich nicht rückgängig machen.`,
+        discardDeviceText: (n: number, m: number) => `${nDe(n, 'Foto', 'Fotos')}${m ? ` und ${nDe(m, 'Änderung', 'Änderungen')}` : ''} ${n + m === 1 ? 'wird von diesem Gerät gelöscht und erreicht' : 'werden von diesem Gerät gelöscht und erreichen'} die Forschung nicht. Das lässt sich nicht rückgängig machen.`,
+        discardDeviceOk: 'Verwerfen',
     },
 
     changes: {

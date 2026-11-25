@@ -114,6 +114,7 @@ import { batchMethods } from './batch-ui.js';
 import { phoneMethods } from './phone-ui.js';
 import { deviceStartMethods } from './device-start-ui.js';
 import { deviceConnMethods } from './device-conn-ui.js';
+import { devicePhotosMethods } from './device-photos-ui.js';
 import { deviceModeMethods } from './device-mode-ui.js';
 import { readDocumentMethods } from './read-document-ui.js';
 import { readProposeMethods } from './read-propose-ui.js';
@@ -899,6 +900,9 @@ Object.assign(UIClass.prototype, deviceStartMethods);
 type DeviceConnMethods = typeof deviceConnMethods;
 export interface UIClass extends DeviceConnMethods {}
 Object.assign(UIClass.prototype, deviceConnMethods);
+type DevicePhotosMethods = typeof devicePhotosMethods;
+export interface UIClass extends DevicePhotosMethods {}
+Object.assign(UIClass.prototype, devicePhotosMethods);
 type DeviceModeMethods = typeof deviceModeMethods;
 export interface UIClass extends DeviceModeMethods {}
 Object.assign(UIClass.prototype, deviceModeMethods);

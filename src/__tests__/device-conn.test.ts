@@ -114,5 +114,8 @@ describe('the Connection: what waits on the device', () => {
         await deviceQueue.put('photo-2', { name: 'b.jpg' });
         await deviceQueue.put('edit-1', { changes: 2 });
         expect(await queueCounts()).toEqual({ photos: 2, edits: 1 });
+        // a batch kept for a tree counts each of its photos
+        await deviceQueue.put('batch:pychavkovi', { treeId: 'pychavkovi', name: 'Mlýnky', photos: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] });
+        expect(await queueCounts()).toEqual({ photos: 5, edits: 1 });
     });
 });

@@ -2154,6 +2154,8 @@
         .toast[data-output-wait] { z-index: 550; }
         /* The memory question before a file (spec 135): above the export dialog (500) it was asked from. */
         #confirmation-modal.over-dialog { z-index: 510; }
+        /* Discard… of the photos waiting on a device (spec 094 §7): above the sheet from below (2500) it was asked from. */
+        #confirmation-modal.over-sheet { z-index: 2600; }
         .about-share .ui-icon { color: var(--primary); }
         /* Touch: both support buttons a finger high. */
         @media (pointer: coarse) {
@@ -23653,6 +23655,10 @@
             align-self: flex-start; padding: 4px 0; border: 0; border-radius: var(--r-md); background: none;
             color: var(--primary-dark); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
         }
+        /* What waits on the device: Save photos to the device · Discard… (in red). */
+        .device-conn-keep { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; }
+        .device-conn-keep > .device-conn-link { align-self: auto; text-align: left; overflow-wrap: anywhere; }
+        .device-conn .device-conn-link.device-conn-discard { color: var(--error-text); }
         .device-conn--sheet button.secondary, .device-conn--sheet button.primary, .device-conn--sheet button.danger {
             min-height: 44px; padding: 0 16px; border-radius: var(--r-lg); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
         }

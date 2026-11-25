@@ -1026,6 +1026,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         savePhotos: 'Zapisz zdjęcia na urządzeniu',
         discardDevice: 'Odrzuć…',
         discardDeviceAsk: 'Odrzucić to, co czeka na urządzeniu?',
-        discardDeviceText: (n: number, m: number) => `${nPl(n, 'zdjęcie', 'zdjęcia', 'zdjęć')} i ${nPl(m, 'zmiana', 'zmiany', 'zmian')} zostanie usuniętych z urządzenia i nie trafi do badania. Nie da się tego cofnąć.`,
+        discardDeviceText: (n: number, m: number) => `${nPl(n, 'zdjęcie', 'zdjęcia', 'zdjęć')}${m ? ` i ${nPl(m, 'zmiana', 'zmiany', 'zmian')}` : ''} ${n + m === 1 ? 'zostanie usunięte' : 'zostanie usuniętych'} z urządzenia i nie trafi do badania. Nie da się tego cofnąć.`,
+        discardDeviceOk: 'Odrzuć',
     },
 };
