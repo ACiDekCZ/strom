@@ -365,6 +365,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         undoThisAsk: 'Cofnąć to wysłanie?',
         undoThisKeep: (pc: string) => `Cofną się tylko te pola. Późniejsze zmiany z innych urządzeń i z komputera ${pc} zostają.`,
         undoThisOk: 'Cofnij wysłanie',
+        undoThisMenu: 'Cofnij wysłanie…',
         undoThisEmpty: 'puste',
         undoThisFailed: 'Nie udało się cofnąć wysłania.',
         undoThisFrom: (name: string, time: string) => `Z urządzenia ${name}, ${time}`,

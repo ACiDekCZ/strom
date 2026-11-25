@@ -2000,6 +2000,8 @@ const stringsEN = {
         undoThisAsk: 'Undo this send?',
         undoThisKeep: (pc: string) => `Only these fields are reverted. Later changes from other devices and from ${pc} stay.`,
         undoThisOk: 'Undo send',
+        /** The research's actions on a device (spec 094, 4.2 and 6.1): this device's newest send, asked first. */
+        undoThisMenu: 'Undo send…',
         undoThisEmpty: 'empty',
         undoThisFailed: 'The send could not be undone.',
         /** Under the question: whose send and when ("From iPhone · Safari, 13:52"). */
@@ -14057,6 +14059,7 @@ const stringsCZ: StringsType = {
         undoThisAsk: 'Vrátit toto poslání?',
         undoThisKeep: (pc: string) => `Vrátí se jen tato pole. Pozdější změny z jiných zařízení a z počítače ${pc} zůstanou.`,
         undoThisOk: 'Vrátit poslání',
+        undoThisMenu: 'Vrátit poslání…',
         undoThisEmpty: 'prázdné',
         undoThisFailed: 'Poslání se vrátit nepodařilo.',
         undoThisFrom: (name: string, time: string) => `Ze zařízení ${name}, ${time}`,
@@ -25863,6 +25866,7 @@ const stringsDE: StringsType = {
         undoThisAsk: 'Dieses Senden zurücknehmen?',
         undoThisKeep: (pc: string) => `Nur diese Felder werden zurückgesetzt. Spätere Änderungen von anderen Geräten und von ${pc} bleiben.`,
         undoThisOk: 'Senden zurücknehmen',
+        undoThisMenu: 'Senden zurücknehmen…',
         undoThisEmpty: 'leer',
         undoThisFailed: 'Das Senden ließ sich nicht zurücknehmen.',
         undoThisFrom: (name: string, time: string) => `Von ${name}, ${time}`,

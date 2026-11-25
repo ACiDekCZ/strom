@@ -17,7 +17,9 @@ import type { DeviceClient } from '../device-client.js';
 import { researchBridgeWrite } from '../research-directions-write.js';
 import { deviceComputerName, inDeviceMode, thisDeviceId } from './device-mode-ui.js';
 import { sendSourceWords } from '../conflict-devices.js';
-import { appendChangeText, el, type ChangeSourceGateway, type LiveChangeItem, type LiveSession } from './research-ui.js';
+import { appendChangeText, el, researchSession, type ChangeSourceGateway, type LiveChangeItem, type LiveSession } from './research-ui.js';
+import { storedResearchBridge } from '../research-device.js';
+import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -62,6 +64,17 @@ export function deviceSourceWords(client: DeviceClient | undefined, byAgent: boo
 /** The sends of the last 24 hours the research wrote (`status.sends`), as Progress shows them. */
 export function deviceProgressSends(sends: readonly ResearchSendRecord[] | null | undefined, now = Date.now()): ResearchSendRecord[] {
     return (sends ?? []).filter(r => r.state === 'written' && !!r.input && now - (Date.parse(r.at) || 0) < RECENT_MS);
+}
+
+/**
+ * This device's newest send it can undo (spec 094, 4.2 and 6.1: "Undo send…" among the research's actions):
+ * written in Progress's 24 hours, with the research's input, by this device (`me`); null: none.
+ */
+export function deviceUndoableSend(sends: readonly ResearchSendRecord[] | null | undefined, me: string, now = Date.now()): ResearchSendRecord | null {
+    if (!me) return null;
+    const own = deviceProgressSends(sends, now).filter(r => r.client?.id === me && !!r.input);
+    own.sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
+    return own[0] ?? null;
 }
 
 /** One change of `device/sync/<I>/undo`'s preview: `from` as it is now, `to` once the send is undone. */
@@ -194,22 +207,40 @@ export const deviceProgressMethods = uiModule({
      * them) — then the undo; the status read again. A send undone already, or no longer one, is said instead.
      */
     async undoThisSend(s: LiveSession, send: ResearchSendRecord): Promise<void> {
+        await this.undoDeviceSend(s.bridge.base, send, () => this.researchStatusAfterWrite(s));
+    },
+
+    /** "Undo send…" among the research's actions (4.2, 6.1): this device's newest send it can undo, asked first. */
+    researchActionUndoThisSend(): void {
+        const id = this.activeResearchId();
+        const send = id ? deviceUndoableSend(this.researchStatusOf(id)?.sends, thisDeviceId()) : null;
+        const session = researchSession();
+        const base = session?.researchId === id ? session.bridge.base : id ? storedResearchBridge(id)?.base : undefined;
+        if (!id || !send || !base) return;
+        void this.undoDeviceSend(base, send, () => {
+            if (session?.researchId === id) this.researchStatusAfterWrite(session);
+            else void this.askResearchBridge(id, BRIDGE_ANSWER_MS).then(() => this.refreshResearchSyncUi());
+        });
+    },
+
+    /** The send undone through the gateway at `base` (preview, the question, the undo); `after` reads the status again. */
+    async undoDeviceSend(base: string, send: ResearchSendRecord, after: () => void): Promise<void> {
         const S = strings.sync;
         const input = send.input;
         if (!input) return;
         const path = `device/sync/${encodeURIComponent(input)}/undo`;
-        const preview = await researchBridgeWrite(s.bridge.base, 'POST', path, { dry: true }, r => undoPreviewOf(r, thisDeviceId()));
+        const preview = await researchBridgeWrite(base, 'POST', path, { dry: true }, r => undoPreviewOf(r, thisDeviceId()));
         if (!preview.ok) {
             // Refused as the computer's (403): said once by the transport, the button gone.
             if (!researchDeviceAllows('sync-undo-this')) return;
             const gone = preview.errorCode === 'sync.not-sync' || preview.status === 404 || preview.status === 410;
             this.showToast(gone ? S.undoThisGone : S.undoThisFailed, 5000);
-            if (gone) this.researchStatusAfterWrite(s);
+            if (gone) after();
             return;
         }
         if (preview.already) {
             this.showToast(S.undoThisAlready, 5000);
-            this.researchStatusAfterWrite(s);
+            after();
             return;
         }
         const lines = preview.fields.map(undoFieldLine);
@@ -225,12 +256,12 @@ export const deviceProgressMethods = uiModule({
         const ok = await asked;
         modal?.classList.remove('over-sheet');
         if (!ok) return;
-        const done = await researchBridgeWrite(s.bridge.base, 'POST', path, {}, () => ({}));
+        const done = await researchBridgeWrite(base, 'POST', path, {}, () => ({}));
         if (!done.ok) {
             if (!researchDeviceAllows('sync-undo-this')) return;
             const gone = done.errorCode === 'sync.not-sync' || done.status === 404;
             this.showToast(gone ? S.undoThisGone : S.undoThisFailed, 5000);
         }
-        this.researchStatusAfterWrite(s);
+        after();
     },
 });

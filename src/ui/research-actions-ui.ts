@@ -32,7 +32,8 @@ import { waitingTodoCount } from '../research-waiting.js';
 import { researchOpenMark, researchActionLabel, researchActionMark, researchMarkFlags } from './research-open-mark.js';
 import { researchOpenSvg } from '../history-symbols.js';
 import { overviewInWindow } from '../windows/overview-window.js';
-import { inDeviceMode } from './device-mode-ui.js';
+import { inDeviceMode, thisDeviceId } from './device-mode-ui.js';
+import { deviceUndoableSend } from './device-progress-ui.js';
 import { deviceDownNow } from './device-offline-ui.js';
 
 export { researchOpenMark } from './research-open-mark.js';
@@ -183,7 +184,7 @@ const MENU_ITEM_ACTIONS: Readonly<Record<string, ResearchDeviceAction>> = {
     'research-item-read': 'read-document', 'research-item-history': 'history', 'research-item-version': 'load-version',
     'research-item-update': 'update', 'research-item-phone': 'devices', 'research-item-fixes': 'fixes',
     'research-item-verify': 'verify-bulk', 'research-item-tools': 'research-tools', 'research-item-undo': 'sync-undo',
-    'research-item-tree-settings': 'tree-settings', 'research-item-setup': 'setup',
+    'research-item-tree-settings': 'tree-settings', 'research-item-setup': 'setup', 'research-item-undo-this': 'sync-undo-this',
 };
 
 /** An item of the menu drawn here (always outside the device mode). */
@@ -436,7 +437,10 @@ export const researchActionsMethods = uiModule({
             if (waiting > 0) first.push({ id: 'research-item-waiting', label: r.waiting, method: 'researchActionWaiting', count: waiting });
             first.push(...sendRow.map(i => ({ ...i, ext: false, ai: false })));
             const materialsFirst = [...materials].sort((a, b) => Number(b.id === 'research-item-materials') - Number(a.id === 'research-item-materials'));
-            more = [...changesRow, ...materialsFirst, ...viewLinks];
+            // Undo this device's newest send (4.2, 6.1), when the gateway allows it and there is one.
+            const undoThis: SubmenuItem[] = this.activeResearchId() && deviceUndoableSend(this.researchStatusOf(this.activeResearchId()!)?.sends, thisDeviceId())
+                ? [{ id: 'research-item-undo-this', label: strings.sync.undoThisMenu, method: 'researchActionUndoThisSend' }] : [];
+            more = [...changesRow, ...materialsFirst, ...undoThis, ...viewLinks];
             moreQuiet = [];
         } else if (!this.researchAnyAnnounced()) {
             // No strom-research:// links here (an older research, none announced, or

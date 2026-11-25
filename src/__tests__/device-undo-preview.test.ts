@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { undoPreviewOf, undoFieldLine } from '../ui/device-progress-ui';
+import { undoPreviewOf, undoFieldLine, deviceUndoableSend } from '../ui/device-progress-ui';
+import type { ResearchSendRecord } from '../research-link';
 import { setLanguage } from '../strings';
 
 afterEach(() => setLanguage('en'));
@@ -45,5 +46,29 @@ describe('Undo this send on a device: the preview (spec 094 §4, 4.9; K2.3)', ()
     it('a send taken back already says so (no fields, undoneAt)', () => {
         expect(undoPreviewOf({ input: 'I0007', undone: 0, undoneAt: '2026-11-24T10:00:00Z' }, ME).already).toBe(true);
         expect(undoPreviewOf({ input: 'I0007', undone: 0, fields: [] }, ME).already).toBe(false);
+    });
+});
+
+describe('"Undo send…" among the research\'s actions on a device (4.2, 6.1): which send', () => {
+    const NOW = Date.parse('2026-11-25T10:00:00Z');
+    const send = (at: string, client: { id: string; name?: string } | undefined, more: Partial<ResearchSendRecord> = {}): ResearchSendRecord => ({
+        intake: `in-${at}`, input: 'I0001', at, state: 'written', changes: 2, tries: null, tree: 't', sent: '', decidedAt: '', reason: '',
+        conflicts: null, conflictPersons: [], ...(client ? { client } : {}), ...more,
+    } as ResearchSendRecord);
+
+    it('this device\'s newest written send of the last 24 hours with its input; none of another device, none without input', () => {
+        const mine = send('2026-11-25T09:30:00Z', { id: ME }, { input: 'I0009' });
+        const sends = [
+            send('2026-11-25T08:00:00Z', { id: ME }, { input: 'I0005' }),
+            mine,
+            send('2026-11-25T09:50:00Z', IPAD),
+            send('2026-11-25T09:55:00Z', { id: ME }, { input: undefined }),
+            send('2026-11-25T09:58:00Z', { id: ME }, { state: 'undone' }),
+            send('2026-11-24T08:00:00Z', { id: ME }, { input: 'I0001' }),
+        ];
+        expect(deviceUndoableSend(sends, ME, NOW)).toBe(mine);
+        expect(deviceUndoableSend(sends, IPAD.id + 'x', NOW)).toBeNull();
+        expect(deviceUndoableSend(sends, '', NOW)).toBeNull();
+        expect(deviceUndoableSend(null, ME, NOW)).toBeNull();
     });
 });
