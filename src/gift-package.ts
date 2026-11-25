@@ -28,10 +28,11 @@ import type { Person, PersonId, StromData } from './types.js';
 import type { LineageIndex } from './lineage.js';
 import { ancestorGenerations } from './lineage.js';
 import {
-    giftCutIds, giftProtectedData,
+    giftCutIds, giftProtectedData, giftShortensLiving,
     type GiftLang, type GiftLetter, type GiftParts, type GiftSettings,
 } from './gift-tree.js';
 import { getStringsForLang, joinAnd } from './strings.js';
+import { buildGiftCover, giftMessage } from './gift-cover.js';
 import { shownName } from './person-name.js';
 import { unicodeFileName } from './filenames.js';
 import { ZipBlobSink, ZipWriter, type ZipAdded } from './zip.js';
@@ -170,10 +171,8 @@ export function giftBatchFileName(lang: GiftLang, year: number): string {
     return unicodeFileName(getStringsForLang(lang).giftTree.files.batch(year), 'family-trees.zip');
 }
 
-/** The message with the salutation in place of "[oslovení]" (§6). */
-export function giftMessage(letter: Pick<GiftLetter, 'message' | 'salutation'>): string {
-    return (letter.message ?? '').split('[oslovení]').join(letter.salutation ?? '');
-}
+/** The message with the salutation in place of every language's placeholder (§6). */
+export { giftMessage };
 
 // ==================== The cover page ====================
 
@@ -200,27 +199,15 @@ export interface GiftCoverInfo {
     photos: boolean;
     folder: string;
     now: Date;
+    /** Whether the protection shortens some details of the living (the footer says so). */
+    shortened?: boolean;
+    /** The embedded @font-face rules (the pages'). */
+    fontCss?: string;
 }
 
 /** The cover page ("Start here.html") from the very data every part got. */
 export type GiftCoverBuilder = (data: StromData, info: GiftCoverInfo) => string | Promise<string>;
 
-function escHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-/** A path as a link: each folder and file name escaped for a URL. */
-function hrefOf(path: string): string {
-    return path.split('/').map(encodeURIComponent).join('/');
-}
-
-/** A plain cover page until the real one is supplied: the folder's name and a link to each part. */
-export function giftCoverPlaceholder(_data: StromData, info: GiftCoverInfo): string {
-    const rows = info.files.map(f => `<li><a href="${escHtml(hrefOf(f.path))}">${escHtml(f.path)}</a></li>`).join('');
-    return `<!doctype html><html lang="${info.lang}"><head><meta charset="utf-8">`
-        + `<meta name="viewport" content="width=device-width, initial-scale=1"><title>${escHtml(info.folder)}</title></head>`
-        + `<body><h1>${escHtml(info.folder)}</h1><ul>${rows}</ul></body></html>\n`;
-}
 
 // ==================== One package ====================
 
@@ -239,7 +226,7 @@ export interface GiftPackageEnv {
     app?: (data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string }) => Promise<Blob>;
     /** An SVG drawn to a PNG (svgToPngBlob); none or null: the fan only as SVG. */
     png?: (svg: string, widthPx: number, heightPx: number) => Promise<Blob | null>;
-    /** The cover page; default: a plain list of the parts. */
+    /** The cover page; default: buildGiftCover. */
     cover?: GiftCoverBuilder;
     /** The embedded @font-face rules of the pages, the book and the fan. */
     fonts?: { pages?: string; book?: string; fan?: string };
@@ -504,8 +491,10 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
         const info: GiftCoverInfo = {
             lang, recipients, names: people.map(p => p.name), parts: { ...parts }, files: cover.slice(),
             letter: settings.letter, treeName: input.treeName, persons, photos: settings.photos, folder, now,
+            shortened: giftShortensLiving(input.data, settings.cut, settings.privacy, now.getFullYear()),
+            ...(env.fonts?.pages ? { fontCss: env.fonts.pages } : {}),
         };
-        const coverHtml = await (env.cover ?? giftCoverPlaceholder)(data, info);
+        const coverHtml = await (env.cover ?? buildGiftCover)(data, info);
         checkAbort(signal);
         await put(names.start, coverHtml);
         await writer.finishAsync();

@@ -16022,6 +16022,12 @@
             background: var(--hover-bg, #f4f1ea); border-left: 3px solid var(--primary);
             border-radius: 6px; font-style: italic; font-size: 14px; text-align: left; white-space: pre-wrap;
         }
+        /* The sender's message as plain text (spec 093 §6 [52]): serif, no stripe, no background. */
+        .share-message.share-message--plain {
+            margin: 12px auto 4px; padding: 0; background: none; border: 0; border-radius: 0;
+            font-family: var(--font-serif); font-style: normal; font-size: 16px; line-height: 1.55;
+            color: var(--text); overflow-wrap: anywhere;
+        }
         .share-welcome-buttons { justify-content: center; margin-top: 14px; flex-wrap: wrap; }
         /* Sender hint under the "only changes" scope option. */
         .share-changes-hint { margin: 8px 0 0; font-size: 12.5px; color: var(--text-secondary, #777); line-height: 1.45; }
@@ -39942,7 +39948,7 @@
             <div class="share-welcome-icon">Strom</div>
             <h2 id="share-welcome-title"></h2>
             <div id="share-welcome-counts" class="share-welcome-counts"></div>
-            <blockquote id="share-welcome-message" class="share-message"></blockquote>
+            <blockquote id="share-welcome-message" class="share-message share-message--plain"></blockquote>
             <div class="buttons share-welcome-buttons">
                 <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeShareWelcome()" data-i18n="share.welcomeView"></button>
                 <button type="button" class="primary" onclick="window.Strom.UI.shareWelcomeEdit()" data-i18n="share.welcomeEdit"></button>
@@ -39956,7 +39962,7 @@
             <div class="share-welcome-icon">Strom</div>
             <h2 id="share-reply-title"></h2>
             <p id="share-reply-intro" class="modal-description"></p>
-            <blockquote id="share-reply-message" class="share-message"></blockquote>
+            <blockquote id="share-reply-message" class="share-message share-message--plain"></blockquote>
             <div class="buttons share-welcome-buttons">
                 <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeShareReplyDialog()" data-i18n="share.replyView"></button>
                 <button type="button" class="secondary" onclick="window.Strom.UI.shareReplyImport()" data-i18n="share.replyImport"></button>
@@ -39971,7 +39977,7 @@
             <div class="share-welcome-icon">Strom</div>
             <h2 id="share-packet-title"></h2>
             <p id="share-packet-intro" class="modal-description"></p>
-            <blockquote id="share-packet-message" class="share-message"></blockquote>
+            <blockquote id="share-packet-message" class="share-message share-message--plain"></blockquote>
             <div id="share-packet-body" class="share-packet-body"></div>
             <div class="buttons share-welcome-buttons">
                 <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeChangePacketPreview()" data-i18n="buttons.cancel"></button>

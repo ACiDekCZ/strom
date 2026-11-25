@@ -7,6 +7,24 @@ import type { Gender, TableGroupKey } from './types.js';
 
 export type Language = 'en' | 'cs' | 'de' | 'pl';
 
+/**
+ * What a cover letter's template says about the gift (spec 093 §6): the
+ * figures come from the cut. `oldest` is left out when the oldest ancestor is
+ * not shown by name (a living person).
+ */
+export interface GiftTemplateFacts {
+    /** The recipient's gender (the greeting); a couple is greeted in the plural. */
+    gender: Gender;
+    couple: boolean;
+    /** Whether the cut holds any ancestor of the recipients. */
+    ancestors: boolean;
+    /** The oldest ancestor: the name, "about 1798" and the place, as far as known. */
+    oldest: { name: string; when: string | null; place: string | null } | null;
+    persons: number;
+    /** Years from the earliest birth in the cut to the letter's year; null unknown. */
+    years: number | null;
+}
+
 /** The event a main excerpt of the person page shows (personPage.excerptCaption). */
 export type PersonPageCaptionEvent = 'birth' | 'birthBaptism' | 'marriage' | 'death' | 'deathBurial';
 /** The kind of register a source is (from its title), for the excerpt caption. */
@@ -12728,7 +12746,7 @@ const stringsEN = {
             births: 'nobody has a birth year recorded.',
         },
     },
-    /** "Give a family tree" (spec 093): the gift package's files and its steps. */
+    /** "Give a family tree" (spec 093): the gift package's files, its steps, the cover letter's templates and the cover page. */
     giftTree: {
         /** The package's file and folder names (§5), in the letter's language. */
         files: {
@@ -12754,6 +12772,78 @@ const stringsEN = {
             fan: 'Ancestor fan',
             gedcom: 'GEDCOM',
             zip: 'Writing the ZIP',
+        },
+        /** The salutation's placeholder in the message; every language's one is replaced (giftMessage). */
+        salutationToken: '[name]',
+        /** The cover letter's templates by motif (§6): the letter may address the recipient. */
+        template: {
+            none: (f: GiftTemplateFacts): string => {
+                const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
+                return `Dear [name],\n\n`
+                    + `Here is a piece of our family: ${f.ancestors ? 'your ancestors and the families around them' : 'the closest family and the families around it'}.`
+                    + (f.oldest ? ` The oldest of them is ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
+                    + ` In all, ${nEn(f.persons, 'person', 'people')}${f.years ? ` and ${nEn(f.years, 'year', 'years')}` : ''}.\n\n`
+                    + 'Everything opens in a browser, nothing needs installing. If anything comes to mind to add, just write.';
+            },
+            xmas: (f: GiftTemplateFacts): string => {
+                const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
+                return `Dear [name],\n\n`
+                    + `For Christmas, here is a piece of our family: ${f.ancestors ? 'your ancestors and the families around them' : 'the closest family and the families around it'}.`
+                    + (f.oldest ? ` The oldest of them is ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
+                    + ` In all, ${nEn(f.persons, 'person', 'people')}${f.years ? ` and ${nEn(f.years, 'year', 'years')}` : ''}.\n\n`
+                    + 'Everything opens in a browser, nothing needs installing. If anything comes to mind to add, just write.\n\n'
+                    + 'Merry Christmas!';
+            },
+        },
+        /** The cover page "Start here" (§6), in the letter's language. */
+        cover: {
+            kicker: 'Family tree',
+            kickerXmas: (year: number) => `Christmas ${year} · Family tree`,
+            ancestorsTo: (year: number) => `ancestors back to ${year}`,
+            /** The words after a figure in bold ("84 people"). */
+            persons: (n: number) => plural('en', n, 'person', 'people'),
+            generations: (n: number) => plural('en', n, 'generation', 'generations'),
+            years: (n: number) => plural('en', n, 'year', 'years'),
+            rods: (n: number) => plural('en', n, 'family line', 'family lines'),
+            whatH: 'What the package holds',
+            whatLead: 'Everything opens in a browser, with no installation and no internet. The app shows the most.',
+            printLead: (folder: string) => `The files in the folder “${folder}” (once the ZIP is unpacked).`,
+            unzip: 'If the links don\'t open, the package isn\'t unpacked. On Windows: right-click the ZIP › Extract All…, on a Mac double-click it; then open Start here again.',
+            /** Each part: its title, the card's sentence (f) and the printed list's (p). */
+            parts: {
+                start: { t: 'Start here', f: 'This page, with links to the other parts.', p: 'This page, with links to the other parts.' },
+                app: {
+                    t: 'Family tree (app)',
+                    f: 'The whole family tree to browse: tree, timeline, map and fan. Opens in a browser, with no installation and no internet.',
+                    p: 'The whole family tree to browse. Opens in a browser with a double-click, with no installation and no internet.',
+                },
+                pages: {
+                    t: 'Family pages',
+                    f: 'The family as linked pages: each person with parents, children and places. Easy to read on a phone too.',
+                    p: 'Linked pages of the family, on a phone too.',
+                },
+                book: {
+                    t: 'Family book',
+                    f: 'Chapters by family with an index, ready to print. PDF: in the browser Print › Save as PDF.',
+                    p: 'Chapters by family, to print. PDF: in the browser Print › Save as PDF.',
+                },
+                fan: { t: 'Ancestor fan', f: 'All direct ancestors in one picture, to print or as a poster.', p: 'The direct ancestors in one picture.' },
+                gedcom: { t: 'For other programs', f: 'The family tree in the GEDCOM format for other genealogy programs.', p: 'GEDCOM for other genealogy programs.' },
+            },
+            open: 'Open ›',
+            showFile: 'Show file ›',
+            numbersH: 'The family tree in numbers',
+            oldest: 'Oldest ancestor',
+            rodsK: 'Family lines',
+            places: 'Places',
+            journey: 'The family\'s path',
+            oldestRecord: 'Oldest record',
+            about: 'about',
+            chartH: 'People by generation',
+            chartNote: (last: string) => `I = oldest, ${last} = youngest`,
+            created: (date: string) => `Made ${date} in the Strom app`,
+            offline: 'everything works without internet',
+            shortened: 'some details of the living are shortened',
         },
     },
 };
@@ -24953,6 +25043,75 @@ const stringsCZ: StringsType = {
             gedcom: 'GEDCOM',
             zip: 'Zápis ZIP',
         },
+        salutationToken: '[oslovení]',
+        template: {
+            none: (f: GiftTemplateFacts): string => {
+                const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
+                const hi = f.couple ? 'Milí' : f.gender === 'female' ? 'Milá' : f.gender === 'male' ? 'Milý' : 'Milý/Milá';
+                return `${hi} [oslovení],\n\n`
+                    + `posílám kus naší rodiny: ${f.ancestors ? `${f.couple ? 'vaše' : 'tvé'} předky a rodiny kolem nich` : 'nejbližší rodinu a rodiny kolem ní'}.`
+                    + (f.oldest ? ` Nejstarší z nich je ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
+                    + ` Celkem ${nCs(f.persons, 'osoba', 'osoby', 'osob')}${f.years ? ` a ${nCs(f.years, 'rok', 'roky', 'let')}` : ''}.\n\n`
+                    + `Všechno se otevře v prohlížeči, nic se neinstaluje. Kdyby ${f.couple ? 'vás' : 'tě'} napadlo, co doplnit, stačí napsat.`;
+            },
+            xmas: (f: GiftTemplateFacts): string => {
+                const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
+                const hi = f.couple ? 'Milí' : f.gender === 'female' ? 'Milá' : f.gender === 'male' ? 'Milý' : 'Milý/Milá';
+                return `${hi} [oslovení],\n\n`
+                    + `k Vánocům posílám kus naší rodiny: ${f.ancestors ? `${f.couple ? 'vaše' : 'tvé'} předky a rodiny kolem nich` : 'nejbližší rodinu a rodiny kolem ní'}.`
+                    + (f.oldest ? ` Nejstarší z nich je ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
+                    + ` Celkem ${nCs(f.persons, 'osoba', 'osoby', 'osob')}${f.years ? ` a ${nCs(f.years, 'rok', 'roky', 'let')}` : ''}.\n\n`
+                    + `Všechno se otevře v prohlížeči, nic se neinstaluje. Kdyby ${f.couple ? 'vás' : 'tě'} napadlo, co doplnit, stačí napsat.\n\n`
+                    + 'Krásné Vánoce!';
+            },
+        },
+        cover: {
+            kicker: 'Rodokmen',
+            kickerXmas: (year: number) => `Vánoce ${year} · Rodokmen`,
+            ancestorsTo: (year: number) => `předci až do roku ${year}`,
+            persons: (n: number) => plural('cs', n, 'osoba', 'osoby', 'osob'),
+            generations: (n: number) => plural('cs', n, 'generace', 'generace', 'generací'),
+            years: (n: number) => plural('cs', n, 'rok', 'roky', 'let'),
+            rods: (n: number) => plural('cs', n, 'rod', 'rody', 'rodů'),
+            whatH: 'Co je v balíčku',
+            whatLead: 'Vše se otevře v prohlížeči, bez instalace a bez internetu. Nejvíc toho ukáže Rodokmen (aplikace).',
+            printLead: (folder: string) => `Soubory ve složce „${folder}“ (po rozbalení ZIP).`,
+            unzip: 'Když se odkazy neotvírají, balíček není rozbalený. Ve Windows: pravým tlačítkem na soubor ZIP › Extrahovat vše…, na Macu dvojklik; pak znovu otevřít Začít zde.',
+            parts: {
+                start: { t: 'Začít zde', f: 'Tento list s rozcestníkem; odkazy na ostatní části.', p: 'Tento list s rozcestníkem; odkazy na ostatní části.' },
+                app: {
+                    t: 'Rodokmen (aplikace)',
+                    f: 'Celý rodokmen k procházení: strom, časová osa, mapa a vějíř. Otevře se v prohlížeči, bez instalace a bez internetu.',
+                    p: 'Celý rodokmen k procházení. Otevře se dvojklikem v prohlížeči, bez instalace a bez internetu.',
+                },
+                pages: {
+                    t: 'Stránky rodiny',
+                    f: 'Rodina jako propojené stránky: každá osoba, její rodiče, děti a místa. Pohodlné i na telefonu.',
+                    p: 'Propojené stránky rodiny, i na telefonu.',
+                },
+                book: {
+                    t: 'Kniha rodu',
+                    f: 'Kapitoly po rodinách s rejstříkem, připravené k tisku. PDF: v prohlížeči Tisk › Uložit jako PDF.',
+                    p: 'Kapitoly po rodinách k tisku. PDF: v prohlížeči Tisk › Uložit jako PDF.',
+                },
+                fan: { t: 'Vějíř předků', f: 'Všichni přímí předci v jednom obrázku, k vytištění nebo jako plakát.', p: 'Přímí předci v jednom obrázku.' },
+                gedcom: { t: 'Pro jiné programy', f: 'Rodokmen ve formátu GEDCOM pro jiné genealogické programy.', p: 'GEDCOM pro jiné genealogické programy.' },
+            },
+            open: 'Otevřít ›',
+            showFile: 'Ukázat soubor ›',
+            numbersH: 'Rodokmen v číslech',
+            oldest: 'Nejstarší předek',
+            rodsK: 'Rody',
+            places: 'Místa',
+            journey: 'Cesta rodiny',
+            oldestRecord: 'Nejstarší záznam',
+            about: 'kolem',
+            chartH: 'Osoby po generacích',
+            chartNote: (last: string) => `I = nejstarší, ${last} = nejmladší`,
+            created: (date: string) => `Vytvořeno ${date} v aplikaci Strom`,
+            offline: 'vše funguje bez internetu',
+            shortened: 'u žijících osob jsou některé údaje zkrácené',
+        },
     },
 };
 
@@ -37058,6 +37217,75 @@ const stringsDE: StringsType = {
             fan: 'Ahnenfächer',
             gedcom: 'GEDCOM',
             zip: 'ZIP schreiben',
+        },
+        salutationToken: '[Name]',
+        template: {
+            none: (f: GiftTemplateFacts): string => {
+                const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
+                const hi = f.couple || f.gender === 'female' ? 'Liebe' : f.gender === 'male' ? 'Lieber' : 'Liebe/r';
+                return `${hi} [Name],\n\n`
+                    + `hier schicke ich ein Stück unserer Familie: ${f.ancestors ? `${f.couple ? 'eure' : 'deine'} Vorfahren und die Familien um sie herum` : 'die engste Familie und die Familien um sie herum'}.`
+                    + (f.oldest ? ` Am weitesten zurück reicht ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
+                    + ` Insgesamt ${nDe(f.persons, 'Person', 'Personen')}${f.years ? ` und ${nDe(f.years, 'Jahr', 'Jahre')}` : ''}.\n\n`
+                    + `Alles öffnet sich im Browser, nichts muss installiert werden. Wenn ${f.couple ? 'euch' : 'dir'} etwas einfällt, das fehlt, ${f.couple ? 'schreibt' : 'schreib'} einfach.`;
+            },
+            xmas: (f: GiftTemplateFacts): string => {
+                const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
+                const hi = f.couple || f.gender === 'female' ? 'Liebe' : f.gender === 'male' ? 'Lieber' : 'Liebe/r';
+                return `${hi} [Name],\n\n`
+                    + `zu Weihnachten schicke ich ein Stück unserer Familie: ${f.ancestors ? `${f.couple ? 'eure' : 'deine'} Vorfahren und die Familien um sie herum` : 'die engste Familie und die Familien um sie herum'}.`
+                    + (f.oldest ? ` Am weitesten zurück reicht ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
+                    + ` Insgesamt ${nDe(f.persons, 'Person', 'Personen')}${f.years ? ` und ${nDe(f.years, 'Jahr', 'Jahre')}` : ''}.\n\n`
+                    + `Alles öffnet sich im Browser, nichts muss installiert werden. Wenn ${f.couple ? 'euch' : 'dir'} etwas einfällt, das fehlt, ${f.couple ? 'schreibt' : 'schreib'} einfach.\n\n`
+                    + 'Frohe Weihnachten!';
+            },
+        },
+        cover: {
+            kicker: 'Stammbaum',
+            kickerXmas: (year: number) => `Weihnachten ${year} · Stammbaum`,
+            ancestorsTo: (year: number) => `Vorfahren bis ${year}`,
+            persons: (n: number) => plural('de', n, 'Person', 'Personen'),
+            generations: (n: number) => plural('de', n, 'Generation', 'Generationen'),
+            years: (n: number) => plural('de', n, 'Jahr', 'Jahre'),
+            rods: (n: number) => plural('de', n, 'Stammlinie', 'Stammlinien'),
+            whatH: 'Inhalt des Pakets',
+            whatLead: 'Alles öffnet sich im Browser, ohne Installation und ohne Internet. Am meisten zeigt der Stammbaum (App).',
+            printLead: (folder: string) => `Die Dateien im Ordner „${folder}“ (nach dem Entpacken der ZIP-Datei).`,
+            unzip: 'Öffnen sich die Links nicht, ist das Paket nicht entpackt. Unter Windows: Rechtsklick auf die ZIP-Datei › Alle extrahieren…, auf dem Mac Doppelklick; dann Hier beginnen erneut öffnen.',
+            parts: {
+                start: { t: 'Hier beginnen', f: 'Diese Seite mit Links zu den anderen Teilen.', p: 'Diese Seite mit Links zu den anderen Teilen.' },
+                app: {
+                    t: 'Stammbaum (App)',
+                    f: 'Der ganze Stammbaum zum Durchblättern: Baum, Zeitleiste, Karte und Fächer. Öffnet sich im Browser, ohne Installation und ohne Internet.',
+                    p: 'Der ganze Stammbaum zum Durchblättern. Öffnet sich per Doppelklick im Browser, ohne Installation und ohne Internet.',
+                },
+                pages: {
+                    t: 'Familienseiten',
+                    f: 'Die Familie als verlinkte Seiten: jede Person mit Eltern, Kindern und Orten. Auch auf dem Handy gut lesbar.',
+                    p: 'Verlinkte Seiten der Familie, auch auf dem Handy.',
+                },
+                book: {
+                    t: 'Familienbuch',
+                    f: 'Kapitel nach Familien mit Register, bereit zum Drucken. PDF: im Browser Drucken › Als PDF speichern.',
+                    p: 'Kapitel nach Familien zum Drucken. PDF: im Browser Drucken › Als PDF speichern.',
+                },
+                fan: { t: 'Ahnenfächer', f: 'Alle direkten Vorfahren in einem Bild, zum Ausdrucken oder als Poster.', p: 'Die direkten Vorfahren in einem Bild.' },
+                gedcom: { t: 'Für andere Programme', f: 'Der Stammbaum im GEDCOM-Format für andere Genealogieprogramme.', p: 'GEDCOM für andere Genealogieprogramme.' },
+            },
+            open: 'Öffnen ›',
+            showFile: 'Datei zeigen ›',
+            numbersH: 'Der Stammbaum in Zahlen',
+            oldest: 'Am weitesten zurück',
+            rodsK: 'Stammlinien',
+            places: 'Orte',
+            journey: 'Weg der Familie',
+            oldestRecord: 'Ältester Eintrag',
+            about: 'um',
+            chartH: 'Personen nach Generationen',
+            chartNote: (last: string) => `I = älteste, ${last} = jüngste`,
+            created: (date: string) => `Erstellt am ${date} mit der App Strom`,
+            offline: 'alles funktioniert ohne Internet',
+            shortened: 'bei lebenden Personen sind einige Angaben gekürzt',
         },
     },
 };

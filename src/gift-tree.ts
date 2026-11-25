@@ -20,7 +20,7 @@ import {
 } from './lineage.js';
 import { extractSubtree } from './subtree.js';
 import {
-    applyLivingPrivacy, stripResearchWork,
+    applyLivingPrivacy, inferBirthUpperBounds, isLivingPerson, stripResearchWork,
     type DeceasedDetails, type LivingSensitive, type PrivacyMode,
 } from './privacy.js';
 import { stripMedia } from './attachments.js';
@@ -89,7 +89,7 @@ export type GiftLang = 'cs' | 'en' | 'de' | 'pl';
 export interface GiftLetter {
     lang: GiftLang;
     motif: 'none' | 'xmas';
-    /** How the letter greets the recipient; '[oslovení]' in the message is replaced by it. */
+    /** How the letter greets the recipient; each language's placeholder in the message ('[oslovení]', '[name]', '[Name]', '[imię]') is replaced by it. */
     salutation: string;
     message: string;
     signature: string;
@@ -318,4 +318,25 @@ export function giftProtectedData(
     if (!opts.photos) out = stripMedia(out);
     dropDanglingPortraitSources(out);
     return out;
+}
+
+/**
+ * Whether the protection shortens anything of a living person in the cut (the
+ * cover page's "some details of the living are shortened", §6): a living
+ * person outside the household and the exceptions under a mode other than
+ * 'full', or a living person shown in full while some kind of detail is masked.
+ */
+export function giftShortensLiving(
+    source: StromData | LineageIndex, cut: GiftCut, privacy: GiftPrivacy, currentYear: number = new Date().getFullYear(),
+): boolean {
+    const sub = giftCutData(source, cut);
+    const bounds = inferBirthUpperBounds(sub);
+    const full = new Set<PersonId>([...giftHouseholdIds(sub, cut.recipients), ...privacy.fullIds]);
+    const masks = Object.values(privacy.sensitive).some(kept => !kept);
+    for (const p of Object.values(sub.persons)) {
+        if (p.isPlaceholder || !isLivingPerson(p, currentYear, bounds)) continue;
+        if (masks) return true;
+        if (privacy.others !== 'full' && !full.has(p.id)) return true;
+    }
+    return false;
 }

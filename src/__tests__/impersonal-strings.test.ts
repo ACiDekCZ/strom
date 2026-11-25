@@ -28,10 +28,10 @@ const ADDRESS: Record<'en' | 'cs' | 'de' | 'pl', RegExp> = {
 
 /** Per language: texts quoting another program, and words that only look like an address (group.key). */
 const EXCEPTIONS: Record<'en' | 'cs' | 'de' | 'pl', Set<string>> = {
-    // The sample message the sender writes to a relative.
-    en: new Set(['share.messagePlaceholder']),
-    // The sample message the sender writes to a relative.
-    cs: new Set(['share.messagePlaceholder']),
+    // The sample message the sender writes to a relative; the gift's cover letter (a letter to the recipient, spec 093 §6).
+    en: new Set(['share.messagePlaceholder', 'giftTree.template.none', 'giftTree.template.xmas']),
+    // The sample message the sender writes to a relative; the gift's cover letter.
+    cs: new Set(['share.messagePlaceholder', 'giftTree.template.none', 'giftTree.template.xmas']),
     // A sentence-initial "Sie" meaning "it/they" (the changes, the source, the backup, the originals, the research).
     de: new Set(['sync.notWrittenListed', 'sync.notWrittenToast', 'research.reviewIntro', 'treeSettings.guideDesc', 'sources.deleteConfirm',
         'snapshots.restoreConfirm', 'mediaQueue.browserOnly', 'mediaQueue.bridgeDownSince', 'mediaQueue.staleSub',
@@ -41,10 +41,10 @@ const EXCEPTIONS: Record<'en' | 'cs' | 'de' | 'pl', Set<string>> = {
         'win.screenDenied',
         // "Sie" the tasks going back to the agent (spec 089).
         'live.waitingRetry.confirm',
-        // The sample message the sender writes to a relative.
-        'share.messagePlaceholder']),
-    // The sample message the sender writes to a relative.
-    pl: new Set(['share.messagePlaceholder']),
+        // The sample message the sender writes to a relative; the gift's cover letter.
+        'share.messagePlaceholder', 'giftTree.template.none', 'giftTree.template.xmas']),
+    // The sample message the sender writes to a relative; the gift's cover letter.
+    pl: new Set(['share.messagePlaceholder', 'giftTree.template.none', 'giftTree.template.xmas']),
 };
 
 /** Every text of an object as "path → text"; a function's text is its source (the template it returns). */

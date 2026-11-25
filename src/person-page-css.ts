@@ -22,7 +22,7 @@ export const PERSON_PAGE_LIGHT_TOKENS = [
 ].join('; ') + ';';
 
 /** The font stacks of the app (the file falls back to Georgia / the system sans without the embedded faces). */
-const FONT_STACKS = "--font-serif: 'Strom Serif', Georgia, 'Times New Roman', serif; --font-sans: 'Instrument Sans', -apple-system, 'Segoe UI', sans-serif;";
+export const FONT_STACKS = "--font-serif: 'Strom Serif', Georgia, 'Times New Roman', serif; --font-sans: 'Instrument Sans', -apple-system, 'Segoe UI', sans-serif;";
 
 /**
  * The Ancestors section (spec 029 §8): the fan on a tinted surface (desktop
