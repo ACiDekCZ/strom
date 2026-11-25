@@ -26,17 +26,26 @@ import { MEDIA_BLOCK } from '../src/device/device-crypto';
  * - PUT /device/media/<sha> (094 §2.4 as the research's U9c): the open headers
  *   (Device, Time, Nonce, Tree, Size ≥ 1, From ≤ N) checked, the meta block
  *   (4112 B) opened, its headers only the allowlist (else a sealed 400
- *   device.bad {header}), From against the blocks kept (409 media.from
- *   {have}), blocks From+1…N opened and kept per device and file, a body
- *   ending short answered 200 {sha, have, size}, the whole file's SHA-256
+ *   device.bad {params: {header}}), From against the blocks kept (409
+ *   media.from {params: {have}}), blocks From+1…N opened and kept per device
+ *   and file, a body ending short (a batch, U9d) answered 200 {sha, have,
+ *   size}, a nonce seen before a sealed 409 media.replay {params: {have}}
+ *   (U9d; a time off stays the open 409 device.clock {now, replay: false}),
+ *   the whole file's SHA-256
  *   checked (409 media.hash, nothing kept), then the bridge's answer by
  *   `onMedia` (default 200 `{id}`) — all sealed as a tunnel's with the
  *   request's nonce base; the test's `mediaSteps`, one per request: 429
  *   device.busy, blocks kept up to one and the connection closed without an
- *   answer, a hash that does not hold; `GET device/media/<sha>` through the tunnel says
+ *   answer, blocks kept up to one and the request answered as one sent again
+ *   (media.replay), a hash that does not hold; `GET device/media/<sha>` through the tunnel says
  *   what is kept (`{sha, size, have}`),
  * - a tunnelled request with `z: "gzip"` unpacked before its handler sees it
  *   (as the research carries it),
+ * - 409 device.clock of the tunnel and the stream with `replay` (U9d): false
+ *   for a time off, true for a nonce seen before; `replayWrites` carries a
+ *   write and answers it 409 device.clock {replay: true} (its answer lost),
+ * - GET status says the tree asked (`tree: {id, name}`, its name from
+ *   `trees`) and `device.others` (U9d),
  * - refusals the test asks for (refuseNext: 401/404/409 clock/410/503), and
  *   `unreachable` (each connection closed without an answer).
  *
@@ -96,9 +105,19 @@ export interface FakeGateway {
     /**
      * What the next PUTs /device/media meet, one per request (first first; none: as it should go):
      * `busy` 429 device.busy (Retry-After 1), `{cutAfter}` blocks kept up to it and the connection closed
-     * without an answer, `badHash` the whole file's SHA-256 does not hold (409 media.hash, nothing kept).
+     * without an answer, `{replayAfter}` blocks kept up to it and the request answered as one the browser sent
+     * again (sealed 409 media.replay {params: {have}}), `badHash` the whole file's SHA-256 does not hold (409
+     * media.hash, nothing kept).
      */
-    mediaSteps: ('busy' | 'badHash' | { cutAfter: number } | null)[];
+    mediaSteps: ('busy' | 'badHash' | { cutAfter: number } | { replayAfter: number } | null)[];
+    /**
+     * Paths of the tunnel (`device/rename`, `sync/apply`, …) whose next write (not GET) is carried to its handler
+     * and then answered 409 device.clock `{now, replay: true}`: as when the browser sent it again after a cut and
+     * the first one's answer was lost (U9d). Taken one per request.
+     */
+    replayWrites: string[];
+    /** Other devices connected now, said in GET status (`device.others`, U9d). */
+    others: number;
     /** Each connection closed at once without an answer. */
     unreachable: boolean;
     /** The gateway's own paths (/device/*) held without an answer (the app's request times out: connecting meanwhile). */
@@ -125,7 +144,6 @@ export interface FakeGateway {
 const STATUS = {
     ok: true,
     features: ['device.gateway'],
-    tree: { name: 'Pýchavkovi z Mlýnků' },
 };
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -167,6 +185,8 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         onMedia: () => undefined,
         mediaRequests: [],
         mediaSteps: [],
+        replayWrites: [],
+        others: 0,
         unreachable: false,
         stall: false,
         clockOffsetMs: 0,
@@ -228,7 +248,8 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         const r = openRequest(device.key, env);
         if (!r) return json(res, 400, { code: 'device.bad' });
         const now = Date.now() + gw.clockOffsetMs;
-        if (Math.abs(env.t - now) > 2 * 60_000 || seenNonces.has(env.n)) return json(res, 409, { code: 'device.clock', now });
+        if (Math.abs(env.t - now) > 2 * 60_000) return json(res, 409, { code: 'device.clock', now, replay: false });
+        if (seenNonces.has(env.n)) return json(res, 409, { code: 'device.clock', now, replay: true });
         seenNonces.add(env.n);
         if (r.z === 'gzip' && typeof r.b64 === 'string') {
             const packed = fromB64url(r.b64);
@@ -245,7 +266,11 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
             reply = { s: 200, body: k ? { sha: state[1], size: k.size, have: k.blocks.size } : { sha: state[1], have: 0 } };
         }
         if (!reply) {
-            if (r.p === 'status' && r.m === 'GET') reply = { s: 200, body: { ...STATUS, device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair'] } } };
+            if (r.p === 'status' && r.m === 'GET') {
+                const tree = gw.trees.find(x => x.id === r.tree);
+                reply = { s: 200, body: { ...STATUS, tree: { id: r.tree, name: tree?.name ?? 'Pýchavkovi z Mlýnků' },
+                    device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair'], others: gw.others } } };
+            }
             else if (r.p === 'device/rename' && r.m === 'POST') {
                 // NFC, at most 60 characters, as the research keeps it
                 const name = typeof (r.b as { name?: unknown } | undefined)?.name === 'string' ? ((r.b as { name: string }).name).normalize('NFC').trim() : '';
@@ -261,6 +286,12 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
             }
             else if (r.p === 'device' || r.p.startsWith('device/')) reply = { s: 404, body: { code: 'device.unknown-action' } };
             else reply = { s: 404, body: { code: 'not-found' } };
+        }
+        // carried, its answer lost: the browser's own second request meets the nonce seen (U9d)
+        const lost = r.m !== 'GET' ? gw.replayWrites.indexOf(r.p) : -1;
+        if (lost >= 0) {
+            gw.replayWrites.splice(lost, 1);
+            return json(res, 409, { code: 'device.clock', now, replay: true });
         }
         const bytes = reply.body === undefined || reply.body === null ? null
             : reply.body instanceof Uint8Array ? reply.body
@@ -290,34 +321,41 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         const opened = openMediaBody(device.key, device.id, t, nonce, sha, size, from, new Uint8Array(raw));
         if (!opened.ok && !opened.meta) return json(res, 400, { code: 'device.bad' });
         const now = Date.now() + gw.clockOffsetMs;
-        if (Math.abs(t - now) > 2 * 60_000 || seenNonces.has(n)) return json(res, 409, { code: 'device.clock', now });
-        seenNonces.add(n);
+        if (Math.abs(t - now) > 2 * 60_000) return json(res, 409, { code: 'device.clock', now, replay: false });
         const sealed = (s: number, body: unknown, headers: Record<string, string> = {}): void => {
             const bytes = body === undefined || body === null ? null : new TextEncoder().encode(JSON.stringify(body));
             json(res, 200, sealResponse(device.key, device.id, n, {
                 s, h: { 'Content-Type': 'application/json; charset=utf-8', ...headers }, b: bytes ? b64url(bytes) : null,
             }));
         };
-        if (!opened.ok && !('blocks' in opened)) return sealed(400, { code: 'device.bad', ...(opened.header ? { header: opened.header } : {}) });
+        const id = `${device.id}|${sha}`;
+        const haveNow = (): number => {
+            const k = kept.get(id);
+            return k && k.size === size ? k.blocks.size : 0;
+        };
+        // The same request again (the browser after a cut): nothing read, nothing kept, sealed (U9d).
+        if (seenNonces.has(n)) return sealed(409, { code: 'media.replay', params: { have: String(haveNow()) } });
+        seenNonces.add(n);
+        if (!opened.ok && !('blocks' in opened)) return sealed(400, { code: 'device.bad', ...(opened.header ? { params: { header: opened.header } } : {}) });
         gw.mediaRequests.push({ sha, from, blocks: [...opened.blocks.keys()], headers: Object.fromEntries(Object.entries(req.headers).map(([k, v]) => [k, String(v)])) });
         const step = gw.mediaSteps.shift() ?? null;
         if (step === 'busy') return sealed(429, { code: 'device.busy' }, { 'Retry-After': '1' });
-        const id = `${device.id}|${sha}`;
         const k = kept.get(id);
-        const have = k && k.size === size ? k.blocks.size : 0;
-        if (from > 0 && from !== have) return sealed(409, { code: 'media.from', have: String(have) });
+        const have = haveNow();
+        if (from > 0 && from !== have) return sealed(409, { code: 'media.from', params: { have: String(have) } });
         const keep = from === 0 || !k ? { size, blocks: new Map<number, Uint8Array>() } : k;
         kept.set(id, keep);
-        const cutAfter = step && typeof step === 'object' ? step.cutAfter : null;
+        const cutAfter = step && typeof step === 'object' ? 'cutAfter' in step ? step.cutAfter : step.replayAfter : null;
         for (const [i, b] of opened.blocks) {
             if (cutAfter !== null && i > cutAfter) break;
             keep.blocks.set(i, b);
         }
+        if (step && typeof step === 'object' && 'replayAfter' in step) return sealed(409, { code: 'media.replay', params: { have: String(keep.blocks.size) } });
         if (cutAfter !== null) {
             req.socket.destroy();
             return;
         }
-        if (!opened.ok) return sealed(400, { code: 'device.bad', have: String(keep.blocks.size) });
+        if (!opened.ok) return sealed(400, { code: 'device.bad', params: { have: String(keep.blocks.size) } });
         if (keep.blocks.size < total) return sealed(200, { sha, have: keep.blocks.size, size });
         const file = Buffer.alloc(size);
         for (const [i, b] of keep.blocks) file.set(b, (i - 1) * MEDIA_BLOCK);
@@ -342,7 +380,8 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         const device = gw.devices.find(d => d.id === q.get('d'));
         if (!device) return json(res, 401, { code: 'device.unpaired' });
         if (q.get('a') !== eventsAuth(device.key, t, n, tree, app)) return json(res, 400, { code: 'device.bad' });
-        if (Math.abs(t - (Date.now() + gw.clockOffsetMs)) > 2 * 60_000 || seenNonces.has(n)) return json(res, 409, { code: 'device.clock', now: Date.now() + gw.clockOffsetMs });
+        const now = Date.now() + gw.clockOffsetMs;
+        if (Math.abs(t - now) > 2 * 60_000 || seenNonces.has(n)) return json(res, 409, { code: 'device.clock', now, replay: seenNonces.has(n) && Math.abs(t - now) <= 2 * 60_000 });
         seenNonces.add(n);
         if (!gw.trees.some(x => x.id === tree)) return json(res, 404, { code: 'tree.unknown' });
         res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive' });

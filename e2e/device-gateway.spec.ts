@@ -94,6 +94,39 @@ test('pairs by the code of its address and asks the research through the tunnel'
     expect(await page.evaluate(() => (globalThis as unknown as { __stromDevice: DeviceHooks }).__stromDevice.pairing())).toBeNull();
 });
 
+test('a write whose answer was lost (409 device.clock, replay: true) is never sent twice: one quiet sentence; a read is asked again (U9d)', async ({ page }) => {
+    await seeds(page);
+    gw.others = 2;
+    const code = gw.pairCode();
+    await page.goto(code.url);
+    await deviceHooksReady(page);
+    type Hooks = { __stromDevice: DeviceHooks };
+    // the status as the research's U9d: the tree asked (id and name) and the other devices connected now
+    const status = await page.evaluate(async () => (await (globalThis as unknown as Hooks).__stromDevice.deviceFetch('status')).json());
+    expect(status).toMatchObject({ tree: { id: 'pychavkovi', name: 'Pýchavkovi z Mlýnků' }, device: { others: 2 } });
+
+    // a read whose nonce came again: asked once more, answered
+    gw.refuseNext(409, { code: 'device.clock', now: Date.now(), replay: true });
+    expect(await page.evaluate(async () => (await (globalThis as unknown as Hooks).__stromDevice.deviceFetch('status')).status)).toBe(200);
+
+    // a write through the research's bridge: carried, its answer lost on the way
+    gw.replayWrites = ['device/rename'];
+    const said = await page.evaluate(async () => {
+        try {
+            const r = await fetch(`${location.origin}/__device/pychavkovi/device/rename`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Mlýnek' }),
+            });
+            return `answer ${r.status}`;
+        } catch (e) {
+            return `error ${(e as { code?: string }).code ?? String(e)}`;
+        }
+    });
+    expect(said).toBe('error device.replay');
+    // carried once, never a second time
+    expect(gw.tunnelled.filter(r => r.p === 'device/rename')).toHaveLength(1);
+    await expect(page.getByText('The answer to the last change was lost on the way; the research\'s state is being read again.')).toBeVisible();
+});
+
 test('a stored pairing comes back after a reload; the computer away is unreachable', async ({ page }) => {
     await seeds(page);
     // the computer's name is this page's own host: no other address to look for

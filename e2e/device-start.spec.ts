@@ -180,6 +180,41 @@ test.describe('en', () => {
         await expect(ludmila).toBeVisible({ timeout: 15000 });
     });
 
+    test('the tree is named by the research\'s status now (tree.name), the pairing\'s name only when the status says none; a write whose answer was lost is read again, never sent twice (U9d)', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        // the pairing knows the name the tree had then; the research renamed it since
+        research(gw, [{ id: PYCH, name: 'Pýchavkovi (starý název)', archive: false }]);
+        const asked = gw.onTunnel;
+        gw.onTunnel = (req, device) => {
+            const a = asked(req, device);
+            if (req.p === 'status' && a) (a.body as { tree: { name: string } }).tree.name = 'Pýchavkovi z Mlýnků';
+            return a;
+        };
+        await page.goto(gw.pairCode().url);
+        await expect(page.locator('#device-boot')).toHaveCount(0, { timeout: 15000 });
+        await expect(page.locator('#current-tree-name')).toHaveText('Pýchavkovi z Mlýnků', { timeout: 15000 });
+
+        // a write of the research's bridge whose answer was lost (409 device.clock replay: true): never sent
+        // again, one quiet sentence, the research's state read again at once (U9d)
+        const statuses = gw.tunnelled.filter(t => t.p === 'status').length;
+        gw.replayWrites = ['device/rename'];
+        const said = await page.evaluate(async (tree) => {
+            try {
+                const r = await fetch(`${location.origin}/__device/${tree}/device/rename`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Mlýnek' }),
+                });
+                return `answer ${r.status}`;
+            } catch (e) {
+                return `error ${(e as { code?: string }).code ?? String(e)}`;
+            }
+        }, PYCH);
+        expect(said).toBe('error device.replay');
+        expect(gw.tunnelled.filter(t => t.p === 'device/rename')).toHaveLength(1);
+        await expect(page.getByText('The answer to the last change was lost on the way; the research\'s state is being read again.')).toBeVisible();
+        await expect.poll(() => gw.tunnelled.filter(t => t.p === 'status').length).toBeGreaterThan(statuses);
+    });
+
     test('a code that paired nothing: one screen with one "Try again"', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await seeds(page);

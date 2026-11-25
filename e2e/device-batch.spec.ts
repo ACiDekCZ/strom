@@ -260,16 +260,20 @@ test.describe('a phone of the home network (touch)', () => {
         await pairedTree(page, { lang: 'en', width: 390 });
         await openBatch(page);
         const dlg = page.locator(DLG);
-        // The first request: block 1 kept, then the connection ends without an answer; going on (the batch
-        // pauses and goes on by itself) the gateway is asked what it has, is busy with another file of the
-        // device once, then the hash does not hold.
+        // The first request: block 1 kept, then the connection ends without an answer. Chrome may send it
+        // again by itself (the gateway: sealed 409 media.replay {have}, on from have, nothing asked); else, as
+        // an interruption (U9d), the gateway is asked at once what it has and the file goes on from there.
+        // The gateway is busy with another file of the device once, then the hash does not hold.
         gw.mediaSteps = [{ cutAfter: 1 }, 'busy', 'badHash'];
         await dlg.locator('#batch-input-gallery').setInputFiles([big, empty]);
         await dlg.locator('[data-act="next"]').tap();
         await dlg.locator('[data-act="go"]').tap();
         await expect(dlg.locator('.batch-confirm-title')).toHaveText('1 of 2 photos is in the research', { timeout: 20000 });
         const sha = gw.mediaRequests[0].sha;
-        expect(gw.tunnelled.filter(r => r.p.startsWith('device/media/')).map(r => `${r.m} ${r.p}`)).toEqual([`GET device/media/${sha}`]);
+        const asked = gw.tunnelled.filter(r => r.p.startsWith('device/media/')).map(r => `${r.m} ${r.p}`);
+        expect(asked.length).toBeLessThanOrEqual(1);
+        expect(asked.every(a => a === `GET device/media/${sha}`)).toBe(true);
+        // the request sent again (if it was) is answered before its blocks are read: never among these
         expect(gw.mediaRequests.map(r => [r.from, r.blocks])).toEqual([[0, [1, 2, 3]], [1, [2, 3]], [1, [2, 3]], [0, [1, 2, 3]]]);
         // Nothing of the file in the open headers: no batch, no name; the meta block has them.
         expect(Object.keys(gw.mediaRequests[0].headers).filter(k => k.startsWith('x-strom-')).sort()).toEqual(
@@ -281,6 +285,28 @@ test.describe('a phone of the home network (touch)', () => {
         // The file of 0 B never went: refused here as empty.
         await expect(dlg.locator('.batch-photo-row.is-error .batch-photo-why')).toHaveText('the file is empty (0 B)');
         expect(await overflowing(page, DLG)).toEqual([]);
+    });
+
+    test('a photo over 8 MiB goes in batches of at most 8 blocks; a request the browser sent again (media.replay) goes on from what the computer has, nothing asked (U9d)', async ({ page }) => {
+        // 12.5 MiB: 13 blocks, so three requests of at most 8 blocks.
+        const big = { name: 'IMG_2060.png', mimeType: 'image/png', buffer: Buffer.concat([PNG, Buffer.alloc(12.5 * 1024 * 1024, 9)]) };
+        await pairedTree(page, { lang: 'en', width: 390 });
+        await openBatch(page);
+        const dlg = page.locator(DLG);
+        // The first request: blocks up to 3 kept, then answered as one sent again after a cut (sealed 409 media.replay {have: 3}).
+        gw.mediaSteps = [{ replayAfter: 3 }];
+        await dlg.locator('#batch-input-gallery').setInputFiles([big]);
+        await dlg.locator('[data-act="next"]').tap();
+        await dlg.locator('[data-act="go"]').tap();
+        await expect(dlg.locator('.batch-confirm-title')).toHaveText('✓ 1 of 1 photo is in the research', { timeout: 30000 });
+        const range = (a: number, b: number): number[] => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+        expect(gw.mediaRequests.map(r => [r.from, r.blocks])).toEqual([[0, range(1, 8)], [3, range(4, 11)], [11, [12, 13]]]);
+        expect(gw.mediaRequests.every(r => r.blocks.length <= 8)).toBe(true);
+        // A new request each time (its own nonce), and no question to the tunnel about what the computer has.
+        expect(new Set(gw.mediaRequests.map(r => r.headers['x-strom-nonce'])).size).toBe(3);
+        expect(gw.tunnelled.filter(r => r.p.startsWith('device/media/'))).toEqual([]);
+        expect(gw.media).toHaveLength(1);
+        expect(gw.media[0].bytes.equals(big.buffer)).toBe(true);
     });
 
     test('a computer that takes no files of devices: the photos stay on the device with a quiet sentence, also after a reload', async ({ page }) => {
