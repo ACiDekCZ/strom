@@ -47,9 +47,9 @@ interface Asked {
 
 /**
  * One tree of the research behind the gateway. `hold`: the answer of the next `tree.ged` waits for it;
- * `fail`: `tree.ged` answers 500 until asked again after the failure is said (its variant by hash, then the whole file it falls back to); `slowMs`: every `tree.ged` answers after it (the bridge building the tree).
+ * `holdImages`: every `POST images` waits for it; `fail`: `tree.ged` answers 500 until asked again after the failure is said (its variant by hash, then the whole file it falls back to); `slowMs`: every `tree.ged` answers after it (the bridge building the tree).
  */
-function research(gw: FakeGateway, o: { hold?: Promise<void>; fail?: boolean; slowMs?: number } = {}): Asked {
+function research(gw: FakeGateway, o: { hold?: Promise<void>; holdImages?: Promise<void>; fail?: boolean; slowMs?: number } = {}): Asked {
     gw.trees = [{ id: PYCH, name: 'Pýchavkovi z Mlýnků', archive: false }];
     gw.computer = { name: '127.0.0.1', label: 'Pracovna' };
     const asked: Asked = { trees: [], images: [] };
@@ -88,6 +88,7 @@ function research(gw: FakeGateway, o: { hold?: Promise<void>; fail?: boolean; sl
             const raw = (req as { b?: unknown }).b;
             const shas = (typeof raw === 'string' ? JSON.parse(raw) : raw as { images: string[] }).images as string[];
             asked.images.push(shas);
+            if (o.holdImages) await o.holdImages;
             const images = shas.filter(s => s === SHA).map(sha => ({ sha, mime: 'image/png', bytes: Buffer.from(PNG, 'base64').length, data: PNG }));
             return { s: 200, body: { images, missing: shas.filter(s => s !== SHA), more: [] } };
         }
@@ -169,6 +170,23 @@ test.describe('en', () => {
         await page.waitForTimeout(500);
         await expect(page.locator('.person-card', { hasText: 'Josef' })).toHaveCount(0);
         expect(asked.trees).toHaveLength(1);
+    });
+
+    test('Cancel while the images come stops them at once: the start screen gone, nothing opened', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        let release!: () => void;
+        const asked = research(gw, { holdImages: new Promise<void>(r => { release = r; }) });
+        await page.goto(gw.pairCode().url);
+        await expect.poll(() => asked.images.length, { timeout: 20000 }).toBeGreaterThan(0);
+        await loadToast(page).getByRole('button', { name: 'Cancel' }).click();
+        // Not after the images asked already: at once, the answer still held.
+        await expect(page.locator('#device-boot')).toHaveCount(0, { timeout: 3000 });
+        await expect(loadToast(page)).toHaveCount(0);
+        release();
+        await page.waitForTimeout(500);
+        await expect(page.locator('.person-card', { hasText: 'Josef' })).toHaveCount(0);
+        expect(asked.images).toHaveLength(1);
     });
 
     test('a failed download says so with Try again, which opens the tree', async ({ page }) => {

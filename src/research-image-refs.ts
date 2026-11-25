@@ -411,7 +411,7 @@ async function checkedImage(img: { sha: string; mime: string; data: string }, re
  * one cannot be had: the bridge lacks it, refuses, keeps failing, or sends
  * bytes that do not give the hash (once more asked, then given up).
  */
-export async function fetchImagesByHash(url: string, refs: readonly ImageRef[], deps: ImageFetchDeps): Promise<Map<string, string>> {
+export async function fetchImagesByHash(url: string, refs: readonly ImageRef[], deps: ImageFetchDeps, signal?: AbortSignal): Promise<Map<string, string>> {
     const out = new Map<string, string>();
     const wanted = new Map(refs.map(r => [r.sha, r]));
     const queue: string[][] = [];
@@ -422,7 +422,7 @@ export async function fetchImagesByHash(url: string, refs: readonly ImageRef[], 
     let failed: unknown = null;
 
     const handle = async (batch: string[]): Promise<void> => {
-        const answer = await askImages(url, batch, deps);
+        const answer = await askImages(url, batch, deps, signal);
         if (failed) return;
         if (answer.missing.length) throw new ImagesNotResolved(`not at the bridge: ${answer.missing.length}`);
         const open = new Set(batch);
@@ -571,7 +571,7 @@ export interface ImagesResolved {
  * image (an attachment's PDF), never asked of the bridge, none missed.
  */
 export async function resolveImageRefs(
-    o: { researchId: string | null; refs: readonly ImageRef[]; imagesUrl: string; files?: readonly string[] },
+    o: { researchId: string | null; refs: readonly ImageRef[]; imagesUrl: string; files?: readonly string[]; signal?: AbortSignal },
     deps: ImageResolveDeps,
     later?: ImageRef[],
 ): Promise<ImagesResolved> {
@@ -643,7 +643,7 @@ export async function resolveImageRefs(
         want.clear();
     }
     if (want.size) {
-        const got = await fetchImagesByHash(o.imagesUrl, [...want.values()], deps);
+        const got = await fetchImagesByHash(o.imagesUrl, [...want.values()], deps, o.signal);
         for (const [sha, url] of got) images.set(sha, url);
         fetched = got.size;
     }

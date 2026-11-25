@@ -1525,9 +1525,12 @@ async function fetchRefTree(url: string, opts: { stale?: boolean; etag?: string 
         return { ...base, variant: 'ref', images: got.images, ...pending };
     }
     try {
-        const got = await resolveImageRefs({ researchId: readResearchHeader(text).treeId, refs, imagesUrl: imagesUrlOf(url), files }, imageDeps);
+        const got = await resolveImageRefs({ researchId: readResearchHeader(text).treeId, refs, imagesUrl: imagesUrlOf(url), files,
+            ...(opts.watch?.signal ? { signal: opts.watch.signal } : {}) }, imageDeps);
         return { ...base, variant: 'ref', images: got.images };
     } catch (err) {
+        // Cancelled: no file with the images in it after all.
+        if (opts.watch?.signal?.aborted) throw err;
         console.warn('The images by hash could not all be had, loading the whole file', err);
         forgetHeldImages();
         return null;
