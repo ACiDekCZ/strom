@@ -2033,6 +2033,28 @@ export interface MergeEdit {
 }
 
 /**
+ * A house of the tree (spec 030 K1.1a): the town as `placeKey` reads it and
+ * the house as `houseKey` reads it, `<town>|<house>` ("belokamen|16"). The
+ * research sends the same key (it ports both algorithms; shared cases in
+ * test/fixtures/streets/cases.json, section `house`).
+ */
+export type HouseId = string;
+
+/** What a person said about one house (StromData.houses, data version 27). */
+export interface HouseUserData {
+    /** The house's name after the farm ("U Prouzalů", the Czech "jméno po chalupě"). */
+    name?: string;
+    /** Houses that are this one under another number (joined by hand): their facts count here. */
+    merged?: HouseId[];
+    /** Houses that are NOT this one (told apart by hand): never joined with it, whoever proposes it. */
+    split?: HouseId[];
+    /** Where the house stands, placed or confirmed by a person. */
+    location?: { lat: number; lng: number; how: 'manual' | 'confirmed' };
+    /** Events of the 20th century revealed for outputs (§10), by the research's item ids. */
+    revealInOutputs?: string[];
+}
+
+/**
  * The record of a merge (spec 134 §0.3, data version 26): what one merge
  * brought into the tree, kept in StromData.merges (the Merge history, the
  * undo). Travels with the tree's data: a backup and a JSON export keep it,
@@ -2191,6 +2213,16 @@ export interface StromData {
      * or empty = none.
      */
     merges?: MergeRecord[];
+
+    /**
+     * What a person said about houses of the tree (data version 27, spec 030):
+     * a house's name after the farm, houses joined as one or told apart, a
+     * point placed by hand, events of the 20th century revealed for outputs.
+     * By HouseId (`<placeKey of the town>|<houseKey of the house>`, src/houses.ts).
+     * The houses themselves are worked out from the facts, never stored.
+     * Absent or empty = nothing said.
+     */
+    houses?: Record<HouseId, HouseUserData>;
 
     // Last focused state (used when defaultPersonId === LAST_FOCUSED)
     lastFocusPersonId?: PersonId;
@@ -2368,6 +2400,7 @@ export type AuditAction =
     | 'tableView.save'
     | 'tableView.rename'
     | 'tableView.delete'
+    | 'house.edit'
     | 'personList.save'
     | 'personList.delete'
     | 'undo'

@@ -19,7 +19,7 @@
  * the house field (splitPlaceHouses).
  */
 
-import { StromData, Person, PersonId, PlaceGeo, LifeEvent, LifeEventType, CoupleEventType } from './types.js';
+import { StromData, Person, PersonId, PlaceGeo, LifeEvent, LifeEventType, CoupleEvent, CoupleEventType } from './types.js';
 import type { SharedEventIndex } from './shared-events.js';
 import {
     bareNumber, foldText, houseWith, isNumberTok, KnownStreets, nameOf, numberedTown, splitStreet, streetOfHouse, tokens,
@@ -101,7 +101,7 @@ export interface PlaceShare {
  * kind and the people it belongs to (a couple's fact belongs to both
  * partners). The setters write into the data walked — callers walk a copy.
  */
-interface PlaceFact {
+export interface PlaceFact {
     place: string | undefined;
     /** The fact's house field; undefined when empty or when it has none. */
     house: string | undefined;
@@ -112,6 +112,14 @@ interface PlaceFact {
     persons: PersonId[];
     /** A person's own event (not a couple's): the event itself. */
     event?: LifeEvent;
+    /** A couple's own event (not the wedding or the divorce): the event itself. */
+    coupleEvent?: CoupleEvent;
+    /**
+     * Which field this is, stable while the tree keeps it: `birth:<person>`,
+     * `death:<person>`, `event:<event id>`, `wedding:<union>`, `divorce:<union>`,
+     * `coupleEvent:<event id>`.
+     */
+    ref: string;
     setPlace(value: string | undefined): void;
     setHouse(value: string | undefined): void;
 }
@@ -128,18 +136,18 @@ export function forEachPlaceFact(data: StromData, visit: (fact: PlaceFact) => vo
         const who = [person.id];
         visit({
             place: person.birthPlace, house: person.birthAddress, hasHouseField: true, date: person.birthDate,
-            kind: 'birth', persons: who,
+            kind: 'birth', persons: who, ref: `birth:${person.id}`,
             setPlace: v => { person.birthPlace = v; }, setHouse: v => { person.birthAddress = v; },
         });
         visit({
             place: person.deathPlace, house: person.deathAddress, hasHouseField: true, date: person.deathDate,
-            kind: 'death', persons: who,
+            kind: 'death', persons: who, ref: `death:${person.id}`,
             setPlace: v => { person.deathPlace = v; }, setHouse: v => { person.deathAddress = v; },
         });
         for (const ev of person.events ?? []) {
             visit({
                 place: ev.place, house: ev.address, hasHouseField: true, date: ev.date,
-                kind: lifeEventKind(ev.type), persons: who, event: ev,
+                kind: lifeEventKind(ev.type), persons: who, event: ev, ref: `event:${ev.id}`,
                 setPlace: v => { ev.place = v; }, setHouse: v => { ev.address = v; },
             });
         }
@@ -148,19 +156,19 @@ export function forEachPlaceFact(data: StromData, visit: (fact: PlaceFact) => vo
         const couple = [union.person1Id, union.person2Id];
         visit({
             place: union.startPlace, house: union.address, hasHouseField: true, date: union.startDate,
-            kind: 'wedding', persons: couple,
+            kind: 'wedding', persons: couple, ref: `wedding:${union.id}`,
             setPlace: v => { union.startPlace = v; }, setHouse: v => { union.address = v; },
         });
         // The divorce has no house field of its own (union.address is the wedding's).
         visit({
             place: union.endPlace, house: undefined, hasHouseField: false, date: union.endDate,
-            kind: 'event', persons: couple,
+            kind: 'event', persons: couple, ref: `divorce:${union.id}`,
             setPlace: v => { union.endPlace = v; }, setHouse: none,
         });
         for (const ev of union.events ?? []) {
             visit({
                 place: ev.place, house: ev.address, hasHouseField: true, date: ev.date,
-                kind: coupleEventKind(ev.type), persons: couple,
+                kind: coupleEventKind(ev.type), persons: couple, coupleEvent: ev, ref: `coupleEvent:${ev.id}`,
                 setPlace: v => { ev.place = v; }, setHouse: v => { ev.address = v; },
             });
         }
@@ -492,6 +500,11 @@ export function houseIsStreet(text: string): boolean {
     return houseOrder(text).cls !== 0;
 }
 
+/** Does a house text hold a number ("16", "čp. 4", "Kopřivná 12"), not only words ("mlýn", "Kopřivná")? */
+export function houseHasNumber(text: string): boolean {
+    return houseOrder(text).cls !== 2;
+}
+
 /**
  * The same house however it is written: "16", "čp. 16", "Haus Nr. 16" and
  * "House No. 16" are one house; "Kopřivná 12" and "kopřivná 12" too.
@@ -523,7 +536,7 @@ export function compareHouses(a: string, b: string): number {
 }
 
 /** The house of a fact at a place that holds `house`, beside the fact's own house field. */
-function factHouse(house: string, had: string | undefined): string | undefined {
+export function factHouse(house: string, had: string | undefined): string | undefined {
     const h = had?.trim();
     if (!h) return house;
     // the same house written another way ("16" and "čp. 16"): keep the field as it is
@@ -819,7 +832,7 @@ export interface TownHousePlace {
  * geocoder did not find "<Town> N" as a place of its own (coordinates without
  * byTown).
  */
-function bareOffers(data: StromData, known: KnownStreets): (u: PlaceUsage, key: string) => boolean {
+export function bareOffers(data: StromData, known: KnownStreets): (u: Pick<PlaceUsage, 'display'>, key: string) => boolean {
     const towns = new Set<string>();
     const parts = new Set<string>();
     const partOf = (first: string): void => {
