@@ -61,10 +61,10 @@ export function hideSampleWhy(): void {
 
 /**
  * Show the bubble under `anchor` with `content` (a text, or nodes for a
- * richer bubble). It closes on a tap or click elsewhere, Escape, a scroll or
+ * richer bubble, each a line of it). It closes on a tap or click elsewhere, Escape, a scroll or
  * a resize. Returns the bubble.
  */
-export function showSampleWhy(anchor: HTMLElement, content: string | Node): HTMLElement {
+export function showSampleWhy(anchor: HTMLElement, content: string | Node | readonly Node[]): HTMLElement {
     installSampleTagBubble();
     hideSampleWhy();
     const bubble = document.createElement('div');
@@ -75,8 +75,10 @@ export function showSampleWhy(anchor: HTMLElement, content: string | Node): HTML
         const span = document.createElement('span');
         span.textContent = content;
         bubble.appendChild(span);
+    } else if (Array.isArray(content)) {
+        for (const node of content as readonly Node[]) bubble.appendChild(node);
     } else {
-        bubble.appendChild(content);
+        bubble.appendChild(content as Node);
     }
     document.body.appendChild(bubble);
     placeBubble(bubble, anchor);

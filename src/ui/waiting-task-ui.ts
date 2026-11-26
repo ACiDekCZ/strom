@@ -11,7 +11,8 @@ import { inDeviceMode } from './device-mode-ui.js';
 import { browserNote } from '../research-browser.js';
 import { isHelpOpen } from './help-ui.js';
 import { strings } from '../strings.js';
-import { LiveWaiting, researchLinkMark, researchTaskRef } from '../research-link.js';
+import { LiveWaiting, inShowcase, researchLinkMark, researchTaskRef } from '../research-link.js';
+import { markShowcaseOff } from './sample-why.js';
 import { WaitActionView, deliverSentence, deliverSteps, deliverWebUrl, imagesState, waitingActions, waitingDeliver } from '../research-waiting.js';
 import { bookById } from '../research-books.js';
 import { DEFAULT_MEDIA_MAX_BYTES } from '../originals.js';
@@ -570,7 +571,8 @@ export const waitingTaskMethods = uiModule({
             place.type = 'button';
             place.dataset.action = 'place';
             place.onclick = () => this.showWaitingPlaces(w.place ?? w.id);
-            return place;
+            // The showcase (spec 143 K4.1): the answer greyed, a click says why.
+            return inShowcase() ? markShowcaseOff(place, 'none') : place;
         }
         if (w.kind === 'aside') {
             // A file of a book's inbox set aside: decided in the overview's row (it opens there).
@@ -608,6 +610,7 @@ export const waitingTaskMethods = uiModule({
             btn.classList.add('is-bridge');
             btn.dataset.write = 'bridge';
             btn.textContent = v.key === 'images' ? T.haveImages : T.answer;
+            if (inShowcase()) return v.key === 'answer' ? markShowcaseOff(btn, 'none') : null;
             btn.onclick = (e) => {
                 e.stopPropagation();
                 if (v.key === 'images') this.openWaitingDialog(s, w, 'images');

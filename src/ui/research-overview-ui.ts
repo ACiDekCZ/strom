@@ -29,7 +29,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId, ResearchHypothesis } from '../types.js';
 import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waiting.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveBook, type LiveDirection, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, waitingGainOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchDeviceAllows, researchLinkMark } from '../research-link.js';
+import { LiveBook, type LiveDirection, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, waitingGainOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchDeviceAllows, researchLinkMark, inShowcase, showcaseOff, researchNow } from '../research-link.js';
 import { bookById, bookHeadTitle, bookImagesText, bookMetaParts, bookOfferText, bookTitle, bookWebUrl, urgentBooks, urgentBooksShown } from '../research-books.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
@@ -86,6 +86,7 @@ import { canOpenWindows, openInNewWindow } from '../windows/window-open.js';
 import { focusOverviewWindow, overviewChanged, overviewInWindow } from '../windows/overview-window.js';
 import { agentMirror } from '../windows/agent-mirror.js';
 import { greyOverviewActions } from './overview-window-states.js';
+import { markShowcaseOff, sampleNoteEl, showcaseDayText, showcaseItemActions, researchLastWork } from './sample-why.js';
 import { arrangeOverviewColumns, beginOverviewColumns, noteOverviewSectionRows, nodesAfter, resetOverviewColumns } from './overview-columns-ui.js';
 
 /**
@@ -252,10 +253,11 @@ function idleNowRow(s: LiveSession): HTMLElement {
     const L = strings.live;
     const li = el('li', 'live-empty research-overview__idle');
     li.appendChild(el('span', 'research-overview__idle-title', L.nothingAtWork));
-    const last = [...(s.runsEnded ?? [])].sort((a, b) => Date.parse(b.ended) - Date.parse(a.ended))[0];
+    const last = researchLastWork(s, inShowcase());
     if (last) {
         const line = last.research ? s.researches.find(d => d.id === last.research)?.name ?? '' : '';
-        const when = formatLiveClock(Date.parse(last.ended), Date.now(), getCurrentLanguage());
+        // The showcase says its day (a snapshot: no hour of "today").
+        const when = inShowcase() ? showcaseDayText(last.at) : formatLiveClock(last.at, researchNow(), getCurrentLanguage());
         li.appendChild(el('span', 'research-overview__idle-last', L.lastWorked(when, line)));
     }
     return li;
@@ -301,10 +303,13 @@ interface ItemAction {
     count?: string;
     /** Its write runs ("saving" in its row): no second click. */
     disabled?: boolean;
+    /** The showcase (spec 143 K4.1): seen greyed with its mark, a click only says why. */
+    off?: boolean;
 }
 
 /** The action "All images added" of an item whose count of images is not known (its `data-action`). */
 const ALL_IMAGES = 'all-images';
+
 
 /** Answer forms by tree and item: the open one (one at a time) and those kept over a redraw. */
 const answerForms = new Map<string, WaitingAnswerForm>();
@@ -405,6 +410,7 @@ function waitingActionEl(a: ItemAction, weight: 'primary' | 'secondary' | 'link'
     }
     btn.type = 'button';
     btn.dataset.action = a.key;
+    if (a.off) return markShowcaseOff(btn, a.mark ?? 'none', a.label);
     if (a.write) btn.dataset.write = 'bridge';
     if (a.disabled) btn.disabled = true;
     btn.onclick = (e) => {
@@ -871,7 +877,7 @@ export const researchOverviewMethods = uiModule({
             if (closedStrip) root.appendChild(closedStrip);
             // Without following, the bridge answering: what "Follow live" does, under the head (6b).
             // A device of the home network (spec 094 §4, 9): its tree is the research's already; following is an option of the menu.
-            if (source === 'bridge' && !this.activeResearchAgentless() && frozenAt === null && !inDeviceMode()) {
+            if (source === 'bridge' && !this.activeResearchAgentless() && frozenAt === null && !inDeviceMode() && !inShowcase()) {
                 root.appendChild(el('p', 'research-overview__window-note', L.followNote));
             }
         } else {
@@ -910,7 +916,8 @@ export const researchOverviewMethods = uiModule({
             // Without following, the bridge answering: "Follow live" and what it does, under the head (§7.3).
             // Not on a device of the home network (spec 094 §4, 9): its tree is the research's already, editable; following
             // live stays an option of the menu (read-only meanwhile, with the follow panel of today).
-            if (source === 'bridge' && viewed && !inDeviceMode()) {
+            // The showcase (spec 143 K4.1): nothing to follow, its research is a snapshot.
+            if (source === 'bridge' && viewed && !inDeviceMode() && !inShowcase()) {
                 const strip = this.overviewFollowStrip(viewed);
                 if (strip) root.appendChild(strip);
             }
@@ -919,6 +926,8 @@ export const researchOverviewMethods = uiModule({
             const followView = source === 'live' ? this.liveFollowViewRow('overview') : null;
             if (followView) root.appendChild(followView);
         }
+        // The showcase (spec 143 K4.1): as of when and view only, with the command of the full research, under the head.
+        if (inShowcase()) root.appendChild(sampleNoteEl({ asOf: true }));
 
         const body = el('div', 'research-overview__body');
         root.appendChild(body);
@@ -2116,6 +2125,7 @@ export const researchOverviewMethods = uiModule({
                 e.stopPropagation();
                 this.showWaitingPlaces();
             };
+            if (inShowcase()) markShowcaseOff(btn, 'none', P.answer);
             box.appendChild(btn);
             return box;
         }
@@ -2703,6 +2713,9 @@ export const researchOverviewMethods = uiModule({
         if (task && writes.sent && waitingUnsendable(w)) {
             list.push({ key: 'unsent', label: W.unsent, write: true, run: () => { void this.markWaitingUnsent(s, w.id); } });
         }
+        // The showcase (spec 143 K4.1): the answer greyed, the website read; nothing else is written or asked.
+        // "All images added" is an answer too.
+        if (inShowcase()) showcaseItemActions(list, ['answer', ALL_IMAGES], showcaseOff('waiting-answer'));
         const moreBtn = (more: readonly ItemAction[]): HTMLElement => {
             const btn = el('button', 'waiting-more', '⋯');
             btn.type = 'button';
@@ -2737,6 +2750,7 @@ export const researchOverviewMethods = uiModule({
                     link.dataset.action = 'answer';
                     if (answer.mark) setResearchActionLabel(link, T.cannotGet, answer.mark);
                     else link.textContent = T.cannotGet;
+                    if (answer.off) markShowcaseOff(link, answer.mark ?? 'none', answer.label);
                     link.onclick = (e) => {
                         e.stopPropagation();
                         answer.run?.();
@@ -2933,6 +2947,7 @@ export const researchOverviewMethods = uiModule({
             btn.type = 'button';
             btn.dataset.action = 'place';
             btn.onclick = () => this.showWaitingPlaces(w.place ?? w.id);
+            if (inShowcase()) markShowcaseOff(btn, 'none');
             host.appendChild(btn);
             return false;
         }
@@ -3036,7 +3051,7 @@ export const researchOverviewMethods = uiModule({
             return;
         }
         if (starting) list.appendChild(this.overviewQueueStartRow(starting));
-        else if (s.working.length === 0 && lineStarts.length === 0) list.appendChild(inDeviceMode() ? idleNowRow(s) : el('li', 'live-empty', L.nobody));
+        else if (s.working.length === 0 && lineStarts.length === 0) list.appendChild(inDeviceMode() || inShowcase() ? idleNowRow(s) : el('li', 'live-empty', L.nobody));
         for (const w of s.working) {
             const li = el('li', 'research-overview__now-row');
             if (w.run) li.dataset.run = w.run;
@@ -3070,6 +3085,15 @@ export const researchOverviewMethods = uiModule({
      * as it finishes it. While an agent works Now keeps "Finish and stop" only.
      */
     appendOverviewNowWork(host: HTMLElement, s: LiveSession): void {
+        // The showcase (spec 143 K4.1): "Continue the research" stays in sight, greyed with its mark; a click says why.
+        if (showcaseOff('work')) {
+            const row = el('div', 'research-overview__now-actions research-overview__now-work');
+            const btn = setResearchActionLabel(el('button', 'link-button research-overview__work'), strings.sample.continueResearch, researchLinkMark('work'));
+            btn.type = 'button';
+            row.appendChild(markShowcaseOff(btn, researchLinkMark('work')));
+            host.appendChild(row);
+            return;
+        }
         // Runs side by side (spec 126 U10 §5): the directions' own runs leave it offered, the most at once hold it.
         if (!runsSideBySide(s) && s.working.length > 0) return;
         const offer = this.queueWorkOfferFor(s);

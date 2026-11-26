@@ -171,6 +171,15 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         whyWhat: (action: string, mark: string) => `W pełnych badaniach: ${action} · ${mark}`,
         howTo: 'Jak to zrobić ↗',
         copy: 'Kopiuj',
+        /** The showcase's greyed "Work on the queue" in Now (the design's name of the action). */
+        continueResearch: 'Kontynuuj badania',
+        queueOrder: 'Zmień kolejność kolejki',
+        /** The mark's group said in words in the bubble ("In full research: … · terminal"). */
+        markTerminal: 'terminal',
+        markAgent: 'AI + terminal',
+        /** An action without a mark (through the bridge). */
+        whyWhatPlain: (action: string) => `W pełnych badaniach: ${action}`,
+        copied: '✓ Skopiowano',
         notNow: 'Nie teraz',
         updateMenu: (version: string) => `Zaktualizuj przykład (${version})…`,
         updated: (version: string) => `Przykład zaktualizowano do wersji ${version}.`,

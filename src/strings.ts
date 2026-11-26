@@ -437,6 +437,15 @@ const stringsEN = {
         whyWhat: (action: string, mark: string) => `In full research: ${action} · ${mark}`,
         howTo: 'How to ↗',
         copy: 'Copy',
+        /** The showcase's greyed "Work on the queue" in Now (the design's name of the action). */
+        continueResearch: 'Continue the research',
+        queueOrder: 'Change the queue\'s order',
+        /** The mark's group said in words in the bubble ("In full research: … · terminal"). */
+        markTerminal: 'terminal',
+        markAgent: 'AI + terminal',
+        /** An action without a mark (through the bridge). */
+        whyWhatPlain: (action: string) => `In full research: ${action}`,
+        copied: '✓ Copied',
         notNow: 'Not now',
         updateMenu: (version: string) => `Update the sample (${version})…`,
         updated: (version: string) => `The sample is updated to version ${version}.`,
@@ -13684,6 +13693,15 @@ const stringsCZ: StringsType = {
         whyWhat: (action: string, mark: string) => `V plném výzkumu: ${action} · ${mark}`,
         howTo: 'Jak na to ↗',
         copy: 'Kopírovat',
+        /** The showcase's greyed "Work on the queue" in Now (the design's name of the action). */
+        continueResearch: 'Pokračovat ve výzkumu',
+        queueOrder: 'Změnit pořadí fronty',
+        /** The mark's group said in words in the bubble ("In full research: … · terminal"). */
+        markTerminal: 'terminál',
+        markAgent: 'AI + terminál',
+        /** An action without a mark (through the bridge). */
+        whyWhatPlain: (action: string) => `V plném výzkumu: ${action}`,
+        copied: '✓ Zkopírováno',
         notNow: 'Teď ne',
         updateMenu: (version: string) => `Aktualizovat ukázku (${version})…`,
         updated: (version: string) => `Ukázka je aktualizovaná na verzi ${version}.`,
@@ -26583,6 +26601,15 @@ const stringsDE: StringsType = {
         whyWhat: (action: string, mark: string) => `In der vollen Forschung: ${action} · ${mark}`,
         howTo: 'Anleitung ↗',
         copy: 'Kopieren',
+        /** The showcase's greyed "Work on the queue" in Now (the design's name of the action). */
+        continueResearch: 'Forschung fortsetzen',
+        queueOrder: 'Reihenfolge der Warteschlange ändern',
+        /** The mark's group said in words in the bubble ("In full research: … · terminal"). */
+        markTerminal: 'Terminal',
+        markAgent: 'KI + Terminal',
+        /** An action without a mark (through the bridge). */
+        whyWhatPlain: (action: string) => `In der vollen Forschung: ${action}`,
+        copied: '✓ Kopiert',
         notNow: 'Jetzt nicht',
         updateMenu: (version: string) => `Beispiel aktualisieren (${version})…`,
         updated: (version: string) => `Das Beispiel ist auf Version ${version} aktualisiert.`,

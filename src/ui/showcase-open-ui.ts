@@ -44,7 +44,7 @@ import { activatedElement } from './busy.js';
 import { showProgressToast, type ProgressStep } from './toast.js';
 import { setMirroredResearchStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
-import { setInShowcaseLookup } from '../research-link.js';
+import { setInShowcaseLookup, setShowcaseAsOfLookup } from '../research-link.js';
 import { keepShowcaseResearch, restoreShowcaseResearch, showcaseSnapshot } from '../showcase-bridge.js';
 import { isBridgelessWindow } from '../research-device.js';
 
@@ -56,6 +56,16 @@ export function openTreeIsShowcase(): boolean {
 }
 
 setInShowcaseLookup(openTreeIsShowcase);
+
+/** When the open showcase's data is as of (ms): the research's relative times are said against it. */
+export function openShowcaseAsOf(): number | null {
+    const id = DataManager.getCurrentTreeId();
+    const at = id ? TreeManager.getTreeMetadata(id)?.sample?.asOf : undefined;
+    const t = at ? Date.parse(at) : NaN;
+    return Number.isFinite(t) ? t : null;
+}
+
+setShowcaseAsOfLookup(openShowcaseAsOf);
 
 /** The research ids of the showcase trees kept in this browser (lowercase). */
 function showcaseResearchIds(): Set<string> {

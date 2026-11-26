@@ -497,6 +497,37 @@ export function inShowcase(): boolean {
     }
 }
 
+/** A main action in the showcase: drawn greyed with its mark, a click only says why (spec 143 K4.1). */
+export function showcaseOff(action: ResearchShowcaseAction): boolean {
+    return inShowcase() && researchShowcaseShown(action) === 'off';
+}
+
+/** When the open showcase's data is as of (ms; null: no showcase, or no time): set by the app. */
+let showcaseAsOfLookup: (() => number | null) | null = null;
+
+export function setShowcaseAsOfLookup(fn: (() => number | null) | null): void {
+    showcaseAsOfLookup = fn;
+}
+
+/** When the open showcase's research is as of (ms), null outside a showcase. */
+export function showcaseAsOf(): number | null {
+    if (!showcaseAsOfLookup || !inShowcase()) return null;
+    try {
+        const t = showcaseAsOfLookup();
+        return typeof t === 'number' && Number.isFinite(t) ? t : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * "Now" of the research's relative times ("2 h ago", "since 9:14", "yesterday"): in a showcase the
+ * moment its data is as of (a snapshot read days later says what it said then), else the clock.
+ */
+export function researchNow(): number {
+    return showcaseAsOf() ?? Date.now();
+}
+
 /** What says why an action does nothing in the showcase (its bubble, drawn by the UI); `el`: the control clicked. */
 let showcaseWhyHandler: ((el: HTMLElement | null, action: ResearchShowcaseAction | null) => void) | null = null;
 
