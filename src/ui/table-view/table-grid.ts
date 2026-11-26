@@ -240,6 +240,8 @@ export interface GridHandlers {
     onHistory?(dir: -1 | 1): boolean;
     /** The pill "+N" of a citation cell (§14.3): the further citations' bubble. */
     onMoreCites?(line: GridLine, col: ColumnDef, ids: readonly string[], anchor: HTMLElement): void;
+    /** A house of the tree in a cell (spec 030 §15): its page. */
+    onHouse?(houseId: string): void;
     /** A shared event's ages (spec 085 §4, 4a): their bubble. */
     onSharedAges?(line: GridLine, anchor: HTMLElement): void;
     /** The row's menu (§10.1): a right click, Shift+F10, the menu key; the cell it is for (T54 F4). */
@@ -536,6 +538,7 @@ function cellValueCore(value: CellValue, col: ColumnDef, hit = '', links = false
         return html + `<button type="button" class="tv-ages" tabindex="-1" aria-haspopup="dialog" title="${esc(strings.table.agePerPerson)}">`
             + `<span class="tv-cell-text">${hit ? highlightHtml(cellText(value), hit) : esc(cellText(value) || '–')}</span></button>`;
     }
+    if (value.house && !value.na) return html + houseLinkHtml(value.house, hit);
     if (value.link && !value.na) return html + linkHtml(value.link, hit);
     if (value.dots && !value.na) return html + readersHtml(value, hit);
     if (value.lineage?.length && !value.na) return html + lineageHtml(value, hit);
@@ -562,6 +565,13 @@ export function linkHtml(link: { href: string; label: string }, hit = ''): strin
     const label = hit ? highlightHtml(link.label, hit) : esc(link.label);
     return `<span class="tv-cell-text"><a class="tv-link" href="${esc(link.href)}" target="_blank" rel="noopener noreferrer" tabindex="-1">${label}`
         + `<span class="tv-link-out" aria-hidden="true"> ↗</span></a></span>`;
+}
+
+/** A house of the tree in a cell (spec 030 §15): a link to its page, the fact's older number faint in brackets. */
+export function houseLinkHtml(house: { id: string; title: string; old?: string }, hit = ''): string {
+    const title = hit ? highlightHtml(house.title, hit) : esc(house.title);
+    const old = house.old ? `<span class="tv-house-old"> (${hit ? highlightHtml(house.old, hit) : esc(house.old)})</span>` : '';
+    return `<span class="tv-cell-text"><button type="button" class="tv-house" data-house="${esc(house.id)}" tabindex="-1">${title}</button>${old}</span>`;
 }
 
 /** The marker shape the page shows (body[data-branch-marker], spec 112), or 'none'. */
@@ -803,6 +813,13 @@ export class TableGrid {
                 }
                 const more = t.closest<HTMLElement>('.tv-cites-more');
                 if (more && cellEl && this.moreCitesAt(line, cellEl, more)) return;
+                // A house (spec 030 §15): a plain click (or Enter) opens its page; Shift / Ctrl / Cmd / Alt stay the cell's.
+                const house = t.closest<HTMLElement>('.tv-house[data-house]');
+                if (house && line.kind === 'row' && this.handlers.onHouse && e.button === 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                    this.select(line);
+                    this.handlers.onHouse(house.dataset.house!);
+                    return;
+                }
                 const ages = t.closest<HTMLElement>('.tv-ages');
                 if (ages && line.kind === 'row' && this.handlers.onSharedAges) {
                     const at = cellEl ?? ages;
@@ -863,7 +880,7 @@ export class TableGrid {
                 const t = e.target as Element;
                 if (performance.now() - this.jumpedAt < JUMP_DOUBLE_MS) return;
                 // A person's link (spec 103 K3.3) is a part of its cell: a double click edits as on the rest of it.
-                if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm:not(.tv-nm--jump), .tv-link, .tv-cites-more, .tv-conf, .tv-ages, .tv-thumb')) return;
+                if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm:not(.tv-nm--jump), .tv-link, .tv-cites-more, .tv-conf, .tv-ages, .tv-house, .tv-thumb')) return;
                 const line = this.lineOf(t);
                 if (!line || line.kind === 'more') return;
                 // A cell edited in place (T54 F8) opens its editor; any other cell edits the row.
@@ -1039,7 +1056,7 @@ export class TableGrid {
      * Enter on its cell jumps.
      */
     private syncNameTabs(): void {
-        for (const b of this.el.querySelectorAll<HTMLElement>('.tv-body :is(.tv-nm[data-ni], .tv-link, .tv-cites-more, .tv-conf, .tv-ages)')) {
+        for (const b of this.el.querySelectorAll<HTMLElement>('.tv-body :is(.tv-nm[data-ni], .tv-link, .tv-cites-more, .tv-conf, .tv-ages, .tv-house)')) {
             b.tabIndex = !b.classList.contains('tv-nm--jump') && b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
         }
     }
@@ -2158,7 +2175,7 @@ export class TableGrid {
         }
         if (e.altKey) return;
         // A name in a cell (§14.1) is a button: Enter and Space are its own.
-        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
+        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more, .tv-conf, .tv-ages, .tv-house')) return;
         const at = this.activeLineIndex();
         const drawn = lines[at];
         const col = Math.min(this.activeCol, input.columns.length - 1);

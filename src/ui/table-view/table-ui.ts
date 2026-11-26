@@ -1018,6 +1018,7 @@ export const tableMethods = uiModule({
                 onPickName: (line, col, names, anchor) => this.tableLinkPick(line, col, names, anchor),
                 onHistory: (d) => this.tableHistory(d, true),
                 onMoreCites: (_line, _col, ids, anchor) => this.showTableCites(ids, anchor),
+                onHouse: (id) => this.openHouse(id),
                 onSharedAges: (line, anchor) => { if (line.kind !== 'more' && line.row.kind === 'event') this.showTableSharedAges(line.row, anchor); },
                 onRowMenu: (line, anchor, cell) => this.showTableRowMenu(line, anchor, cell),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),

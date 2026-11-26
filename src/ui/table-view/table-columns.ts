@@ -30,6 +30,7 @@ import {
     researchCell, sourceImageCell, sourceResearchIdCell, unionResearchCell, unionResearchIdCell, type ResearchColumnId, type UnionResearchColumnId,
 } from './table-research.js';
 import { addedTime } from '../../person-lists-data.js';
+import { houseCell, type TableHouse } from './table-houses.js';
 import type { FieldKey } from '../../image-loads.js';
 import { imgStateOf } from '../image-slot.js';
 import { dateNumber, type CellName, type CellValue, type EventRow, type PersonRow, type RowType, type SourceRow, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
@@ -569,6 +570,8 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
         },
     },
     { id: 'bAddr', group: 'birth', label: 'bAddr', width: 180, get: (_c, r) => textCell(asPerson(r).birthAddress) },
+    // The birth house (spec 030 §15): the tree's house of the birth's place and address, a link to its page.
+    { id: 'house', group: 'birth', label: 'house', width: 190, computed: true, get: (c, r) => houseCell(c.houses().of(asPerson(r).birthPlace, asPerson(r).birthAddress)) },
     { id: 'bapDate', group: 'birth', label: 'bapDate', width: 120, kind: 'date', get: (c, r) => dateCell(c, firstEvent(asPerson(r), 'baptism')?.date) },
     { id: 'bapPlace', group: 'birth', label: 'bapPlace', width: 180, get: (_c, r) => textCell(firstEvent(asPerson(r), 'baptism')?.place) },
     { id: 'godparents', group: 'birth', label: 'godparents', width: 220, get: (c, r) => godparentsCell(c, asPerson(r)) },
@@ -794,6 +797,20 @@ export const UNION_COLUMNS: readonly ColumnDef[] = cols('unions', [
 
 const asEvent = (row: TableRow): EventRow => row as EventRow;
 
+/**
+ * An event's house (spec 030 §15): its place and address — a birth's and a death's of its person, a wedding's of
+ * its union, any other event's own.
+ */
+function eventHouse(c: TableContext, r: EventRow): TableHouse | null {
+    const p = r.persons[0];
+    const address = r.source === 'birth' ? p?.birthAddress
+        : r.source === 'death' ? p?.deathAddress
+        : r.source === 'marriage' ? r.union?.address
+        : r.source === 'divorce' ? undefined
+        : (r.event as { address?: string } | null)?.address;
+    return c.houses().of(r.place, address);
+}
+
 /** An event's people as the cell lists them: a union's blood relative first (as Partner 1, §2b). */
 export function eventPersons(ctx: TableContext, row: EventRow): Person[] {
     const list = row.persons;
@@ -992,6 +1009,7 @@ export const EVENT_COLUMNS: readonly ColumnDef[] = cols('events', [
     { id: 'evWho', group: 'event', label: 'evWho', width: 210, get: (c, r) => whoCell(c, r) },
     { id: 'evDate', group: 'event', label: 'evDate', width: 120, kind: 'date', get: (c, r) => dateCell(c, asEvent(r).date) },
     { id: 'evPlace', group: 'event', label: 'evPlace', width: 210, get: (_c, r) => textCell(asEvent(r).place) },
+    { id: 'evHouse', group: 'event', label: 'evHouse', width: 190, computed: true, get: (c, r) => houseCell(eventHouse(c, asEvent(r))) },
     { id: 'evAge', group: 'event', label: 'evAge', width: 110, kind: 'age', computed: true, get: (c, r) => eventAgeCell(c, r) },
     { id: 'evValue', group: 'event', label: 'evValue', width: 180, get: (_c, r) => eventValueCell(r) },
     { id: 'godparents', group: 'participants', label: 'godparents', width: 250, get: (c, r) => participantsCell(c, r, 'godparent') },

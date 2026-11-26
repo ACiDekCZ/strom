@@ -23,6 +23,7 @@ import type { CrossTreeMatch } from '../../cross-tree.js';
 import { treeHasAnySource, unionsByPerson } from '../../evidence-level.js';
 import { buildEventRows } from './table-events.js';
 import { buildSourceRows } from './table-sources.js';
+import { tableHouses, type TableHouses } from './table-houses.js';
 
 /** What the rows of a table are. P2 adds events and sources, P3 places. */
 export type RowType = 'persons' | 'unions' | 'events' | 'sources';
@@ -101,6 +102,8 @@ export interface CellValue {
      * http and https); `label` is what the link shows.
      */
     link?: { href: string; label: string };
+    /** The tree's house the cell names (spec 030 §15): a link to its page; `old` the older number the fact names. */
+    house?: { id: string; title: string; old?: string };
     /**
      * A pill of dots before the text (§14.2 Read by the research: one dot per
      * reader, filled when read, as the reliability pill of spec 066).
@@ -304,6 +307,8 @@ export interface TableContext {
     hasSources(): boolean;
     /** Each person's unions (the person's status mark). */
     unionsOf(): Map<string, Partnership[]>;
+    /** The tree's houses of the facts (spec 030 §15, the House column). */
+    houses(): TableHouses;
 }
 
 export interface TableModel {
@@ -377,6 +382,7 @@ function makeContext(data: StromData, opts: BuildOptions): TableContext {
     const livingCache = new Map<string, boolean>();
     let hasSources: boolean | undefined;
     let unions: Map<string, Partnership[]> | null = null;
+    let houses: TableHouses | null = null;
     const year = opts.year ?? new Date().getFullYear();
     return {
         data, lang: opts.lang, homeId: opts.homeId, year,
@@ -404,6 +410,7 @@ function makeContext(data: StromData, opts: BuildOptions): TableContext {
         scope: null,
         hasSources: () => hasSources ??= treeHasAnySource(data),
         unionsOf: () => unions ??= unionsByPerson(data),
+        houses: () => houses ??= tableHouses(data),
     };
 }
 

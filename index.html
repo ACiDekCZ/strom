@@ -12284,6 +12284,14 @@
         .tv-src-title { font-weight: 500; }
         .tv-link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
         .tv-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
+        /* A house of the tree (spec 030 §15): a link to its page; the fact's older number faint after it. */
+        .tv-house {
+            padding: 0; border: none; background: none; font: inherit; color: var(--primary); cursor: pointer; text-align: inherit;
+            text-decoration: underline; text-underline-offset: 2px;
+        }
+        .tv-house:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
+        .tv-house-old { color: var(--text-faint); }
+        .tv-cell.is-off-list .tv-house { color: var(--text-faint); }
         .tv-cell .fact-status.tv-readers { margin: 0; vertical-align: middle; }
         /* §14.3: a fact's further citations as a pill "+2" after the first one's value; its bubble lists the sources. */
         .tv-cites-more {
