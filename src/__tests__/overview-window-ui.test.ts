@@ -149,6 +149,24 @@ describe('the state sent to the overview window', () => {
         expect(ui.openOverviewViewing).not.toHaveBeenCalled();
     });
 
+    it('the research\'s status goes along as read here: its features and sends, whether its bridge answers, not its lists or address', () => {
+        fake.live = liveOf();
+        const status = {
+            treeId: 'R1', name: 'Okurkovi research', features: ['hypotheses.accept.link', 'hypothesis.decide.link'],
+            sends: [{ id: 'S1', at: '2026-11-26T10:00:00Z', state: 'written', input: 'I0042' }],
+            waiting: [{ id: 'W1' }], queue: [{ id: 'T1' }], working: [], researches: [], note: `see ${BASE}/status`,
+        };
+        const ui = stateUi({ researchStatusOf: (id: string) => (id === 'R1' ? status : null), researchBridgeUp: () => false });
+        const state = overviewWindowMethods.overviewWindowState.call(ui as never);
+        expect(state.status?.up).toBe(false);
+        expect(state.status?.status).toMatchObject({ name: 'Okurkovi research', features: status.features, sends: status.sends });
+        for (const k of ['waiting', 'queue', 'working', 'researches', 'note']) expect(state.status?.status).not.toHaveProperty(k);
+        expect(JSON.stringify(state)).not.toContain('Zq8tY2kQw9xLmN4pRs7');
+        expect(() => structuredClone(state)).not.toThrow();
+        // No status here: none sent.
+        expect(overviewWindowMethods.overviewWindowState.call(stateUi() as never).status).toBeUndefined();
+    });
+
     it('a locked tree: its name and that it is locked, nothing of its research (followed or not)', () => {
         fake.live = liveOf();
         vi.spyOn(DataManager, 'isLocked').mockReturnValue(true);
@@ -159,6 +177,8 @@ describe('the state sent to the overview window', () => {
         const text = JSON.stringify(state);
         expect(text).not.toContain('Okurkovi research');
         expect(text).not.toContain('W1');
+        const withStatus = stateUi({ researchStatusOf: () => ({ name: 'Okurkovi research', features: [] }), researchBridgeUp: () => true });
+        expect(overviewWindowMethods.overviewWindowState.call(withStatus as never).status).toBeUndefined();
     });
 });
 

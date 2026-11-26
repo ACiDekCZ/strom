@@ -7,6 +7,7 @@
  */
 
 import { DataManager } from '../data.js';
+import { storedResearchBridge } from '../research-device.js';
 import { TreeManager } from '../tree-manager.js';
 import type { PersonId, TreeId } from '../types.js';
 import { researchTaskRef, type ResearchLinkParams } from '../research-link.js';
@@ -21,7 +22,7 @@ import { directionsWindowState, retryDirectionProblem } from './research-directi
 import { queueNextOffered, taskOrderWindowState } from './research-offline-ui.js';
 import { hoverCard } from './research-overview-ui.js';
 import {
-    OVERVIEW_STATE_VERSION, bridgeSecrets, cloneSafe, emptyOverviewExtras, overviewChanged, overviewSessionData,
+    OVERVIEW_STATE_VERSION, bridgeSecrets, cloneSafe, emptyOverviewExtras, overviewChanged, overviewSessionData, overviewStatusData,
     type OverviewAction, type OverviewExtras, type OverviewResearchState, type OverviewSource, type OverviewViewingData,
 } from '../windows/overview-window.js';
 
@@ -87,7 +88,7 @@ export const overviewWindowMethods = uiModule({
             w = windowSession();
         }
         const v = overviewViewing();
-        const secrets = bridgeSecrets(w?.s.bridge.base, l?.bridge.base, v?.session.bridge.base);
+        const secrets = bridgeSecrets(w?.s.bridge.base, l?.bridge.base, v?.session.bridge.base, researchId ? storedResearchBridge(researchId)?.base : null);
         const viewing: OverviewViewingData | null = w && w.source !== 'live' && v ? {
             treeId: v.treeId, researchId: v.researchId, kind: v.kind, follow: v.follow, refreshedAt: v.refreshedAt,
             working: v.working, agentStarted: v.agentStarted, logHead: v.logHead, waitingAt: v.waitingAt,
@@ -134,6 +135,9 @@ export const overviewWindowMethods = uiModule({
             viewing,
             extras,
         };
+        // The research's status as read here (its features), with whether its bridge answers here now.
+        const status = researchId ? this.researchStatusOf(researchId) : null;
+        if (researchId && status) state.status = overviewStatusData(status, this.researchBridgeUp(researchId), secrets);
         return cloneSafe(state, secrets) as OverviewResearchState;
     },
 

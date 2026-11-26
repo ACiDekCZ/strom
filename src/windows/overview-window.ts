@@ -147,6 +147,44 @@ export interface OverviewResearchState {
     extras: OverviewExtras;
     /** The open tree is locked in the main window: nothing of its research is sent (the window says it is locked). */
     locked?: boolean;
+    /**
+     * The research's last status as the main window has it (`researchStatusOf`), and whether its bridge answers
+     * there now: the window reads its features (Accept proposals, a hypothesis decided in place, a device's sends)
+     * as the main window does. Its lists that the session carries are left out (null: no status there).
+     */
+    status?: OverviewStatusData | null;
+}
+
+/** The research's status as it crosses (`OverviewResearchState.status`). */
+export interface OverviewStatusData {
+    status: Record<string, unknown>;
+    up: boolean;
+}
+
+/** A status's lists the session carries already (`OverviewResearchState.session`): not sent twice. */
+const STATUS_IN_SESSION = ['waiting', 'queue', 'working', 'researches'] as const;
+
+/** The research's status as it crosses to the overview window (its lists the session carries left out). */
+export function overviewStatusData(status: object, up: boolean, secrets: readonly string[]): OverviewStatusData {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(status)) {
+        if ((STATUS_IN_SESSION as readonly string[]).includes(k)) continue;
+        const c = cloneSafe(v, secrets);
+        if (c !== undefined) out[k] = c;
+    }
+    return { status: out, up };
+}
+
+/**
+ * The status the overview window reads (null: none): the snapshot's, with the lists the session carries
+ * (empty without a session).
+ */
+export function overviewStatusFrom(state: OverviewResearchState, session: Pick<LiveSession, typeof STATUS_IN_SESSION[number]> | null): OverviewStatusData | null {
+    const st = state.status;
+    if (!st || typeof st !== 'object' || !st.status || typeof st.status !== 'object') return null;
+    const lists: Record<string, unknown> = {};
+    for (const k of STATUS_IN_SESSION) lists[k] = session?.[k] ?? [];
+    return { status: { ...st.status, ...lists }, up: st.up === true };
 }
 
 /** The parts of a bridge's address a snapshot never carries: the address itself and its token. */

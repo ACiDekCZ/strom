@@ -11,7 +11,7 @@
  */
 
 import type { PersonId, ResearchHypothesis } from '../types.js';
-import type { LiveDirection, LiveWaiting } from '../research-link.js';
+import type { LiveDirection, LiveStatus, LiveWaiting } from '../research-link.js';
 import { researchSchemeUrl, researchTaskRef, RESEARCH_LINK_ACTIONS, type ResearchLinkAction, type ResearchLinkParams } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import type { DirectionMove } from '../research-directions.js';
@@ -32,6 +32,7 @@ import { setOverviewOwnWindow } from './research-overview-ui.js';
 import { openResearchBusy, type OpenBusyResult } from './research-open-busy.js';
 import { askMainWindow, followLiveFromWindow } from './overview-window-follow.js';
 import { activatedElement } from './busy.js';
+import { setMirroredResearchStatus } from './research-sync-ui.js';
 import type { ResearchLinkKind } from './research-ui.js';
 import { auditRefusalOf, auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
 import { asAuditPreview } from '../research-audit.js';
@@ -49,7 +50,7 @@ import type { RowNote } from './waiting-row-notes.js';
 import type { RowBusyView } from './row-busy.js';
 import { taskOrderOutcomeOf, type TaskOrderOutcome, type TaskOrderWrite } from './research-offline-ui.js';
 import {
-    OVERVIEW_ACTIONS_TO_MAIN, emptyOverviewExtras, overviewSessionFromData, readOverviewState,
+    OVERVIEW_ACTIONS_TO_MAIN, emptyOverviewExtras, overviewSessionFromData, overviewStatusFrom, readOverviewState,
     type OverviewAction, type OverviewActionId, type OverviewResearchState,
 } from '../windows/overview-window.js';
 
@@ -538,9 +539,25 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
         drawnNow = null;
         setOverviewWindowDrawn(null);
         resetQueueLists();
+        mirrorStatus(null, null);
     };
     /** The main window's status said locked when last drawn (its snapshot may come before or after it). */
     let statusLocked = false;
+    /** The research whose status this window reads as the main window's (it goes with another research or none). */
+    let mirroredId: string | null = null;
+    /**
+     * The research's status as the main window has it, read here as there (its features: Accept proposals, a
+     * hypothesis decided in place, a device's sends); none for a locked tree, a tree without research or none said.
+     */
+    const mirrorStatus = (next: OverviewResearchState | null, session: LiveSession | null): void => {
+        const rid = next && !next.locked ? next.researchId : null;
+        const st = next && rid ? overviewStatusFrom(next, session) : null;
+        if (mirroredId && mirroredId !== rid) setMirroredResearchStatus(mirroredId, null);
+        mirroredId = rid;
+        if (!rid) return;
+        if (st) setMirroredResearchStatus(rid, st.status as unknown as LiveStatus, st.up);
+        else setMirroredResearchStatus(rid, null);
+    };
     const port = gatedOverviewPort(mainPort, () => host?.connection() === 'main-closed');
     Object.assign(ui, overviewWindowOverrides(port, () => state));
     setOverviewOwnWindow({
@@ -590,6 +607,7 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
             // A locked tree's: nothing of it is taken in.
             if (next.locked) {
                 state = next;
+                mirrorStatus(null, null);
                 render();
                 return true;
             }
@@ -600,6 +618,7 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
             drawnNow = { live: d.live, viewing: d.viewing };
             setOverviewWindowDrawn(drawnNow);
             const s = d.live ?? d.viewing?.session ?? null;
+            mirrorStatus(next, s);
             // What only the main window knows: the lines' writes, the hypotheses waited for, the queue's pages.
             applyDirectionsWindowState(next.extras.lines, s, (id) => port.send('line-retry', { directionId: id }));
             if (next.researchId) {
@@ -628,6 +647,7 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
             setOverviewWindowDrawn(null);
             onQueueListsChange(null);
             setQueueRemote(null);
+            mirrorStatus(null, null);
             drawnNow = null;
         },
     };

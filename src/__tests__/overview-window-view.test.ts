@@ -717,3 +717,68 @@ describe('the tree deleted or locked in the main window (§3.5b, §3.6)', () => 
         view.stop();
     });
 });
+
+describe('the research\'s status as the main window has it (O2-O4)', () => {
+    const FEATURES = ['hypotheses.accept.link', 'hypothesis.decide.link'];
+    const SENDS = [{ id: 'S1', at: '2026-11-26T10:00:00Z', state: 'written', input: 'I0042' }];
+    const withStatus = (up: boolean, o: Partial<OverviewResearchState> = {}) => stateOf({
+        status: { status: { treeId: 'R1', name: 'Okurkovi research', features: FEATURES, sends: SENDS }, up }, ...o,
+    });
+    const HYPO = { id: 'H0022', pickable: true, variants: [{ id: 'A' }, { id: 'B' }] };
+
+    async function windowUi() {
+        const { researchSyncMethods } = await import('../ui/research-sync-ui.js');
+        const { hypothesisWaitingMethods } = await import('../ui/hypothesis-waiting-ui.js');
+        const { DataManager } = await import('../data.js');
+        vi.spyOn(DataManager, 'isReadOnly').mockReturnValue(false);
+        return {
+            renderResearchOverview: vi.fn(), openWaitingItems: vi.fn(),
+            researchStatusOf: researchSyncMethods.researchStatusOf,
+            researchBridgeUp: researchSyncMethods.researchBridgeUp,
+            researchHypothesisPickable: researchSyncMethods.researchHypothesisPickable,
+            hypothesesAcceptAvailable: hypothesisWaitingMethods.hypothesesAcceptAvailable,
+            // The research's links announced on this computer (the main window's too).
+            researchLinkAvailable: () => true,
+        } as Record<string, (...a: unknown[]) => unknown>;
+    }
+
+    it('Accept proposals and a hypothesis decided in place are offered as in the main window; their clicks ask the main window', async () => {
+        const ui = await windowUi();
+        const { port } = portSpy();
+        const view = startOverviewWindowView(ui as never, port, () => 'Okurkovi');
+        view.apply(withStatus(true));
+        expect(ui.hypothesesAcceptAvailable()).toBe(true);
+        expect(ui.researchHypothesisPickable(HYPO)).toBe('pick');
+        expect(ui.researchBridgeUp('R1')).toBe(true);
+        // A device's sends in Progress read from the same status.
+        expect((ui.researchStatusOf('R1') as { sends: unknown }).sends).toEqual(SENDS);
+        // The lists the session carries are the status's here too.
+        expect((ui.researchStatusOf('R1') as { waiting: { id: string }[] }).waiting.map(w => w.id)).toEqual(['W1']);
+        (ui.acceptHypothesisProposals as (ids: string[]) => void)(['H0022']);
+        expect(port.send).toHaveBeenCalledWith('hypotheses-accept', { ids: ['H0022'] });
+        (ui.askWaitingHypothesis as (h: unknown, what: string, v?: string) => void)(HYPO, 'decide', 'B');
+        expect(port.send).toHaveBeenCalledWith('hypothesis-ask', { hypothesisId: 'H0022', do: 'decide', variant: 'B' });
+        view.stop();
+    });
+
+    it('the main window\'s bridge down: said down here too; no status, another research, a locked tree or the window\'s end: none here', async () => {
+        const ui = await windowUi();
+        const view = startOverviewWindowView(ui as never, portSpy().port, () => 'Okurkovi');
+        view.apply(withStatus(false));
+        expect(ui.researchBridgeUp('R1')).toBe(false);
+        expect(ui.hypothesesAcceptAvailable()).toBe(true);
+        view.apply(stateOf());
+        expect(ui.researchStatusOf('R1')).toBeNull();
+        expect(ui.hypothesesAcceptAvailable()).toBe(false);
+        expect(ui.researchHypothesisPickable(HYPO)).toBe('old');
+        view.apply(withStatus(true));
+        view.apply(stateOf({ researchId: 'R2', session: sessionData({ researchId: 'R2' }), status: { status: { features: [] }, up: true } }));
+        expect(ui.researchStatusOf('R1')).toBeNull();
+        expect(ui.researchBridgeUp('R2')).toBe(true);
+        view.apply(stateOf({ locked: true, researchId: null, session: null, source: null }));
+        expect(ui.researchStatusOf('R2')).toBeNull();
+        view.apply(withStatus(true));
+        view.stop();
+        expect(ui.researchStatusOf('R1')).toBeNull();
+    });
+});
