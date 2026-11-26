@@ -151,7 +151,7 @@ test.describe('desktop', () => {
         await openPageFromMenu(page);
         const w = win(page);
         await w.locator('.pp-more').click();
-        await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Edit person', 'Focus in tree']);
+        await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Edit person', 'Focus in tree', 'Give a family tree…']);
         await w.locator('[data-pp-menu="edit"]').click();
         const editor = page.locator('#person-modal');
         await expect(editor).toBeVisible();
@@ -163,11 +163,11 @@ test.describe('desktop', () => {
         await page.keyboard.press('Escape');
         await expect(w).toHaveCount(0);
 
-        // A locked person.
+        // A locked person: no Edit; Give a family tree… stays (it does not change the person).
         await page.evaluate(() => window.Strom.UI.runPersonMenuAction('jan' as never, 'toggle-lock'));
         await openPageFromMenu(page);
         await w.locator('.pp-more').click();
-        await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Focus in tree']);
+        await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Focus in tree', 'Give a family tree…']);
         await page.keyboard.press('Escape');
         await page.keyboard.press('Escape');
         await expect(w).toHaveCount(0);
@@ -1410,7 +1410,7 @@ test.describe('a phone', () => {
         expect(fits).toBe(true);
         // Save and Print in ⋯ on a phone.
         await w.locator('.pp-more').click();
-        await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Save as HTML', 'Print', 'Edit person', 'Focus in tree']);
+        await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Save as HTML', 'Print', 'Edit person', 'Focus in tree', 'Give a family tree…']);
     });
 
     test('Ancestors (1031): the fan across the screen, 236 px (+ the band for ⛶), only ⛶, the tap line; a tap opens the ancestor', async ({ page }) => {

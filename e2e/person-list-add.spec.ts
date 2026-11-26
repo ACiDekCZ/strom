@@ -52,10 +52,11 @@ test.describe('Add to list: a computer', () => {
         await card(page, 'Quillon').click();
         const menu = page.locator('.context-menu:not(.context-submenu)');
         await expect(menu).toBeVisible();
-        // In the group of Find relationship… and Search in archives…, right after them.
+        // In the group of Find relationship… and Search in archives…, after them and Give a family tree… (spec 093).
         const labels = await menu.locator('.context-menu-item').allInnerTexts();
         const at = labels.findIndex(l => l.startsWith('Add to list'));
-        expect(labels[at - 1]).toContain('Search in archives');
+        expect(labels[at - 1]).toContain('Give a family tree…');
+        expect(labels[at - 2]).toContain('Search in archives');
         await menu.locator('[data-menu="add-to-list"]').click();
         const sub = page.locator('.context-submenu');
         await expect(sub).toBeVisible();

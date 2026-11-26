@@ -1,6 +1,6 @@
 /**
  * The family book (package 1031 §4, §6): the options dialog (presets, the
- * four kinds of selection and the House card for later, the parts with the
+ * five kinds of selection and the House card for later, the parts with the
  * reasons they are unavailable, the estimate, the memory per tree and the
  * entries from the overview, the person card and a person), the book window
  * (toolbar, side contents, anchors, Save as HTML, Change options, Close) and
@@ -53,7 +53,7 @@ async function openBook(page: Page, context: BrowserContext): Promise<Page> {
 test.describe('family book: the options dialog', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
 
-    test('structure: presets, four kinds and House later, the parts with their reasons; a change makes the preset Custom @smoke', async ({ page }) => {
+    test('structure: presets, five kinds and House later, the parts with their reasons; a change makes the preset Custom @smoke', async ({ page }) => {
         await setup(page);
         const dialog = await openDialog(page);
         await expect(dialog.locator('#book-dlg-title')).toHaveText('Book and pages');
@@ -61,9 +61,9 @@ test.describe('family book: the options dialog', () => {
         await expect(presets).toHaveText(['For the family', 'For researchers', 'Custom']);
         await expect(dialog.locator('[data-preset="family"]')).toHaveAttribute('aria-checked', 'true');
 
-        // What goes in the book: four kinds, the whole tree chosen; the House card is there, disabled.
+        // What goes in the book: five kinds (Person's family tree, spec 093), the whole tree chosen; the House card is there, disabled.
         await expect(dialog.locator('.book-kind[data-kind] .book-kind-t')).toHaveText([
-            'Whole tree', 'Family lines', 'Ancestors of a person', 'Descendants of a person',
+            'Whole tree', 'Family lines', 'Ancestors of a person', 'Descendants of a person', 'Person’s family tree',
         ]);
         await expect(kind(dialog, 'tree')).toBeChecked();
         const house = dialog.locator('.book-kind--house');

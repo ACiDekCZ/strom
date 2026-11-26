@@ -346,7 +346,7 @@ function optionsHtml(s: DialogState): string {
         + `<div class="book-gift-line"><label class="book-anc-l" for="book-gift-depth">${esc(strings.giftTree.cut.depthH)}</label>`
         + `<select id="book-gift-depth" name="book-gift-depth">`
         + GIFT_DEPTHS.map((d, i) => `<option value="${d}">${esc(strings.giftTree.cut.depth[i])}</option>`).join('')
-        + `</select><span class="book-anc-n book-gift-n" aria-live="polite"></span></div>`
+        + `</select><span class="book-gift-n" aria-live="polite"></span></div>`
         + `</div>`
         + (pages ? `<div class="book-sel book-sel-persons"><div class="book-sel-picker"></div>`
             + `<p class="book-hint book-sel-state" aria-live="polite"></p>`

@@ -59,7 +59,7 @@ test.describe('pages of selected people', () => {
         await expect(outBtn(dialog, 'pages')).toHaveAttribute('aria-checked', 'true');
         // The pages' kinds: Selected people last; it is checked, with Karl as its chip.
         await expect(dialog.locator('.book-kind[data-kind] .book-kind-t')).toHaveText([
-            'Whole tree', 'Family lines', 'Ancestors of a person', 'Descendants of a person', 'Selected people',
+            'Whole tree', 'Family lines', 'Ancestors of a person', 'Descendants of a person', 'Person’s family tree', 'Selected people',
         ]);
         await expect(kind(dialog, 'persons')).toBeChecked();
         const sel = dialog.locator('.book-sel-persons');

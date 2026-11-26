@@ -178,7 +178,7 @@ test.describe('The portrait picker with a mouse (1440)', () => {
         await personPage(page, 'Josef');
         await expect(ppWin(page).locator('.pp-portrait-link')).toHaveCount(0);
         await ppWin(page).locator('.pp-more').click();
-        await expect(ppWin(page).locator('.pp-menu-item:visible')).toHaveText(['Edit person', 'Change portrait…', 'Edit portrait crop', 'Focus in tree']);
+        await expect(ppWin(page).locator('.pp-menu-item:visible')).toHaveText(['Edit person', 'Change portrait…', 'Edit portrait crop', 'Focus in tree', 'Give a family tree…']);
         await ppWin(page).locator('[data-pp-menu="portrait"]').click();
         await expect(popover(page)).toBeVisible();
         await tile(popover(page), 'Svatba').click();
