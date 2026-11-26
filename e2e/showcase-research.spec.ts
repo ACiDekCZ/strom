@@ -230,6 +230,9 @@ test.describe('the showcase with research', () => {
             return bg;
         });
         await expect(page.locator('#research-item-chat .research-ai-badge')).toHaveCSS('background-color', badge);
+        // The footer: the showcase's own sentence, not "trial · continues in the research" (the snapshot continues nowhere).
+        await expect(page.locator('#research-menu-foot')).toHaveText('View only in the sample');
+        await expect(page.locator('#research-menu-foot .research-trial-tag')).toHaveCount(0);
         await clickSaysWhy(page, page.locator('#research-item-chat'), 'In full research: Continue with the agent · AI + terminal');
         await page.keyboard.press('Escape');
         await card(page, 'Josef').click();

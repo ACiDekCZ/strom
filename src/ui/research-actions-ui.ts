@@ -633,10 +633,12 @@ export const researchActionsMethods = uiModule({
         // Not an item: "trial" and what the mark means (the whole sentence as its title) — only "trial"
         // when nothing in the menu carries the mark (menu 1020 D8).
         const anyExt = [...model.first, ...model.more, ...model.moreQuiet].some(i => i.ext || !!i.link) || model.blocks.includes('research-open-mark');
-        const foot = model.foot
-            ? `<div class="research-menu-foot" id="research-menu-foot" role="none"${anyExt ? ` title="${esc(desc)}"` : ''}>${researchTrialTagHtml(true)}`
-                + (anyExt ? `<span class="research-menu-foot-text">${researchOpenSvgMark(12)}${esc(r.footer)}</span>` : '') + '</div>'
-            : '';
+        // The showcase's snapshot continues nowhere: its own sentence in place of "trial · continues in the research".
+        const foot = !model.foot ? ''
+            : inShowcase()
+                ? `<div class="research-menu-foot" id="research-menu-foot" role="none"><span class="research-menu-foot-text">${esc(strings.sample.whyTitle)}</span></div>`
+                : `<div class="research-menu-foot" id="research-menu-foot" role="none"${anyExt ? ` title="${esc(desc)}"` : ''}>${researchTrialTagHtml(true)}`
+                    + (anyExt ? `<span class="research-menu-foot-text">${researchOpenSvgMark(12)}${esc(r.footer)}</span>` : '') + '</div>';
         const only = model.onlyComputer ? `<div class="research-menu-only-computer" id="research-menu-only-computer" role="none">${esc(model.onlyComputer)}</div>` : '';
         return heading + model.blocks + first + more + only + foot;
     },
