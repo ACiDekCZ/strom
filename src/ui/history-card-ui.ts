@@ -478,7 +478,9 @@ export const historyCardMethods = uiModule({
     /** §5.2: `POST /history/first {region}` from the card; the answer in the last row. */
     async lifelineHistoryFind(region: string): Promise<void> {
         const ctx = this.historyManageContext();
-        if (!ctx?.base || findBusy.has(region)) return;
+        // A satellite writes it through the main window's bridge.
+        const base = ctx?.base ?? null;
+        if (!ctx || !base && !ctx.viaMain || findBusy.has(region)) return;
         const h = strings.history;
         const rid = ctx.researchId;
         const busy = { slow: false };
@@ -487,12 +489,14 @@ export const historyCardMethods = uiModule({
         this.historyChanged();
         const slow = setTimeout(() => { busy.slow = true; this.historyChanged(); }, 300);
         const before = this.researchHeadNow(rid);
-        const r = await postBridgeFirst(ctx.base, region, ctx.features, this.historyOffCheck(rid, 'regions'));
+        const r = base ? await postBridgeFirst(base, region, ctx.features, this.historyOffCheck(rid, 'regions'))
+            : await this.historyWriteViaMain({ step: 'first', region });
         clearTimeout(slow);
         findBusy.delete(region);
         if (r.ok) {
             findNotes.set(region, { text: h.firstDone(this.historyCardRegionName(region), this.historyCardPace()) });
-            this.historyManageWritten(rid, before, r);
+            // Through the main window: its new head taken and the history read there.
+            if (base) this.historyManageWritten(rid, before, r);
         } else {
             this.lifelineHistoryFindRefused(rid, region, r);
         }
@@ -515,7 +519,7 @@ export const historyCardMethods = uiModule({
             findNotes.set(region, { text: h.findMapping });
         } else if (r.code === 'skipped') {
             // Skipped meanwhile: "Search again" first (the bridge never undoes the choice itself).
-            const canSkip = !!ctx?.base && ctx.features.includes(HISTORY_SKIP_FEATURE);
+            const canSkip = !!(ctx?.base || ctx?.viaMain) && ctx.features.includes(HISTORY_SKIP_FEATURE);
             findNotes.set(region, {
                 text: h.toastSkipped(this.historyCardRegionName(region)),
                 ...(canSkip ? { link: { label: h.searchAgain, run: () => { void this.lifelineHistorySearchAgain(region); } } } : {}),
@@ -531,19 +535,21 @@ export const historyCardMethods = uiModule({
     /** "Search again" of a region skipped meanwhile (`/history/skip do:"undo"`); then the offer is back. */
     async lifelineHistorySearchAgain(region: string): Promise<void> {
         const ctx = this.historyManageContext();
-        if (!ctx?.base || findBusy.has(region)) return;
+        const base = ctx?.base ?? null;
+        if (!ctx || !base && !ctx.viaMain || findBusy.has(region)) return;
         // Its link locked at once, its "…" after 300 ms (as "Find first", B188).
         const busy = { slow: false };
         findBusy.set(region, busy);
         this.historyChanged();
         const slow = setTimeout(() => { busy.slow = true; this.historyChanged(); }, 300);
         const before = this.researchHeadNow(ctx.researchId);
-        const r = await postBridgeSkip(ctx.base, { region, do: 'undo' }, ctx.features);
+        const r = base ? await postBridgeSkip(base, { region, do: 'undo' }, ctx.features)
+            : await this.historyWriteViaMain({ step: 'search-again', region });
         clearTimeout(slow);
         findBusy.delete(region);
         if (r.ok) {
             findNotes.delete(region);
-            this.historyManageWritten(ctx.researchId, before, r);
+            if (base) this.historyManageWritten(ctx.researchId, before, r);
         } else {
             this.lifelineHistoryFindRefused(ctx.researchId, region, r);
         }

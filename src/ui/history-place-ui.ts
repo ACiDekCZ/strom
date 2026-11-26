@@ -160,7 +160,8 @@ export const historyPlaceMethods = uiModule({
             return;
         }
         const ctx = this.historyManageContext();
-        if (!ctx?.base) {
+        // A satellite writes it through the main window's bridge.
+        if (!ctx || !ctx.base && !ctx.viaMain) {
             st.note = { text: strings.history.manageNoBridge };
             this.renderHistoryPlaceFind();
             return;
@@ -173,7 +174,8 @@ export const historyPlaceMethods = uiModule({
             st.note = null;
             this.renderHistoryPlaceFind();
             try {
-                return await postBridgePlace(base, st.id, ctx.features, this.historyOffCheck(st.rid, 'places'));
+                return base ? await postBridgePlace(base, st.id, ctx.features, this.historyOffCheck(st.rid, 'places'))
+                    : await this.historyWriteViaMain({ step: 'place', place: st.id });
             } finally {
                 st.busy = false;
             }
@@ -189,7 +191,8 @@ export const historyPlaceMethods = uiModule({
             // Only a research that says `history.place.direct`: first in line.
             this.closeHistoryPlaceFind();
             this.showToast(strings.history.placeToast(st.name), 6000, { kind: 'history-place' });
-            this.historyManageWritten(st.rid, before, r);
+            // Through the main window: its new head taken and the history read there.
+            if (base) this.historyManageWritten(st.rid, before, r);
             return;
         }
         if (r.code === 'link' && r.link) {
@@ -231,17 +234,20 @@ export const historyPlaceMethods = uiModule({
         const d = this.historyManageDrawn();
         const id = d?.payload?.places[key]?.id;
         // Asked already and not answered (the detail drawn anew meanwhile has a new link): nothing more.
-        if (!d?.base || !id || placeAgainAsking.has(key)) return;
+        // A satellite asks through the main window's bridge.
+        const viaMain = !d?.base && !!this.historyManageContext()?.viaMain;
+        if (!d || !d.base && !viaMain || !id || placeAgainAsking.has(key)) return;
         placeAgainAsking.add(key);
         let r: Awaited<ReturnType<typeof postBridgePlace>>;
         try {
-            r = await postBridgePlace(d.base, id, d.features, this.historyOffCheck(d.rid, 'places'));
+            r = d.base ? await postBridgePlace(d.base, id, d.features, this.historyOffCheck(d.rid, 'places'))
+                : await this.historyWriteViaMain({ step: 'place', place: id });
         } finally {
             placeAgainAsking.delete(key);
         }
         if (r.ok) {
             this.showToast(strings.history.placeToast(d.names.place(key)), 6000, { kind: 'history-place' });
-            this.historyManageWritten(d.rid, this.researchHeadNow(d.rid), r);
+            if (d.base) this.historyManageWritten(d.rid, this.researchHeadNow(d.rid), r);
             return;
         }
         if (r.code === 'link' && r.link) {

@@ -17,6 +17,7 @@ import { historyKindSvg } from '../history-symbols.js';
 import { regionName } from '../history-manage.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
+import { HISTORY_STEP_ACTION, satMainForward } from '../windows/window-sat-research.js';
 import { uiModule } from './module.js';
 import type { ToastWorkEnd } from './toast.js';
 
@@ -77,6 +78,14 @@ export const historyAlignMethods = uiModule({
     openHistoryAlignDialog(): void {
         const rid = activeResearchId();
         if (!rid) return;
+        // A satellite with the main window open: the preview and "Align" go through the main window's bridge, so
+        // the dialog opens there and the main window comes forward.
+        const main = satMainForward();
+        if (main) {
+            this.closeLifelineHistoryPopups();
+            main.run(HISTORY_STEP_ACTION, { step: 'align' }, true);
+            return;
+        }
         if (!bridgeBase(rid) || !this.researchBridgeUp(rid)) {
             this.showToast(strings.history.storiesBridgeDown, 5000);
             return;

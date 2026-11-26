@@ -32,6 +32,7 @@ import {
 import { HISTORY_ALIGN_FEATURE, researchLinkMark } from '../research-link.js';
 import { historyKindSvg } from '../history-symbols.js';
 import { HISTORY_MANAGE_DIALOG_ID } from './history-ui.js';
+import { HISTORY_STEP_ACTION, satMainForward } from '../windows/window-sat-research.js';
 import { mapUndoBody } from './history-map-ui.js';
 import { uiModule } from './module.js';
 import { undoInToast } from './toast.js';
@@ -175,6 +176,15 @@ export const historyManageMethods = uiModule({
      * (Settings, the person card); Close returns there.
      */
     openHistoryManage(opts: { tab?: ManageTab; place?: string; region?: string } = {}): void {
+        // A satellite with the main window open: the manager is the main window's (its bridge writes every row's
+        // step); it opens there, at the same tab, place or region, and the main window comes forward.
+        const main = satMainForward();
+        if (main) {
+            main.run(HISTORY_STEP_ACTION, {
+                step: 'manage', ...(opts.tab ? { tab: opts.tab } : {}), ...(opts.place ? { place: opts.place } : {}), ...(opts.region ? { region: opts.region } : {}),
+            }, true);
+            return;
+        }
         const modal = document.getElementById(HISTORY_MANAGE_DIALOG_ID);
         if (!modal) return;
         const reopen = modal.classList.contains('active');
@@ -235,7 +245,8 @@ export const historyManageMethods = uiModule({
         const env: ManageEnv = {
             lang: lang(),
             features,
-            bridgeUp: !!status && !!ctx.base,
+            // A satellite: the main window's bridge, as the main window mirrors it.
+            bridgeUp: !!status && (!!ctx.base || ctx.viaMain),
             queue: ctx.queue,
             ...(status?.treeState ? { treeState: status.treeState } : {}),
             ...(status?.experiments ? { searchOn: status.experiments.history } : {}),

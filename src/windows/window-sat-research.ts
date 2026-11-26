@@ -19,6 +19,9 @@ import type { FactConfirmErrorCode, FactConfirmResult } from '../research-verify
 import type { RevertResult } from '../research-revert.js';
 import { researchLinkActionOf } from '../research-link.js';
 import { isBridgelessWindow } from '../research-device.js';
+import { HISTORY_PLACE_ID_RE, HISTORY_REGION_RE, sanitizeHideQueue, type HistoryHideOp } from '../history.js';
+import type { ExperimentSwitch, HistoryWriteError, HistoryWriteRefusal, HistoryWriteResult } from '../history-bridge.js';
+import type { ManageTab } from '../history-manage.js';
 
 /** What a satellite's UI needs from its client to have an action run in the main window. */
 export interface SatResearchForward {
@@ -387,4 +390,98 @@ export function readRevertResult(raw: unknown): (RevertResult & { loaded?: 'quie
         default:
             return null;
     }
+}
+
+/** A hiding (or its undo) of a satellite's history: queued and sent by the main window, which holds the bridge and the queue. */
+export const HISTORY_HIDE_ACTION = 'history-hide';
+
+/** `history-hide`'s arguments as they came: the one hiding, read as the device's queue reads its entries (null: malformed). */
+export function readHistoryHideArgs(raw: unknown): { op: HistoryHideOp } | null {
+    const a = argsObject(raw);
+    if (!a || Object.keys(a).some(k => k !== 'op')) return null;
+    const op = sanitizeHideQueue([a.op])[0];
+    return op ? { op } : null;
+}
+
+/** A step of a satellite's history layer that the main window takes: its dialog opened there, or a write through its bridge. */
+export const HISTORY_STEP_ACTION = 'history-step';
+
+/**
+ * - `manage`: "History of places" in the main window (its tab, a place's row, a region's detail);
+ * - `align`: "Align history with the settings…" in the main window;
+ * - `first` / `search-again`: a region's "Find first" / "Search again" of the card, written through the main window's bridge;
+ * - `place`: a place's own history asked (its record), through the main window's bridge;
+ * - `off`: the search switched off for the tree (both, or one of `experiments.split`), through the main window's bridge.
+ */
+export type HistoryStep =
+    | { step: 'manage'; tab?: ManageTab; place?: string; region?: string }
+    | { step: 'align' }
+    | { step: 'first' | 'search-again'; region: string }
+    | { step: 'place'; place: string }
+    | { step: 'off'; which: ExperimentSwitch };
+
+/** The steps that write (the satellite waits for the bridge's answer). */
+export type HistoryWriteStep = Extract<HistoryStep, { step: 'first' | 'search-again' | 'place' | 'off' }>;
+
+const MANAGE_TABS: readonly ManageTab[] = ['regions', 'places', 'hidden', 'deleted'];
+const EXPERIMENT_SWITCHES: readonly ExperimentSwitch[] = ['history', 'regions', 'places'];
+
+/** `history-step`'s arguments as they came (null: malformed). */
+export function readHistoryStepArgs(raw: unknown): HistoryStep | null {
+    const a = argsObject(raw);
+    if (!a) return null;
+    const only = (...keys: string[]): boolean => Object.keys(a).every(k => k === 'step' || keys.includes(k));
+    switch (a.step) {
+        case 'manage': {
+            if (!only('tab', 'place', 'region')) return null;
+            if (a.tab !== undefined && !MANAGE_TABS.includes(a.tab as ManageTab)) return null;
+            if (a.place !== undefined && (typeof a.place !== 'string' || !a.place || a.place.length > MAX_TEXT)) return null;
+            if (a.region !== undefined && (typeof a.region !== 'string' || !HISTORY_REGION_RE.test(a.region))) return null;
+            return {
+                step: 'manage',
+                ...(a.tab ? { tab: a.tab as ManageTab } : {}),
+                ...(typeof a.place === 'string' ? { place: a.place } : {}),
+                ...(typeof a.region === 'string' ? { region: a.region } : {}),
+            };
+        }
+        case 'align':
+            return only() ? { step: 'align' } : null;
+        case 'first':
+        case 'search-again':
+            if (!only('region') || typeof a.region !== 'string' || !HISTORY_REGION_RE.test(a.region)) return null;
+            return { step: a.step, region: a.region };
+        case 'place':
+            if (!only('place') || typeof a.place !== 'string' || !HISTORY_PLACE_ID_RE.test(a.place)) return null;
+            return { step: 'place', place: a.place };
+        case 'off':
+            if (!only('which') || !EXPERIMENT_SWITCHES.includes(a.which as ExperimentSwitch)) return null;
+            return { step: 'off', which: a.which as ExperimentSwitch };
+        default:
+            return null;
+    }
+}
+
+const HISTORY_WRITE_CODES: readonly HistoryWriteError[] = [
+    'invalid', 'gone', 'off', 'archive', 'done', 'retracted', 'skipped', 'link', 'held', 'busy', 'network', 'timeout', 'unknown',
+];
+
+/** No answer from the main window (or from the bridge it writes to). */
+export const HISTORY_NO_ANSWER: HistoryWriteRefusal = { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+
+/**
+ * The main window's answer to a history write as it came: done (its new head), or the refusal with the bridge's
+ * sentence (what holds writing already put into words there) and a link only when it is one of the research's
+ * own links the app builds. Anything else: no answer.
+ */
+export function readHistoryWriteResult(raw: unknown): HistoryWriteResult {
+    const r = argsObject(raw);
+    if (!r) return HISTORY_NO_ANSWER;
+    if (r.ok === true) return textOf(r.head) && textOf(r.parent) ? { ok: true, head: r.head, parent: r.parent } : HISTORY_NO_ANSWER;
+    if (r.ok !== false || !HISTORY_WRITE_CODES.includes(r.code as HistoryWriteError)) return HISTORY_NO_ANSWER;
+    if (typeof r.status !== 'number' || !textOf(r.reason)) return HISTORY_NO_ANSWER;
+    const link = typeof r.link === 'string' && r.link.length <= 2000 && researchLinkActionOf(r.link) ? r.link : '';
+    return {
+        ok: false, code: r.code as HistoryWriteError, status: r.status, reason: r.reason,
+        bridgeCode: textOf(r.bridgeCode) ? r.bridgeCode : '', ...(link ? { link } : {}),
+    };
 }

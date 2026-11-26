@@ -40,8 +40,12 @@ import {
 import { manageSummaries } from '../history-manage.js';
 import {
     fetchBridgeHistory, hideRequestBody, postBridgeHide, postBridgeExperimentsOff, experimentOfSwitch, HISTORY_READ_TIMEOUT_MS,
-    type ExperimentSwitch,
+    postBridgeFirst, postBridgeSkip, postBridgePlace, HISTORY_WRITE_TIMEOUT_MS,
+    type ExperimentSwitch, type ExperimentsOffResult, type HistoryWriteResult,
 } from '../history-bridge.js';
+import {
+    HISTORY_HIDE_ACTION, HISTORY_NO_ANSWER, HISTORY_STEP_ACTION, readHistoryWriteResult, satMainForward, type HistoryWriteStep,
+} from '../windows/window-sat-research.js';
 import { busySpinHtml, runBusy, activatedElement } from './busy.js';
 import { loadHistoryCache, saveHistoryCache, loadHideQueue, saveHideQueue } from '../history-store.js';
 import { onBridgeStatus } from './research-sync-ui.js';
@@ -103,6 +107,9 @@ const lastFeatures = new Map<string, readonly string[]>();
 /** The bridge's sentence after a failed switch-off, and its link (until Settings close). */
 let offError: { researchId: string; text: string; link?: string } | null = null;
 let listening = false;
+
+/** A satellite waits this long for a history write through the main window's bridge (the bridge's own limit and a little). */
+const VIA_MAIN_WAIT_MS = HISTORY_WRITE_TIMEOUT_MS + 3000;
 
 /** A status saying the search is on this soon after a switch-off may have been asked before it. */
 const OFF_SETTLE_MS = 5000;
@@ -611,6 +618,11 @@ export const historyMethods = uiModule({
         researchId: string; payload: HistoryPayload | null | undefined; queue: HistoryHideOp[];
         status: LiveStatus | null; lastStatus: LiveStatus | null; features: readonly string[];
         base: string | null; offDone: boolean; canLinkOn: boolean;
+        /**
+         * A satellite (no bridge address of its own) whose main window is open: the bridge's state is the main
+         * window's mirrored one, and the writes go through the main window's bridge (`historyWriteViaMain`).
+         */
+        viaMain: boolean;
         /** `experiments.split`: each search alone (a switch-off from here applied); null without it. */
         split: { regions: boolean; places: boolean } | null;
         /** `POST /experiments` switches off (`experiments.off`, the bridge running). */
@@ -627,6 +639,7 @@ export const historyMethods = uiModule({
             lastStatus: status ?? this.researchStatusOf(rid),
             features: status?.features ?? this.researchStatusOf(rid)?.features ?? lastFeatures.get(rid) ?? [],
             base: status ? bridgeBase(rid) : null,
+            viaMain: !!status && !!satMainForward(),
             offDone: offDone.has(rid),
             canLinkOn: this.historyCanLinkOn(rid),
             split: this.historySplitNow(rid),
@@ -680,11 +693,59 @@ export const historyMethods = uiModule({
     async applyHistoryHide(op: HistoryHideOp): Promise<void> {
         const rid = activeResearchId();
         if (!rid) return;
+        // A satellite with the main window open: the main window queues it with its own, keeps the device's queue and
+        // sends it (a queue kept here would never be sent, and the main window's next save would drop it). Here it is
+        // shown at once, as the main window shows it.
+        const main = satMainForward();
+        if (main) main.run(HISTORY_HIDE_ACTION, { op }, false);
         await this.ensureHistoryCache(rid);
         queues.set(rid, queueHideOp(queues.get(rid) ?? [], op, cache.get(rid) ?? null));
+        if (main) {
+            this.historyChanged();
+            return;
+        }
         await saveHideQueue(rid, displayQueue(rid));
         this.historyChanged();
         void this.flushHistoryQueue(rid);
+    },
+
+    /**
+     * A history write of a satellite through the main window's bridge: the bridge's answer as the main window got
+     * it (what holds writing already in words), or no answer (`network`) when the main window does not answer in time.
+     */
+    async historyWriteViaMain(step: HistoryWriteStep): Promise<HistoryWriteResult> {
+        const main = satMainForward();
+        if (!main) return HISTORY_NO_ANSWER;
+        return readHistoryWriteResult(await main.ask(HISTORY_STEP_ACTION, step, VIA_MAIN_WAIT_MS));
+    },
+
+    /**
+     * The main window's side of a satellite's history write: through this window's bridge as its own button writes
+     * (the research's new head taken, the history read again), the answer as the satellite reads it.
+     */
+    async historyWriteHere(step: HistoryWriteStep): Promise<unknown> {
+        const ctx = this.historyManageContext();
+        if (!ctx?.base || !ctx.status) return HISTORY_NO_ANSWER;
+        const rid = ctx.researchId;
+        const base = ctx.base;
+        const before = this.researchHeadNow(rid);
+        let r: HistoryWriteResult | ExperimentsOffResult;
+        if (step.step === 'off') {
+            r = await postBridgeExperimentsOff(base, ctx.features, rid, announcedResearchScheme(), { which: step.which });
+            if (r.ok) {
+                this.historyOffTaken(rid, step.which, before, r);
+                this.renderHistorySettingsIfOpen();
+            }
+        } else {
+            r = step.step === 'place' ? await postBridgePlace(base, step.place, ctx.features, this.historyOffCheck(rid, 'places'))
+                : step.step === 'first' ? await postBridgeFirst(base, step.region, ctx.features, this.historyOffCheck(rid, 'regions'))
+                    : await postBridgeSkip(base, { region: step.region, do: 'undo' }, ctx.features);
+            if (r.ok) this.historyManageWritten(rid, before, r);
+        }
+        this.historyChanged();
+        if (r.ok) return { ok: true, head: r.head, parent: r.parent };
+        const { held, ...refusal } = r;
+        return { ...refusal, reason: r.reason || (held ? this.researchWriteHeldText(held, false).toast : '') };
     },
 
     // ─── Settings (§1) ─────────────────────────────────────────────────────
@@ -962,23 +1023,20 @@ export const historyMethods = uiModule({
         if (!rid) return false;
         const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
         const base = bridgeBase(rid);
-        if (!status || !base || !(status.features ?? []).includes(EXPERIMENTS_OFF_FEATURE)) {
+        // A satellite writes it through the main window's bridge.
+        const main = base ? null : satMainForward();
+        if (!status || !base && !main || !(status.features ?? []).includes(EXPERIMENTS_OFF_FEATURE)) {
             if (this.historyCanLinkOn(rid)) this.historyLaunchExperiment('off', which);
             return false;
         }
         const h = strings.history;
         const before = this.researchHeadNow(rid);
-        const r = await postBridgeExperimentsOff(base, status.features, rid, announcedResearchScheme(), { which });
+        const r: ExperimentsOffResult = base
+            ? await postBridgeExperimentsOff(base, status.features, rid, announcedResearchScheme(), { which })
+            : await this.historyWriteViaMain({ step: 'off', which }) as ExperimentsOffResult;
         if (r.ok) {
-            if (which === 'history') {
-                offDone.set(rid, Date.now());
-                offError = null;
-            } else {
-                const m = offDoneSwitch.get(rid) ?? new Map<'regions' | 'places', number>();
-                m.set(which, Date.now());
-                offDoneSwitch.set(rid, m);
-            }
-            if (r.head) this.researchTakeOwnWriteHead(rid, before, r.head, r.parent);
+            // Through the main window: its new head was taken there.
+            this.historyOffTaken(rid, which, base ? before : null, r);
             if (!opts.quiet) {
                 this.showToast(which === 'history' ? h.toastSearchOff
                     : h.toastSwitchOff(which === 'regions' ? h.switchRegions : h.switchPlaces), 4000);
@@ -998,6 +1056,22 @@ export const historyMethods = uiModule({
         this.renderHistorySettingsIfOpen();
         this.historyChanged();
         return r.ok;
+    },
+
+    /**
+     * A switch-off that went: shown off here at once (until the bridge's status agrees); `before` the research's
+     * head before the write, whose new head this window takes as its own (null: taken by the main window).
+     */
+    historyOffTaken(rid: string, which: ExperimentSwitch, before: string | null | undefined, r: { head: string; parent: string }): void {
+        if (which === 'history') {
+            offDone.set(rid, Date.now());
+            offError = null;
+        } else {
+            const m = offDoneSwitch.get(rid) ?? new Map<'regions' | 'places', number>();
+            m.set(which, Date.now());
+            offDoneSwitch.set(rid, m);
+        }
+        if (before !== null && r.head) this.researchTakeOwnWriteHead(rid, before ?? '', r.head, r.parent);
     },
 
     /** Test hook: forget the page's history state (a new page). */

@@ -7,10 +7,13 @@
  */
 
 import {
-    CARD_SIGNAL_ACTION, FACT_CONFIRM_ACTION, FACT_REVERT_ACTION, HOUSES_OPEN_ACTION, PLACES_LIVE_ACTION, PLACES_OPEN_ACTION,
-    PLACES_QUEUE_ACTION, VERIFY_PERSON_ACTION, readCardSignalArgs, readFactConfirmArgs, readFactRevertArgs, readHousesOpenArgs,
-    readPlacesLiveArgs, readPlacesOpenArgs, readPlacesQueueArgs, readVerifyPersonArgs, registerMainResearchAction,
+    CARD_SIGNAL_ACTION, FACT_CONFIRM_ACTION, FACT_REVERT_ACTION, HISTORY_HIDE_ACTION, HISTORY_STEP_ACTION, HOUSES_OPEN_ACTION,
+    PLACES_LIVE_ACTION, PLACES_OPEN_ACTION, PLACES_QUEUE_ACTION, VERIFY_PERSON_ACTION, readCardSignalArgs, readFactConfirmArgs,
+    readFactRevertArgs, readHistoryHideArgs, readHistoryStepArgs, readHousesOpenArgs, readPlacesLiveArgs, readPlacesOpenArgs,
+    readPlacesQueueArgs, readVerifyPersonArgs, registerMainResearchAction, type HistoryWriteStep,
 } from '../windows/window-sat-research.js';
+import type { HistoryHideOp } from '../history.js';
+import type { ManageTab } from '../history-manage.js';
 import type { PlacesIdentifyBody, PlacesIdentifyResult, PlacesReadResult } from '../places-bridge.js';
 import type { FactConfirmResult } from '../research-verify.js';
 import type { RevertResult } from '../research-revert.js';
@@ -39,6 +42,12 @@ export interface SatResearchMainDeps {
     factConfirmWrite(eid: string, confirm: boolean, txt: string | null): Promise<FactConfirmResult | null>;
     /** A fact's family tree value put back through this window's bridge, as its own Revert does. */
     revertFactHere(personId: PersonId, fact: string): Promise<RevertResult & { loaded?: 'quiet' | 'later' }>;
+    /** A hiding (or its undo) of the history: queued here, kept on the device, sent through this window's bridge. */
+    applyHistoryHide(op: HistoryHideOp): Promise<void>;
+    openHistoryManage(opts?: { tab?: ManageTab; place?: string; region?: string }): void;
+    openHistoryAlignDialog(): void;
+    /** A history write through this window's bridge, its answer as a satellite reads it. */
+    historyWriteHere(step: HistoryWriteStep): Promise<unknown>;
 }
 
 /** Register every action a satellite may ask the main window for. */
@@ -103,5 +112,31 @@ export function registerSatelliteResearchActions(ui: SatResearchMainDeps): void 
     registerMainResearchAction(FACT_REVERT_ACTION, {
         read: readFactRevertArgs,
         run: (a) => ui.revertFactHere(a.personId as PersonId, a.fact),
+    });
+    // A hiding of a satellite's history: queued here with this window's own (one queue, one device copy) and sent
+    // through its bridge; the satellite shows it at once by itself.
+    registerMainResearchAction(HISTORY_HIDE_ACTION, {
+        read: readHistoryHideArgs,
+        run: (a) => {
+            void ui.applyHistoryHide(a.op);
+            return true;
+        },
+    });
+    // A step of a satellite's history layer: "History of places" and the alignment open here; "Find first",
+    // "Search again", a place's own history and switching the search off are written through this window's bridge,
+    // the answer back to the satellite, which says it as this window would.
+    registerMainResearchAction(HISTORY_STEP_ACTION, {
+        read: readHistoryStepArgs,
+        run: (a) => {
+            if (a.step === 'manage') {
+                ui.openHistoryManage({ ...(a.tab ? { tab: a.tab } : {}), ...(a.place ? { place: a.place } : {}), ...(a.region ? { region: a.region } : {}) });
+                return true;
+            }
+            if (a.step === 'align') {
+                ui.openHistoryAlignDialog();
+                return true;
+            }
+            return ui.historyWriteHere(a);
+        },
     });
 }
