@@ -15,7 +15,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { hideSampleWhy, installSampleTagBubble, showSampleWhy } from './sample-tag.js';
 import { copyPlainText } from './table-view/table-cell.js';
 import { setResearchActionLabel } from './research-open-mark.js';
-import { setShowcaseWhy, showcaseAsOf, type ResearchActionMark, type ResearchShowcaseAction } from '../research-link.js';
+import { researchMarkNone, setShowcaseWhy, showcaseActionMark, showcaseAsOf, type ResearchActionMark, type ResearchShowcaseAction } from '../research-link.js';
 
 /** The command that sets up the full research with the same made-up family. */
 export const SHOWCASE_DEMO_COMMAND = 'strom demo';
@@ -36,7 +36,8 @@ export function showcaseMarkWords(mark: ResearchActionMark): string {
 /** "In full research: {action} · {mark}" ('' without an action). */
 export function showcaseWhatText(label: string, mark: ResearchActionMark): string {
     const s = strings.sample;
-    const text = label.replace(/\s*[↗…]\s*$/, '').trim();
+    // Without a trailing "\u2197" (the web) or an ellipsis (a dialog follows).
+    const text = label.replace(/\s*[\u2197\u2026]\s*$/, '').trim();
     if (!text) return '';
     const words = showcaseMarkWords(mark);
     return words ? s.whyWhat(text, words) : s.whyWhatPlain(text);
@@ -228,18 +229,22 @@ function hoverable(): boolean {
 /** The labels of the showcase's main actions asked without a control (the second guard behind the UI). */
 function actionLabel(action: ResearchShowcaseAction | null): { label: string; mark: ResearchActionMark } {
     const s = strings;
-    switch (action) {
-        case 'work': return { label: s.sample.continueResearch, mark: 'agent' };
-        case 'send': return { label: s.sync.sendButton, mark: 'terminal' };
-        case 'conflict': return { label: s.sync.decideInResearch, mark: 'terminal' };
-        case 'conflict-agent': return { label: s.research.leaveToAgent, mark: 'agent' };
-        case 'chat': return { label: s.research.askAgent, mark: 'agent' };
-        case 'waiting-answer': return { label: s.research.answer, mark: 'none' };
-        case 'queue-order': return { label: s.sample.queueOrder, mark: 'none' };
-        case 'work-now': return { label: s.sample.processNow, mark: 'agent' };
-        case 'direction-new': return { label: s.live.dirFormNew, mark: 'terminal' };
-        default: return { label: '', mark: 'none' };
-    }
+    const label = ((): string => {
+        switch (action) {
+            case 'work': return s.sample.continueResearch;
+            case 'send': return s.sync.sendButton;
+            case 'conflict': return s.sync.decideInResearch;
+            case 'conflict-agent': return s.research.leaveToAgent;
+            case 'chat': return s.research.askAgent;
+            case 'waiting-answer': return s.research.answer;
+            case 'queue-order': return s.sample.queueOrder;
+            case 'work-now': return s.sample.processNow;
+            case 'direction-new': return s.live.dirFormNew;
+            default: return '';
+        }
+    })();
+    // Its group from the one map (RESEARCH_LINK_MARKS through showcaseActionMark).
+    return { label, mark: label && action ? showcaseActionMark(action) : researchMarkNone() };
 }
 
 let installed = false;
@@ -366,10 +371,12 @@ export function researchLastWork(
 export function showcaseQueueActions(): HTMLElement {
     const s = strings.sample;
     const row = make('div', 'research-overview__queue-acts');
-    const order = setResearchActionLabel(make('button', 'link-button research-overview__queue-order'), s.queueOrder, 'none');
+    const orderMark = showcaseActionMark('queue-order');
+    const order = setResearchActionLabel(make('button', 'link-button research-overview__queue-order'), s.queueOrder, orderMark);
     order.type = 'button';
-    const now = setResearchActionLabel(make('button', 'link-button research-overview__queue-now'), s.processNow, 'agent');
+    const nowMark = showcaseActionMark('work-now');
+    const now = setResearchActionLabel(make('button', 'link-button research-overview__queue-now'), s.processNow, nowMark);
     now.type = 'button';
-    row.append(markShowcaseOff(order, 'none', s.queueOrder), markShowcaseOff(now, 'agent', s.processNow));
+    row.append(markShowcaseOff(order, orderMark, s.queueOrder), markShowcaseOff(now, nowMark, s.processNow));
     return row;
 }

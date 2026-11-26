@@ -16,7 +16,7 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatLiveClock } from '../live-time.js';
 import { Person, PersonId } from '../types.js';
-import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, inShowcase, researchDeviceAllows, researchLinkMark } from '../research-link.js';
+import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, inShowcase, researchDeviceAllows, researchNow, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, workingHoldEl, workingSavingEl, timeEl, workingNumberBadge, lightsGroup } from './research-ui.js';
@@ -362,7 +362,7 @@ export function directionRedrawHeld(): void {
 function relativeDay(iso: string): string {
     const ts = Date.parse(iso);
     if (!Number.isFinite(ts)) return '';
-    const days = calendarDaysAgo(ts, Date.now());
+    const days = calendarDaysAgo(ts, researchNow());
     if (days < 0 || days > 6) return shortDate(iso);
     try {
         return new Intl.RelativeTimeFormat(getCurrentLanguage(), { numeric: 'auto' }).format(-days, 'day');
@@ -1211,7 +1211,7 @@ export const researchDirectionsMethods = uiModule({
             } else {
                 state.appendChild(el('strong', undefined, L.lineRunWorking));
                 const at = offer.run?.since ? Date.parse(offer.run.since) : NaN;
-                const since = Number.isFinite(at) ? formatLiveClock(at, Date.now(), getCurrentLanguage()) : '';
+                const since = Number.isFinite(at) ? formatLiveClock(at, researchNow(), getCurrentLanguage()) : '';
                 const rest = agent && since ? L.lineRunWorkingSince(agent, since) : agent;
                 if (rest) state.appendChild(el('span', undefined, ` · ${rest}`));
             }

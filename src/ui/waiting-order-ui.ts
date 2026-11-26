@@ -10,7 +10,7 @@
 
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatWaitingSince } from '../live-time.js';
-import type { LiveWaiting } from '../research-link.js';
+import { researchNow, type LiveWaiting } from '../research-link.js';
 import { ALL_WAITING_ORDERS, GROUP_TITLE_LINES, WaitingOrder, todoWaiting, waitingSince } from '../research-waiting.js';
 import { waitingSeen } from './live-section-prefs.js';
 
@@ -152,7 +152,7 @@ export function waitingSinceEl(w: LiveWaiting, cls = 'research-overview__since')
 }
 
 export function waitingSinceText(ts: number): string {
-    return formatWaitingSince(ts, Date.now(), getCurrentLanguage(), { justNow: strings.research.justNow, yesterday: strings.live.waitingSinceYesterday });
+    return formatWaitingSince(ts, researchNow(), getCurrentLanguage(), { justNow: strings.research.justNow, yesterday: strings.live.waitingSinceYesterday });
 }
 
 /**

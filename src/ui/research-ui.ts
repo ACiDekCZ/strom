@@ -67,7 +67,7 @@ import { fileLooksLikeShowcase, showcaseLangParam } from '../showcase-download.j
 import { returnFocusAfterViewer } from './sources.js';
 import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink, researchLinkActionOf, type ResearchLinkMarkParams } from '../research-link.js';
 import { showcaseQueueActions } from './sample-why.js';
-import { inShowcase, researchShowcaseShown, showcaseActionOfLink, showcaseActionOfUrl, showcaseWhy, parseShowcaseBridge } from '../research-link.js';
+import { inShowcase, researchNow, researchShowcaseShown, showcaseActionOfLink, showcaseActionOfUrl, showcaseWhy, parseShowcaseBridge } from '../research-link.js';
 import { showcaseEventSource } from '../showcase-bridge.js';
 import { deviceEventSource, isDeviceTunnelled } from '../device/device-bridge.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn, waitingGainOn } from '../research-link.js';
@@ -553,7 +553,7 @@ export function appendAllHidden(host: HTMLElement, onEdit: (anchor: HTMLElement)
 }
 
 /** "16 min", "1 h 5 min" since a moment. */
-export function liveDuration(since: number, now = Date.now()): string {
+export function liveDuration(since: number, now = researchNow()): string {
     const min = Math.max(0, Math.floor((now - since) / 60000));
     return min < 60 ? strings.live.minutes(min) : strings.live.hoursMinutes(Math.floor(min / 60), min % 60);
 }
@@ -1847,14 +1847,16 @@ type LiveTimeKind = 'ago' | 'since' | 'sincefor' | 'lastchange' | 'refreshed' | 
 
 function liveTimeText(ts: number, kind: LiveTimeKind): string {
     const lang = getCurrentLanguage();
+    // The research's now: the showcase's own time there (spec 143 K4.1), else the clock.
+    const now = researchNow();
     // An item's "waits since" in a time order of Awaiting action (spec 083 §5).
     if (kind === 'waitsince') return waitingSinceText(ts);
-    if (kind === 'refreshed') return strings.live.refreshedAgo(formatLiveTime(ts, Date.now(), lang, strings.research.justNow));
-    if (kind === 'lastchange') return strings.live.lastChange(formatLiveTime(ts, Date.now(), lang, strings.research.justNow));
-    if (kind === 'sincefor') return strings.live.sinceFor(formatLiveClock(ts, Date.now(), lang), liveDuration(ts));
+    if (kind === 'refreshed') return strings.live.refreshedAgo(formatLiveTime(ts, now, lang, strings.research.justNow));
+    if (kind === 'lastchange') return strings.live.lastChange(formatLiveTime(ts, now, lang, strings.research.justNow));
+    if (kind === 'sincefor') return strings.live.sinceFor(formatLiveClock(ts, now, lang), liveDuration(ts, now));
     return kind === 'since'
-        ? strings.research.since(formatLiveClock(ts, Date.now(), lang))
-        : formatLiveTime(ts, Date.now(), lang, strings.research.justNow);
+        ? strings.research.since(formatLiveClock(ts, now, lang))
+        : formatLiveTime(ts, now, lang, strings.research.justNow);
 }
 
 /** The short label of a waiting item's kind (text, not an icon). */
@@ -1901,7 +1903,7 @@ export function pausedText(w: LiveWorker): string {
     // Waiting for an archive (spec 127): which one, and when the run gives up (not "resumes").
     if (w.waits) return [L.statePaused, waitsText(w)].join(' · ');
     const ts = Date.parse(w.paused.until);
-    return [L.statePaused, pausedReasonText(w.paused.reason), Number.isFinite(ts) ? L.pausedUntil(formatLiveClock(ts, Date.now(), getCurrentLanguage())) : '']
+    return [L.statePaused, pausedReasonText(w.paused.reason), Number.isFinite(ts) ? L.pausedUntil(formatLiveClock(ts, researchNow(), getCurrentLanguage())) : '']
         .filter(Boolean).join(' · ');
 }
 
@@ -6052,7 +6054,7 @@ export const researchUiMethods = uiModule({
         }
         if (filterRun) {
             const at = Date.parse(filterRun.since);
-            const time = Number.isFinite(at) ? formatLiveClock(at, Date.now(), getCurrentLanguage()) : '';
+            const time = Number.isFinite(at) ? formatLiveClock(at, researchNow(), getCurrentLanguage()) : '';
             host.appendChild(el('p', 'research-queue__line-run-filtered', L.queueLineRunFiltered(filterRun.agentName, time)));
         }
         const ul = el('ul', 'live-panel-list live-queue');

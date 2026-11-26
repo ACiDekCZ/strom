@@ -433,7 +433,7 @@ interface ChangeGroup {
 
 /** Changes (newest first) in runs of the same task; without one, by 15 minutes. */
 /** The changes of the last 24 hours: the overview is a preview, the research has the rest. */
-function recentChanges(changes: readonly LiveChangeItem[], now = Date.now()): LiveChangeItem[] {
+function recentChanges(changes: readonly LiveChangeItem[], now = researchNow()): LiveChangeItem[] {
     return changes.filter(c => now - (Date.parse(c.at) || 0) < RECENT_MS);
 }
 
@@ -941,7 +941,7 @@ export const researchOverviewMethods = uiModule({
         // A section hidden by the choice is not drawn, unless shown until the overview closes
         // (expanded, its heading says so and does not fold). A click on a heading is a lasting choice.
         const shown = (key: string): boolean => sectionPref(key) !== 'hidden' || s.overviewShown.has(key);
-        const frozenWhen = frozenAt !== null ? L.asOf(formatLiveClock(frozenAt, Date.now(), getCurrentLanguage())) : '';
+        const frozenWhen = frozenAt !== null ? L.asOf(formatLiveClock(frozenAt, researchNow(), getCurrentLanguage())) : '';
         const fold = (key: string): LiveFold => {
             let f = foldOf(key);
             // Frozen: each section says as of when (Awaiting action without the bridge says its own time).
@@ -1099,7 +1099,8 @@ export const researchOverviewMethods = uiModule({
         // seen; unknown: nothing). The research version (commit) on hover.
         const lastIso = s.headAt || s.changes[0]?.at || '';
         // Without following: when the bridge last answered (its data come with the regular ask).
-        const lastEl = viewed ? timeEl(new Date(viewed.refreshedAt || Date.now()).toISOString(), 'refreshed') : timeEl(lastIso, 'lastchange');
+        // The showcase's snapshot: its research's last change (as of its own time), never when the shim answered.
+        const lastEl = viewed && !inShowcase() ? timeEl(new Date(viewed.refreshedAt || Date.now()).toISOString(), 'refreshed') : timeEl(lastIso, 'lastchange');
         lastEl?.classList.add('research-overview__cell-sub');
         const hover = s.head ? L.versionTitle(s.head.slice(0, 7)) : '';
         // Paused: when it goes on (and why, on hover) says more than the last change.
@@ -1112,7 +1113,7 @@ export const researchOverviewMethods = uiModule({
             cell(L.state, L.stateAgents(runs.length), sub, 'is-working', [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
         } else if (paused && Number.isFinite(resumes)) {
             // A run waiting for an archive gives up then rather than resumes (spec 127): its own sentence.
-            cell(L.state, state, paused.waits ? waitsText(paused) : L.pausedUntil(formatLiveClock(resumes, Date.now(), getCurrentLanguage())), stateCls,
+            cell(L.state, state, paused.waits ? waitsText(paused) : L.pausedUntil(formatLiveClock(resumes, researchNow(), getCurrentLanguage())), stateCls,
                 [pausedText(paused), lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
         } else if (stateCls === 'is-lost') {
             cell(L.state, state, strings.research.reconnectingShort, stateCls, [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
@@ -1122,7 +1123,7 @@ export const researchOverviewMethods = uiModule({
         if (s.logged || viewed) {
             // What the research added in the last 24 hours: the bridge's own count
             // (and what came after it), else from its history.
-            const added = recentAddsCount(s.recent, s.adds, Date.now(), RECENT_MS);
+            const added = recentAddsCount(s.recent, s.adds, researchNow(), RECENT_MS);
             dayCell(L.last24h, L.plusPersons(added.persons), L.plusSourcesToday(added.sources));
         } else {
             dayCell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
@@ -2318,7 +2319,7 @@ export const researchOverviewMethods = uiModule({
                 meta.appendChild(el('span', 'research-overview__waiting-sent',
                     L.waitingSentOn(new Date(ts).toLocaleDateString(getCurrentLanguage(), { day: 'numeric', month: 'numeric' }))));
             }
-            if (Number.isFinite(ts)) meta.appendChild(el('span', 'research-overview__waiting-age', waitingDaysAgo(ts, Date.now(), getCurrentLanguage())));
+            if (Number.isFinite(ts)) meta.appendChild(el('span', 'research-overview__waiting-age', waitingDaysAgo(ts, researchNow(), getCurrentLanguage())));
         } else if (!isTimeOrder(drawnAs.order)) {
             // A time order says it beside the row instead.
             const at = timeEl(w.at, 'ago');
@@ -3363,7 +3364,7 @@ export const researchOverviewMethods = uiModule({
         const L = strings.live;
         const clock = (iso: string | undefined): string => {
             const ts = iso ? Date.parse(iso) : NaN;
-            return Number.isFinite(ts) ? formatLiveClock(ts, Date.now(), getCurrentLanguage()) : '';
+            return Number.isFinite(ts) ? formatLiveClock(ts, researchNow(), getCurrentLanguage()) : '';
         };
         const span = el('span', 'research-overview__run-state');
         switch (run.state) {

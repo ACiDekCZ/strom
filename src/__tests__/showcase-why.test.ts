@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { installMiniDom } from './helpers/mini-dom.js';
 import { setLanguage } from '../strings.js';
-import { setInShowcaseLookup, setShowcaseAsOfLookup, researchNow, showcaseWhy, showcaseOff } from '../research-link.js';
+import { setInShowcaseLookup, setShowcaseAsOfLookup, researchNow, showcaseWhy, showcaseOff, showcaseActionMark } from '../research-link.js';
 import {
     markShowcaseOff, showcaseOffEvent, sampleNoteEl, showcaseItemActions, showcaseWhatText, researchLastWork,
     hideShowcaseWhy, showcaseQueueActions, SAMPLE_WHY_ID, SHOWCASE_DEMO_COMMAND, SHOWCASE_HOW_TO_URL,
@@ -142,6 +142,16 @@ describe('a click or Enter on a greyed action', () => {
     });
 });
 
+describe("the main actions' marks", () => {
+    it('are their groups as outside the showcase (the design table)', () => {
+        expect(Object.fromEntries((['work', 'send', 'conflict', 'conflict-agent', 'hypothesis', 'waiting-answer', 'queue-order', 'work-now',
+            'direction-new', 'chat'] as const).map(a => [a, showcaseActionMark(a)]))).toEqual({
+            work: 'agent', send: 'terminal', conflict: 'terminal', 'conflict-agent': 'agent', hypothesis: 'terminal',
+            'waiting-answer': 'none', 'queue-order': 'none', 'work-now': 'agent', 'direction-new': 'terminal', chat: 'agent',
+        });
+    });
+});
+
 describe('the second guard', () => {
     it('an action asked without its control shows the same bubble', () => {
         showcaseWhy(null, 'send');
@@ -258,6 +268,23 @@ describe('time in the showcase', () => {
         expect(researchNow()).toBe(AS_OF);
         setInShowcaseLookup(() => false);
         expect(researchNow()).toBe(Date.parse('2026-11-26T10:00:00Z'));
+    });
+
+    it("the overview's times are said against the showcase's own time, not today's", async () => {
+        const { timeEl, liveDuration } = await import('../ui/research-ui.js');
+        const { waitingSinceText } = await import('../ui/waiting-order-ui.js');
+        // An hour and a half before the showcase's time: 3 weeks before today's clock.
+        const at = '2026-11-01T08:00:00Z';
+        expect(liveDuration(Date.parse(at))).toBe('1 h 30 min');
+        expect(timeEl(at, 'sincefor')!.textContent).toContain('1 h 30 min');
+        // The same day as the showcase's time: its clock (whatever the time zone), not a date weeks ago.
+        const ago = timeEl(at, 'ago')!.textContent;
+        expect(ago).toMatch(/\d{1,2}:\d{2}/);
+        const since = waitingSinceText(Date.parse(at));
+        setInShowcaseLookup(() => false);
+        expect(timeEl(at, 'ago')!.textContent).not.toBe(ago);
+        expect(waitingSinceText(Date.parse(at))).not.toBe(since);
+        expect(liveDuration(Date.parse(at))).not.toBe('1 h 30 min');
     });
 
     it("the last work is the last run, else (a showcase) the newest line's", () => {

@@ -466,6 +466,26 @@ export function researchShowcaseShown(action: ResearchShowcaseAction): ShowcaseS
     return SHOWCASE_ALLOWS[action] ?? 'hide';
 }
 
+/** No mark: an action that stays in the app or goes through the research's bridge. */
+export function researchMarkNone(): ResearchActionMark {
+    return 'none';
+}
+
+/**
+ * The mark of a showcase's action, its group as outside the showcase (RESEARCH_LINK_MARKS): a link's own; the
+ * conflict left to the agent and "Process now" the agent's work; a new line the lines' link; an answer and
+ * the queue's order through the bridge, no mark.
+ */
+export function showcaseActionMark(action: ResearchShowcaseAction): ResearchActionMark {
+    switch (action) {
+        case 'conflict-agent': return researchLinkMark('conflict', { conflictDo: 'agent' });
+        case 'work-now': return researchLinkMark('work');
+        case 'direction-new': return researchLinkMark('direction');
+        case 'waiting-answer': case 'queue-order': return researchMarkNone();
+    }
+    return (RESEARCH_LINK_ACTIONS as readonly string[]).includes(action) ? researchLinkMark(action as ResearchLinkAction) : researchMarkNone();
+}
+
 /** The showcase's action of a link, by what it asks (`do=`): a conflict left to the agent is its own. */
 export function showcaseActionOfLink(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): ResearchShowcaseAction {
     if (action === 'conflict' && p.conflictDo === 'agent') return 'conflict-agent';
