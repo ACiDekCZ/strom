@@ -4024,7 +4024,8 @@ export const researchOverviewMethods = uiModule({
             stop.type = 'button';
             stop.onclick = () => this.stopLiveFollow();
             head.appendChild(stop);
-        } else if (source === 'bridge' && !this.activeResearchAgentless() && !inDeviceMode()) {
+        } else if (source === 'bridge' && !this.activeResearchAgentless() && !inDeviceMode() && !inShowcase()) {
+            // Not in the showcase (spec 143 K4.1): its research is a snapshot, nothing to follow.
             const follow = el('button', 'research-overview__follow-live research-overview__follow-live--head', r.followLive);
             follow.type = 'button';
             follow.title = L.followNote;

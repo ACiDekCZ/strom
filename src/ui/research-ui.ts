@@ -3683,7 +3683,8 @@ export const researchUiMethods = uiModule({
      */
     startFollowLive(origin: 'menu' | 'panel' | 'overview' | 'window', forResearch?: string, el?: HTMLElement | null): Promise<FollowLiveOutcome> {
         const researchId = forResearch ?? this.activeResearchId();
-        if (!researchId) return Promise.resolve('none');
+        // The showcase (spec 143 K4.1): its research is a snapshot, nothing to follow (the switch is not drawn there).
+        if (!researchId || inShowcase()) return Promise.resolve('none');
         const base = storedResearchBridge(researchId)?.base;
         const key = base ? followKey(base) : null;
         if (base && key) {
@@ -6773,7 +6774,7 @@ export const researchUiMethods = uiModule({
         const open = this.activeResearchLink('open');
         // Its bridge answers and an agent is there: following is the user's choice (by itself only when opening a tree where one works).
         const upHere = !off && !!researchId && answer?.result === 'up' && !!answer.status && !this.activeResearchAgentless()
-            && !panel.querySelector('.live-agent-started');
+            && !panel.querySelector('.live-agent-started') && !inShowcase();
         if (open || upHere) {
             const foot = el('div', 'live-panel-foot busy-host');
             if (upHere && researchId) {

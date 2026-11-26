@@ -291,6 +291,25 @@ describe('the promo on a showcase', () => {
     });
 });
 
+describe('Follow live', () => {
+    it("is not in the head of the showcase's overview, and asking for it follows nothing", async () => {
+        const { researchOverviewMethods: o } = await import('../ui/research-overview-ui.js');
+        const { researchUiMethods: u } = await import('../ui/research-ui.js');
+        const s = { name: 'Rod Novák z Hrabětic', waiting: [], working: [], runs: [], features: [], researches: [] };
+        const ui = {
+            activeResearchAgentless: () => false, isLiveFollowOn: () => false,
+            liveSectionMoreButton: () => document.createElement('button'),
+            activeResearchId: () => 'r1',
+        };
+        const head = o.overviewWindowHead.call(ui as never, s as never, 'bridge');
+        expect(head.querySelector('.research-overview__follow-live')).toBeNull();
+        setInShowcaseLookup(() => false);
+        expect(o.overviewWindowHead.call(ui as never, s as never, 'bridge').querySelector('.research-overview__follow-live')).not.toBeNull();
+        setInShowcaseLookup(() => true);
+        await expect(u.startFollowLive.call(ui as never, 'overview')).resolves.toBe('none');
+    });
+});
+
 describe('time in the showcase', () => {
     it("the research's now is the showcase's as-of time; outside it the clock", () => {
         expect(researchNow()).toBe(AS_OF);
