@@ -2,7 +2,7 @@
  * The research's state of a house (spec 030 §2, K7.5): its badge in the Houses window's row, in the open row's
  * detail and, summed up per town, in Places. Only with `/status.features` `house`; a house the research does not
  * list (`GET /houses`) shows nothing. The list is read again when `/status.houses.rev` changes (each bridge status).
- * Part 1 only shows the state and the way to answer a waiting question; asking for a history is part 2.
+ * Asking for a history (part 2): src/ui/house-request-ui.ts, its action beside the badge.
  */
 
 import { strings, getCurrentLanguage, type Language } from '../strings.js';
@@ -197,7 +197,7 @@ export const houseStateMethods = uiModule({
     renderHouseResearchDetail(h: TreeHouse): string {
         if (!this.houseResearchBridge()) return '';
         const row = this.houseResearchRow(h);
-        const badge = houseStateHtml(row, { lang: getCurrentLanguage(), answer: true });
+        const badge = houseStateHtml(row, { lang: getCurrentLanguage(), answer: true }) + this.houseActionHtml(h);
         const more = this.renderHouseMaterialsHtml(h);
         const sensitive = houseSensitiveHtml(h, this.houseResearchOf(h), DataManager.getData(), new Date(),
             { lang: getCurrentLanguage(), readOnly: DataManager.isReadOnly() });
@@ -207,7 +207,8 @@ export const houseStateMethods = uiModule({
 
     /** A click in the detail's research part: true when handled. */
     houseResearchDetailClick(target: HTMLElement, house: TreeHouse): boolean {
-        return this.houseStateSlotClick(target, house) || this.houseRevealClick(target, house) || this.houseMaterialClick(target, house);
+        return this.houseStateSlotClick(target, house) || this.houseActionClick(target) || this.houseRevealClick(target, house)
+            || this.houseMaterialClick(target, house);
     },
 
     /** "Show in outputs" / "Hide in outputs" of a sensitive event: one step of undo. */

@@ -1305,6 +1305,10 @@ export const miscMethods = uiModule({
                         this.closePlacesManager();
                         return;
                     }
+                    if (currentDialog === 'house-request-modal') {
+                        this.closeHouseRequest();
+                        return;
+                    }
                     if (currentDialog === 'history-place-modal') {
                         this.closeHistoryPlaceFind();
                         return;

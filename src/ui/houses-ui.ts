@@ -952,6 +952,24 @@ export const housesMethods = uiModule({
         }
         this.showHousesWindow({ town, ...(parent ? { parent } : {}) });
     },
+
+    /**
+     * A house of the tree opened from elsewhere ("House page ›" in Places, a house number in the person panel's
+     * timeline, the place menu): the one place that opens a house. For now the Houses window on it, the house's row
+     * open; the house page (spec 030 §3) takes this over. A satellite as "Houses in this town ›".
+     */
+    openHouse(id: string, parent?: string): void {
+        const h = this.treeHouseOf(id);
+        if (!h) return;
+        const ctx = this.placesResearchContext();
+        const main = ctx.viaMain && ctx.researchId && this.researchBridgeUp(ctx.researchId) ? satResearchForward() : null;
+        if (main?.mainOpen()) {
+            const args: HousesOpenArgs = { town: h.ref.town, house: h.id };
+            main.run(HOUSES_OPEN_ACTION, args, true);
+            return;
+        }
+        this.showHousesWindow({ town: h.ref.town, house: h.id, ...(parent ? { parent } : {}) });
+    },
 });
 
 /** The houses of a town in the tree (for "Houses of the town ›"): their count. */

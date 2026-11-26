@@ -7526,6 +7526,34 @@
         .house-research { display: flex; flex-direction: column; gap: 8px; }
         .house-research-state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
         .place-town-house-states { font-size: 12.5px; color: var(--text-light); }
+        /* A house's research action (spec 030 §2): a research-coloured link; its mark after the text. */
+        button.house-req, .modal button.house-req {
+            display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; border-radius: 0; background: none; font: inherit;
+            font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--research); text-decoration: none; cursor: pointer; min-height: 0;
+        }
+        button.house-req:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* The request's dialog (§2): the houses going with it, at most two more. */
+        .house-req-modal fieldset.hrq-with { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .house-req-modal .hrq-with legend { padding: 0 0 4px; font-size: 13.5px; font-weight: 600; color: var(--text); }
+        .house-req-modal .hrq-with .hrq-max { font-weight: 400; color: var(--text-light); }
+        .modal.house-req-modal label.hrq-with-item {
+            display: flex; align-items: center; gap: 8px; margin: 0; padding: 4px 0; font-size: 14px; font-weight: 400; color: var(--text); cursor: pointer;
+        }
+        .house-req-modal .hrq-with-item input { flex: none; margin: 0; }
+        .house-req-modal .hrq-with-item input:disabled + span { color: var(--text-faint); }
+        .hpf-body .hrq-attach-line { margin: 0; }
+        @media (hover: hover) {
+            button.house-req:hover { text-decoration: underline; text-underline-offset: 2px; }
+        }
+        @media (pointer: coarse) {
+            button.house-req, .modal button.house-req { min-height: 36px; }
+            .modal.house-req-modal label.hrq-with-item { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            /* A sheet on a phone: the buttons under each other, the primary on top. */
+            .house-req-modal .buttons.hpf-foot { flex-direction: column-reverse; }
+            .house-req-modal .hpf-foot button { flex: none; width: 100%; min-height: 48px; }
+        }
         /* A house's materials and its research links in the open row (spec 030 §7). */
         .house-mats-h { margin: 4px 0 0; font-size: 14px; font-weight: 600; }
         .house-mats { display: flex; flex-direction: column; border-top: 1px solid var(--divider); }
