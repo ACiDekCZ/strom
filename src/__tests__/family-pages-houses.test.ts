@@ -34,7 +34,7 @@ describe('the houses\' events', () => {
         const { events, houses } = houseOutputs(data, collectHouses(data), HOUSE_NOW);
         expect(events.map(e => [e.kind, e.year, e.personId, e.houseId, e.to ?? ''])).toEqual([
             ['marriedIn', 1845, 'radegunda', HOUSE_ID, ''],
-            ['left', 1845, 'radegunda', OLD_HOUSE_ID, 'Bělokamen čp. 16'],
+            ['left', 1845, 'radegunda', OLD_HOUSE_ID, 'Bělokamen čp.\u00a016'],
             ['last', 1860, 'drahobud', OLD_HOUSE_ID, ''],
             ['marriedIn', 1878, 'kunhuta', HOUSE_ID, ''],
         ]);
@@ -81,7 +81,7 @@ describe('a set of a line with houses', () => {
         // The line's houses: house | period | generations.
         const rod = section(html, [...set.rodSlug.values()][0]);
         expect(rod).toContain('<section class="sp-block sp-houses">');
-        expect(rod).toMatch(new RegExp(`<td><a class="pp-link sp-house-link" href="#${slug}">Bělokamen čp. 16</a></td><td>1820–1920</td><td>2</td>`));
+        expect(rod).toMatch(new RegExp(`<td><a class="pp-link sp-house-link" href="#${slug}">Bělokamen čp.\u00a016</a></td><td>1820–1920</td><td>2</td>`));
         // The timeline: the houses' chip and their sentences.
         const tl = section(html, [...set.rodTimelineSlug.values()][0]);
         expect(tl).toContain('data-tl-k="houses"');

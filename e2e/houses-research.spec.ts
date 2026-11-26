@@ -269,8 +269,15 @@ test.describe('Houses: material of a house', () => {
         ]);
         await expect(material(page).locator('.house-file')).toHaveCount(1);
         await expect(material(page).locator('.house-file .n')).toHaveText('dum-1930.jpg');
-        await expect(material(page).locator('.house-files-note')).toHaveText('1 file goes to the research as a batch of the house.');
-        await material(page).getByRole('button', { name: 'Attach', exact: true }).click();
+        await expect(material(page).locator('.house-files-note')).toHaveText('1 file goes to the research as a house batch.');
+        // With files the button says it goes on (the batch's wizard); without them again "Attach" (question 10).
+        await expect(material(page).getByRole('button', { name: 'Attach', exact: true })).toHaveCount(0);
+        await material(page).locator('.house-file-x').click();
+        await expect(material(page).getByRole('button', { name: 'Attach', exact: true })).toBeVisible();
+        await material(page).locator('.house-files-input').setInputFiles([
+            { name: 'dum-1930.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('obrazek domu') },
+        ]);
+        await material(page).getByRole('button', { name: 'Attach and continue…', exact: true }).click();
         const dialog = page.locator('#batch-modal');
         await expect(dialog.locator('.batch-step.is-active')).toHaveText('Review');
         await dialog.locator('[data-act="next"]').click();

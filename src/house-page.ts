@@ -25,7 +25,7 @@ import type {
     HouseCertainty, HouseEvent, HouseHolder, HouseMaterial, HouseNumberItem, HouseResearch, HouseResident, HouseSource, HouseState,
 } from './house-bridge.js';
 import type { LiveHouseLayer } from './research-link.js';
-import { houseFacts, type HouseFact, type TreeHouse } from './houses.js';
+import { houseFacts, houseLabel, houseTitle, type HouseFact, type TreeHouse } from './houses.js';
 import { houseKey } from './places.js';
 import { houseOutputFilter, housePrivacyContext, type HouseOutput } from './house-privacy.js';
 import { applyLivingPrivacy } from './privacy.js';
@@ -349,7 +349,7 @@ function heroHtml(c: Ctx): string {
         ? `<p class="hp-out">${esc(c.H.hiddenSummary(hidden.events, hidden.location))}</p>` : '';
     return `<header class="pp-sec hp-hero" id="hp-sec-facts">`
         + `<p class="pp-kicker">${esc(P.kicker)}</p>`
-        + `<h1 class="pp-name">${esc(`${house.ref.town} ${house.text}`)}</h1>${nameLine}`
+        + `<h1 class="pp-name">${esc(houseTitle(house))}</h1>${nameLine}`
         + `<dl class="pp-facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>${outLine}</header>`;
 }
 
@@ -455,7 +455,7 @@ function numbersHtml(c: Ctx): string {
                 + `<button type="button" class="hp-mini" data-hp-act="not-same" data-number="${esc(it.id)}">${esc(P.notSame)}</button></span>`
             : '';
         return `<div class="hp-num${it?.proposed ? ' hp-num--prop' : ''}"><span class="hp-num-y">${esc(yearsSpan(c, r.from, r.to))}</span>`
-            + `<b class="hp-num-n">${esc(r.text)}</b><span class="hp-num-w">${what.filter(Boolean).join('')}${acts}</span></div>`;
+            + `<b class="hp-num-n">${esc(houseLabel(r.text))}</b><span class="hp-num-w">${what.filter(Boolean).join('')}${acts}</span></div>`;
     }).join('');
     return section('numbers', P.sec.numbers, `<div class="hp-nums">${html}</div>`);
 }
@@ -769,13 +769,13 @@ function tocNavHtml(sections: readonly HousePageSection[], lang: Language): stri
 /** "Bělokamen čp. 16 „U Prouzalů“" (the file's title; the name only where the file may show it). */
 export function housePageTitle(data: StromData, house: TreeHouse, lang: Language): string {
     const name = data.houses?.[house.id]?.name ?? house.name;
-    return name ? `${house.ref.town} ${house.text} ${quoted(name, lang)}` : `${house.ref.town} ${house.text}`;
+    return name ? `${houseTitle(house)} ${quoted(name, lang)}` : houseTitle(house);
 }
 
 /** The whole saved file (K7.1): self-contained, the light page with its contents. */
 export function buildHousePageDocument(data: StromData, house: TreeHouse, research: HouseResearch | null, opts: HousePageOptions & { fontCss?: string }): string {
     const body = buildHousePage(data, house, research, 'file', { ...opts, app: undefined });
-    const title = `${house.ref.town} ${house.text}`;
+    const title = houseTitle(house);
     return personPageDocumentShell(opts.lang, title, body, opts.fontCss ?? '', tocNavHtml(housePageSections(body, opts.lang), opts.lang),
         { css: HOUSE_PAGE_FILE_TOKENS + HOUSE_PAGE_CSS });
 }

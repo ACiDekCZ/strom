@@ -119,10 +119,16 @@ test.describe('family book: the options dialog', () => {
         await expect(dialog.locator('.book-open-hint')).toHaveText('The book opens in a new window. From there it can be printed or saved.');
     });
 
-    test('the book\'s language beside Privacy: all four languages whole in their segment, at 1440 and 1024', async ({ page }) => {
+    test('the book\'s language under Privacy across the column: all four languages whole in their segment, at 1440 and 1024', async ({ page }) => {
         await setup(page);
         const dialog = await openDialog(page);
         const seg = dialog.locator('.book-sec[data-sec="lang"] .book-seg');
+        // Its own row under Privacy, as wide as Privacy's (question 20), the buttons' padding unchanged.
+        const privacy = (await dialog.locator('.book-sec[data-sec="privacy"]').boundingBox())!;
+        const lang = (await dialog.locator('.book-sec[data-sec="lang"]').boundingBox())!;
+        expect(lang.y).toBeGreaterThanOrEqual(privacy.y + privacy.height - 1);
+        expect(Math.abs(lang.width - privacy.width)).toBeLessThanOrEqual(1);
+        expect(await seg.locator('button').first().evaluate(el => getComputedStyle(el).paddingLeft)).toBe('12px');
         await expect(seg.locator('button')).toHaveText(['Čeština', 'English', 'Deutsch', 'Polski']);
         for (const width of [1440, 1024]) {
             await page.setViewportSize({ width, height: 900 });

@@ -12,7 +12,7 @@
 
 import { strings, getCurrentLanguage } from '../strings.js';
 import { DataManager } from '../data.js';
-import { collectHouses, findHouse, houseContext, houseOfFact, type TreeHouse } from '../houses.js';
+import { collectHouses, findHouse, houseContext, houseLabel, houseOfFact, type TreeHouse } from '../houses.js';
 import { placeKey } from '../places.js';
 import { houseGroupIds } from '../houses-view.js';
 import {
@@ -236,7 +236,7 @@ export const houseRequestMethods = uiModule({
     /** What a request's answer does outside the dialog: a toast, the terminal, or the refusal's sentence. */
     houseRequestDone(house: TreeHouse, r: HouseRequestResult): void {
         if (r.ok) {
-            this.showToast(strings.houses.req.toastTop(house.text), 6000);
+            this.showToast(strings.houses.req.toastTop(houseLabel(house.text)), 6000);
             void this.loadHouseStates();
             return;
         }
@@ -308,7 +308,7 @@ export const houseRequestMethods = uiModule({
         const note = st.note ? `<p class="hpf-note" role="status">${esc(st.note)}</p>` : '';
         const label = strings.houses.req.go;
         modal.innerHTML = '<div class="modal-header hpf-header">'
-            + `<h2 id="hrq-title">${esc(r.title(st.house.text, st.house.ref.town))}</h2>`
+            + `<h2 id="hrq-title">${esc(r.title(houseLabel(st.house.text), st.house.ref.town))}</h2>`
             + `<button type="button" class="close-btn" data-hrq="cancel" aria-label="${esc(strings.buttons.close)}">&times;</button></div>`
             + '<div class="modal-content hpf-body">'
             + `<p class="hpf-area"><strong>${esc(r.what)}</strong></p>`
@@ -405,19 +405,24 @@ export const houseRequestMethods = uiModule({
 
     /** An event's address as the link to its house. */
     houseLinkHtml(house: TreeHouse, address: string): string {
-        return `<button type="button" class="link pm-house-link" data-house="${esc(house.id)}" title="${esc(strings.houses.familyHouses.menuItem(house.text))}">${esc(address)}</button>`;
+        return `<button type="button" class="link pm-house-link" data-house="${esc(house.id)}" title="${esc(strings.houses.familyHouses.menuItem(houseLabel(house.text)))}">${esc(houseLabel(address))}</button>`;
     },
 
-    /** The place menu's item of an event's house: "House history čp. 16", under it its state and "house page". */
+    /**
+     * The place menu's item of an event's house: "House history čp. 16", under it in muted text the research's
+     * state (with the research, "not researched" too) and where the item goes: "house page", or "Houses window"
+     * in a satellite (openHouse; spec 030 §5, question 28). The item only opens the house; no action in it.
+     */
     placeMenuHouseHtml(houseId: string): string {
         const h = this.treeHouseOf(houseId);
         if (!h) return '';
         const f = strings.houses.familyHouses;
         const row = this.houseResearchRow(h);
-        const badge = row && row.state !== 'none' ? `${houseStateHtml(row, { lang: getCurrentLanguage() })} · ` : '';
+        const state = row ? `${houseStateHtml(row, { lang: getCurrentLanguage() })} · ` : '';
+        const where = this.houseOpenMain() ? f.windowLine : f.pageLine;
         return `<button type="button" role="menuitem" class="place-menu-item place-menu-house" data-action="house" data-house="${esc(h.id)}">`
-            + `<span class="place-menu-house-name">${esc(f.menuItem(h.text))}</span>`
-            + `<span class="place-menu-house-line">${badge}${esc(f.pageLine)}</span></button>`;
+            + `<span class="place-menu-house-name">${esc(f.menuItem(houseLabel(h.text)))}</span>`
+            + `<span class="place-menu-house-line">${state}${esc(where)}</span></button>`;
     },
 
     // ─── Places: a town's family houses (§5) ──────────────────────────────
@@ -459,7 +464,7 @@ export const houseRequestMethods = uiModule({
     placeHouseRowHtml(h: TreeHouse): string {
         const row = this.houseResearchRow(h);
         const badge = row && row.state !== 'none' ? houseStateHtml(row, { lang: getCurrentLanguage() }) : '';
-        return `<div class="r" data-house="${esc(h.id)}"><b>${esc(h.text)}</b><span class="m">${esc(placeHouseMeta(h))}</span>`
+        return `<div class="r" data-house="${esc(h.id)}"><b>${esc(houseLabel(h.text))}</b><span class="m">${esc(placeHouseMeta(h))}</span>`
             + `<span class="a">${badge}${this.houseActionHtml(h)}`
             + `<button type="button" class="link place-history-link place-house-page" data-house="${esc(h.id)}">${esc(strings.houses.familyHouses.page)}</button>`
             + '</span></div>';

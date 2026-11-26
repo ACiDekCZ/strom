@@ -206,7 +206,7 @@ test.describe('family book: a house', () => {
         await dialog.locator('.book-kind[data-kind="house"]').click();
         await expect(sw).toBeVisible();
         await expect(sw).toHaveAttribute('aria-checked', 'true');
-        await expect(dialog.locator('.book-house-recent')).toContainText('Last ~100 years by name only');
+        await expect(dialog.locator('.book-house-recent')).toContainText('Last 100 years by name only');
         // The cover's period as the book's title page has it: without Dobromil's 1975.
         await expect(dialog.locator('.book-cover-sub')).toHaveText('1820–1915');
 

@@ -8,7 +8,7 @@
  */
 
 import { strings, getCurrentLanguage } from '../strings.js';
-import type { TreeHouse } from '../houses.js';
+import { houseTitle, type TreeHouse } from '../houses.js';
 import { formatPlaceDate } from '../place-identity.js';
 import { fetchHouse, houseFeature, sendHouseMaterial, type HouseMaterial, type HouseMaterialBody, type HouseResearch, type HouseWriteResult } from '../house-bridge.js';
 import { houseImportLink, researchDeviceAllows, researchLinkMark } from '../research-link.js';
@@ -16,7 +16,7 @@ import { announcedResearchScheme } from '../research-device.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { showToast } from './toast.js';
 import { uiModule } from './module.js';
-import { houseLabel, type HouseMenuItem } from './houses-ui.js';
+import type { HouseMenuItem } from './houses-ui.js';
 
 const MATERIAL_ID = 'house-material-modal';
 const esc = (s: string): string => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -166,7 +166,7 @@ export const houseMaterialMethods = uiModule({
         const key = row?.key ?? house.id;
         const nameWas = row?.name ?? house.name ?? '';
         const withFiles = this.batchAvailable();
-        const sub = [houseLabel(house), nameWas ? `(${nameWas})` : ''].filter(Boolean).join(' ');
+        const sub = [houseTitle(house), nameWas ? `(${nameWas})` : ''].filter(Boolean).join(' ');
         const overlay = this.openHouseSubDialog(MATERIAL_ID, s.attachTitle, sub, `
             ${withFiles ? `<div class="house-drop">
                 <span>${esc(s.drop)}</span>
@@ -202,6 +202,8 @@ export const houseMaterialMethods = uiModule({
             box.hidden = !files.length;
             const note = overlay.querySelector('.house-files-note') as HTMLElement | null;
             if (note) { note.hidden = !files.length; note.textContent = files.length ? s.attachFiles(files.length) : ''; }
+            // With files the dialog goes on to the batch's wizard (spec 030 §7, question 10).
+            go.textContent = files.length ? s.attachGoFiles : s.attachGo;
             box.innerHTML = files.map((f, i) => `<div class="house-file"><span class="ic" aria-hidden="true">${f.type.startsWith('image/') ? '▣' : '▤'}</span>`
                 + `<span class="n">${esc(f.name)}</span><span class="z">${esc(formatSize(f.size, lang))}</span>`
                 + `<button type="button" class="house-file-x" data-i="${i}" aria-label="${esc(s.removeFile(f.name))}">×</button></div>`).join('');

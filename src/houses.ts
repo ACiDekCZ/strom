@@ -474,9 +474,19 @@ export function livedAtHouse(house: Pick<TreeHouse, 'facts'>, years?: { from?: n
     return out;
 }
 
-/** "Bělokamen čp. 16": the town and the house as the tree writes it. */
+/**
+ * The house as the tree writes it, its number kept on one line with the word
+ * before it: "čp.\u00a016", "Haus Nr.\u00a016", "Kopřivná\u00a012" (a text
+ * without a number, or a number alone, unchanged). For what is shown, never
+ * for what is written to the data or compared.
+ */
+export function houseLabel(text: string): string {
+    return text.replace(/^(\D*\S)\s+(?=\d)/u, '$1\u00a0');
+}
+
+/** "Bělokamen čp.\u00a016": the town and the house as the tree writes it, the number kept to its marker (houseLabel). */
 export function houseTitle(h: Pick<TreeHouse, 'ref' | 'text'>): string {
-    return `${h.ref.town} ${h.text}`;
+    return `${h.ref.town} ${houseLabel(h.text)}`;
 }
 
 /** "Bělokamen čp. 16 · U Prouzalů": the house and its name after the farm, when it has one (a book's title). */

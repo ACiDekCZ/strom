@@ -378,7 +378,7 @@ test.describe('The house page', () => {
         await pin.dispatchEvent('pointermove', { pointerId: 7, pointerType: 'touch', clientX: x + 40, clientY: y + 20, isPrimary: true, bubbles: true });
         await pin.dispatchEvent('pointerup', { pointerId: 7, pointerType: 'touch', clientX: x + 40, clientY: y + 20, isPrimary: true, bubbles: true });
         await map.locator('[data-hmap-act="save"]').click();
-        await expect(map.locator('.hmap-pos-t')).toHaveText('Location placed by hand');
+        await expect(map.locator('.hmap-pos-t')).toHaveText('Location set by hand');
         const [moved] = await houseData();
         expect(moved!.how).toBe('manual');
         // 40 px east and 20 px south at zoom 17: east and south of the research's point by a few tens of metres.

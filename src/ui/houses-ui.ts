@@ -15,7 +15,7 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
 import type { HouseId, Person, PersonId, StromData } from '../types.js';
 import {
-    collectHouses, houseFacts, houseInteresting, houseTitle, houseTownKey, withResearchNumbers,
+    collectHouses, houseFacts, houseInteresting, houseLabel, houseTitle, houseTownKey, withResearchNumbers,
     type HouseFact, type HouseNumber, type ResearchHouseNumber, type TreeHouse,
 } from '../houses.js';
 import {
@@ -82,11 +82,6 @@ function freshState(parent: string | null): HousesWindowState {
     };
 }
 
-/** "Bělokamen čp. 16" for the change log and the dialogs' subtitles. */
-export function houseLabel(h: TreeHouse): string {
-    return houseTitle(h);
-}
-
 /** A number as "formerly" shows it beside the house's own: "9" of "čp. 9", a street whole. */
 function shortNumber(text: string): string {
     return houseIsStreet(text) ? text.trim() : houseKey(text);
@@ -141,7 +136,7 @@ export const housesMethods = uiModule({
             <div class="modal houses-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="houses-title">
                 <div class="modal-header">
                     <h2 id="houses-title">${this.escapeHtml(s.title)}</h2>
-                    <button type="button" class="houses-head-more" id="houses-head-more" aria-haspopup="menu" aria-label="${this.escapeHtml(s.headerMenu)}">⋯</button>
+                    <button type="button" class="houses-head-terms" id="houses-head-terms" aria-expanded="false" aria-controls="houses-terms">${this.escapeHtml(s.terms)}</button>
                     <button class="close-btn" id="houses-close-x" aria-label="${this.escapeHtml(strings.buttons.close)}">&times;</button>
                 </div>
                 <p class="houses-intro">${this.escapeHtml(s.intro)}</p>
@@ -151,7 +146,7 @@ export const housesMethods = uiModule({
                     <button type="button" class="secondary" id="houses-close" data-dismiss>${this.escapeHtml(strings.buttons.close)}</button>
                 </div>
             </div>`;
-        overlay.querySelector('#houses-head-more')?.before(helpMark('houses'));
+        overlay.querySelector('#houses-head-terms')?.after(helpMark('houses'));
         document.body.appendChild(overlay);
         const modal = overlay.querySelector('.modal') as HTMLElement;
         normalizeModal(modal);
@@ -244,11 +239,9 @@ export const housesMethods = uiModule({
         const close = (): void => this.closeHousesWindow();
         (overlay.querySelector('#houses-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#houses-close') as HTMLButtonElement).onclick = close;
+        // Terms: the footer's link; on a phone (no footer) a text button in the header (question 3: one item needs no ⋯).
         (overlay.querySelector('#houses-terms-link') as HTMLButtonElement).onclick = () => this.toggleHousesTerms();
-        const headMore = overlay.querySelector('#houses-head-more') as HTMLButtonElement;
-        headMore.onclick = () => this.openHousesMenu(headMore, strings.houses.headerMenu, [
-            { key: 'terms', label: strings.houses.terms, run: () => this.toggleHousesTerms(true) },
-        ]);
+        (overlay.querySelector('#houses-head-terms') as HTMLButtonElement).onclick = () => this.toggleHousesTerms();
         overlay.addEventListener('click', (e) => {
             const t = e.target as HTMLElement;
             if (t === overlay) { close(); return; }
@@ -260,7 +253,7 @@ export const housesMethods = uiModule({
     housesListClick(t: HTMLElement): void {
         if (!state) return;
         const terms = document.getElementById('houses-terms');
-        if (terms && !t.closest('#houses-terms, #houses-terms-link, .houses-head-more')) this.toggleHousesTerms(false);
+        if (terms && !t.closest('#houses-terms, #houses-terms-link, #houses-head-terms')) this.toggleHousesTerms(false);
         const townChip = t.closest<HTMLElement>('.houses-town-chip');
         if (townChip) {
             delete state.filter.town;
@@ -364,7 +357,7 @@ export const housesMethods = uiModule({
         if (host) {
             const town = state.filter.town ? state.houses.find(h => h.townKey === state!.filter.town)?.ref.town ?? state.filter.town : '';
             host.innerHTML = town
-                ? `<button type="button" class="places-chip sel-opt houses-town-chip" aria-pressed="true" title="${this.escapeHtml(s.townAll)}">${this.escapeHtml(s.townOnly(town))}<span class="houses-town-chip-x" aria-hidden="true">&times;</span></button>`
+                ? `<button type="button" class="places-chip sel-opt houses-town-chip" aria-pressed="true" aria-label="${this.escapeHtml(s.townClear)}" title="${this.escapeHtml(s.townAll)}">${this.escapeHtml(s.townOnly(town))}<span class="houses-town-chip-x" aria-hidden="true">&times;</span></button>`
                 : '';
         }
         if (result.groups.length === 0) {
@@ -466,8 +459,8 @@ export const housesMethods = uiModule({
             ? ` <span class="was"${fromResearch ? ` title="${this.escapeHtml(s.probablySame)}"` : ''}>${this.escapeHtml(s.was(former.join(', ')))}</span>` : '';
         const name = h.name ? `<span class="hn">${this.escapeHtml(h.name)}</span>` : '';
         const detailId = `house-detail-${this.housesDomId(h.id)}`;
-        const chev = `<button type="button" class="house-chev" aria-expanded="${open}" aria-controls="${detailId}" aria-label="${this.escapeHtml(houseLabel(h))}">${open ? '▾' : '▸'}</button>`;
-        const no = `<span class="house-no"><b>${this.escapeHtml(h.text)}</b>${was}${name}</span>`;
+        const chev = `<button type="button" class="house-chev" aria-expanded="${open}" aria-controls="${detailId}" aria-label="${this.escapeHtml(houseTitle(h))}">${open ? '▾' : '▸'}</button>`;
+        const no = `<span class="house-no"><b>${this.escapeHtml(houseLabel(h.text))}</b>${was}${name}</span>`;
         if (simple) {
             const first = h.personIds[0] ? data.persons[h.personIds[0]] : undefined;
             const line = [first ? shownName(first) : '', yearsText(h)].filter(Boolean).join(' · ');
@@ -489,7 +482,7 @@ export const housesMethods = uiModule({
         const side = this.renderHouseStateSlot(h);
         const readOnly = DataManager.isReadOnly();
         const menu = readOnly && !this.houseMenuResearchItems(h).length ? '' :
-            `<button type="button" class="house-more-btn" aria-haspopup="menu" aria-label="${this.escapeHtml(s.rowMenu(houseLabel(h)))}">⋯</button>`;
+            `<button type="button" class="house-more-btn" aria-haspopup="menu" aria-label="${this.escapeHtml(s.rowMenu(houseTitle(h)))}">⋯</button>`;
         return `
             <div class="house-row${open ? ' open' : ''}${side ? ' has-side' : ''}" data-house="${this.escapeHtml(h.id)}">
                 ${chev}${no}
@@ -614,7 +607,7 @@ export const housesMethods = uiModule({
             { key: 'merge', label: s.merge, run: () => this.showHouseMergeDialog(h.id) },
             ...(this.houseSplitCandidates(h).length ? [{ key: 'split', label: s.split, run: () => this.showHouseSplitDialog(h.id) }] : []),
         ];
-        this.openHousesMenu(btn, s.rowMenu(houseLabel(h)), research, own);
+        this.openHousesMenu(btn, s.rowMenu(houseTitle(h)), research, own);
     },
 
     /** A small `.context-menu` under its button: arrows move, Enter runs, Escape or a press outside closes it. */
@@ -706,12 +699,12 @@ export const housesMethods = uiModule({
     toggleHousesTerms(force?: boolean): void {
         const modal = document.querySelector('#houses-modal .houses-modal');
         if (!modal) return;
-        const link = document.getElementById('houses-terms-link');
+        const links = document.querySelectorAll('#houses-terms-link, #houses-head-terms');
         const existing = document.getElementById('houses-terms');
         const want = force ?? !existing;
         if (!want) {
             existing?.remove();
-            link?.setAttribute('aria-expanded', 'false');
+            links.forEach(l => l.setAttribute('aria-expanded', 'false'));
             return;
         }
         if (existing) return;
@@ -725,7 +718,7 @@ export const housesMethods = uiModule({
         panel.innerHTML = `<h3>${this.escapeHtml(s.terms)}</h3><dl>${s.glossary.map(g =>
             `<dt>${this.escapeHtml(g.term)}</dt><dd>${this.escapeHtml(g.text)}</dd>`).join('')}</dl>`;
         modal.appendChild(panel);
-        link?.setAttribute('aria-expanded', 'true');
+        links.forEach(l => l.setAttribute('aria-expanded', 'true'));
         panel.focus({ preventScroll: true });
     },
 
@@ -790,7 +783,7 @@ export const housesMethods = uiModule({
         if (!state || !h) return;
         const s = strings.houses;
         const others = state.houses.filter(x => x.townKey === h.townKey && x.id !== h.id);
-        const sub = [houseLabel(h), h.name ? `(${h.name})` : ''].filter(Boolean).join(' ');
+        const sub = [houseTitle(h), h.name ? `(${h.name})` : ''].filter(Boolean).join(' ');
         const overlay = this.openHouseSubDialog(MERGE_ID, s.mergeTitle, sub, `
             <p class="house-sub-note">${this.escapeHtml(s.mergeNote)}</p>
             ${others.length ? `<div class="hm-search house-pick-search">
@@ -811,7 +804,7 @@ export const housesMethods = uiModule({
                 const years = [...new Set(o.facts.map(f => f.year).filter((y): y is number => y !== undefined))].slice(0, 3).join(', ');
                 const on = picked?.id === o.id;
                 return `<button type="button" class="r sel-opt" data-sel-form="row" role="option" aria-selected="${on}" data-house="${this.escapeHtml(o.id)}">
-                    <span class="n">${this.escapeHtml(o.text)}</span>
+                    <span class="n">${this.escapeHtml(houseLabel(o.text))}</span>
                     <span class="w">${this.escapeHtml([first ? shownName(first) : '', years].filter(Boolean).join(' · '))}</span>
                     <span class="t">${this.escapeHtml(o.ref.town)}</span>
                 </button>`;
@@ -826,7 +819,7 @@ export const housesMethods = uiModule({
             if (!o) return;
             picked = o;
             for (const el of list.querySelectorAll<HTMLElement>('.r')) el.setAttribute('aria-selected', String(el.dataset.house === o.id));
-            const label = `${h.text} ${s.was([...houseFormerNumbers(h, h.numbers), shortNumber(o.text)].join(', '))}`;
+            const label = `${houseLabel(h.text)} ${s.was([...houseFormerNumbers(h, h.numbers), shortNumber(o.text)].join(', '))}`;
             if (after) after.textContent = s.mergeAfter(label, houseFacts(o).length);
             go.disabled = false;
         });
@@ -834,7 +827,7 @@ export const housesMethods = uiModule({
             if (!picked) return;
             const changes = mergeHouseChanges(DataManager.getData().houses, h.id, picked.id);
             this.closeHouseSubDialog(MERGE_ID);
-            if (DataManager.setHousesUserData(changes, houseLabel(h))) this.refreshHousesWindow();
+            if (DataManager.setHousesUserData(changes, houseTitle(h))) this.refreshHousesWindow();
         };
         (q ?? go).focus();
     },
@@ -848,12 +841,12 @@ export const housesMethods = uiModule({
         if (!candidates.length) return;
         const ctx = this.placesResearchContext();
         const canSend = !!ctx.base && houseFeature(ctx.features, 'house.confirm');
-        const label = `${h.text}${houseFormerNumbers(h, h.numbers).length ? ` ${s.was(houseFormerNumbers(h, h.numbers).join(', '))}` : ''}`;
+        const label = `${houseLabel(h.text)}${houseFormerNumbers(h, h.numbers).length ? ` ${s.was(houseFormerNumbers(h, h.numbers).join(', '))}` : ''}`;
         const textOf = (c: (typeof candidates)[number]): string => c.research && !state?.byId.has(c.id) && !houseGroupIds(h).includes(c.id)
-            ? s.splitTextResearch(c.text, h.text) : s.splitText(c.text, h.text);
+            ? s.splitTextResearch(houseLabel(c.text), houseLabel(h.text)) : s.splitText(houseLabel(c.text), houseLabel(h.text));
         const choose = candidates.length > 1 ? `
             <fieldset class="house-split-which"><legend>${this.escapeHtml(s.splitWhich)}</legend>
-                ${candidates.map((c, i) => `<label><input type="radio" name="house-split-which" value="${i}"${i === 0 ? ' checked' : ''}> ${this.escapeHtml(c.text)}</label>`).join('')}
+                ${candidates.map((c, i) => `<label><input type="radio" name="house-split-which" value="${i}"${i === 0 ? ' checked' : ''}> ${this.escapeHtml(houseLabel(c.text))}</label>`).join('')}
             </fieldset>` : '';
         const overlay = this.openHouseSubDialog(SPLIT_ID, s.splitTitle, `${h.ref.town} ${label}`, `
             ${choose}
@@ -872,7 +865,7 @@ export const housesMethods = uiModule({
             const send = canSend && !!(overlay.querySelector('.house-split-send input') as HTMLInputElement | null)?.checked;
             const changes = splitHouseChanges(DataManager.getData().houses, h.id, pick.id, houseGroupIds(h));
             this.closeHouseSubDialog(SPLIT_ID);
-            if (DataManager.setHousesUserData(changes, houseLabel(h))) this.refreshHousesWindow();
+            if (DataManager.setHousesUserData(changes, houseTitle(h))) this.refreshHousesWindow();
             if (send && ctx.base) {
                 void confirmHouse(ctx.base, { house: h.id, what: 'notSame', ...(pick.research?.id ? { id: pick.research.id } : {}) }, ctx.features)
                     .then(r => { if (!r.ok) this.showToast(s.splitSendFailed(r.reason || r.code)); });
@@ -937,7 +930,9 @@ export const housesMethods = uiModule({
         if (topId !== MODAL_ID) return false;
         if (document.getElementById('houses-terms')) {
             this.toggleHousesTerms(false);
-            document.getElementById('houses-terms-link')?.focus();
+            // Back to the Terms that is shown: the footer's, on a phone the header's.
+            const back = [...document.querySelectorAll<HTMLElement>('#houses-terms-link, #houses-head-terms')].find(b => b.offsetParent !== null);
+            back?.focus();
             return true;
         }
         this.closeHousesWindow();
@@ -968,14 +963,20 @@ export const housesMethods = uiModule({
     openHouse(id: string, parent?: string): void {
         const h = this.treeHouseOf(id);
         if (!h) return;
-        const ctx = this.placesResearchContext();
-        const main = ctx.viaMain && ctx.researchId && this.researchBridgeUp(ctx.researchId) ? satResearchForward() : null;
-        if (main?.mainOpen()) {
+        const main = this.houseOpenMain();
+        if (main) {
             const args: HousesOpenArgs = { town: h.ref.town, house: h.id };
             main.run(HOUSES_OPEN_ACTION, args, true);
             return;
         }
         this.openHousePage(h.id, parent);
+    },
+
+    /** The main window a satellite opens a house in (the Houses window there), or null: the house page here (openHouse). */
+    houseOpenMain(): ReturnType<typeof satResearchForward> | null {
+        const ctx = this.placesResearchContext();
+        const main = ctx.viaMain && ctx.researchId && this.researchBridgeUp(ctx.researchId) ? satResearchForward() : null;
+        return main?.mainOpen() ? main : null;
     },
 });
 

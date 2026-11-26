@@ -7,7 +7,7 @@
  */
 
 import { houseOutputFilter, housePrivacyContext, type HousePrivacyContext } from './house-privacy.js';
-import { generationsOf, houseTitle, type HouseFact, type TreeHouse } from './houses.js';
+import { generationsOf, houseLabel, houseTitle, type HouseFact, type TreeHouse } from './houses.js';
 import { forEachPlaceFact, placeKey } from './places.js';
 import { yearOf } from './dates.js';
 import type { HouseId, PersonId, StromData } from './types.js';
@@ -23,7 +23,10 @@ export interface HouseLifeEvent {
     /** The house as the tree writes it ("čp. 16"). */
     house: string;
     town: string;
-    /** 'left': where the person went (a house of the tree with its town, else the place). */
+    /**
+     * 'left': where the person went: a house of the tree in another town with its town ("Bělokamen čp.\u00a016"),
+     * one in the same town alone ("čp.\u00a016"), else the place.
+     */
     to?: string;
 }
 
@@ -101,7 +104,8 @@ export function houseLifeEvents(data: StromData, houses: readonly OutputHouse[],
             // The first later fact elsewhere: at another house or in another town (one in the same town without a house says nothing).
             const next = (where.get(pid) ?? []).find(p => p.year > last && (p.house ? p.house !== h : placeKey(p.place) !== h.townKey));
             if (!next) continue;
-            const to = next.house ? houseTitle(next.house) : next.place;
+            const to = !next.house ? next.place
+                : next.house.townKey === h.townKey ? houseLabel(next.house.text) : houseTitle(next.house);
             events.push({ kind: 'left', year: next.year, personId: pid, sex: sexOf(pid), ...base, to });
         }
         // The last of the house: only when the output shows all its facts (a hidden later one would make it wrong).

@@ -52,7 +52,7 @@ import { appFontFaceCss, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { shownName } from '../person-name.js';
 import { displayYear } from '../dates.js';
 import { openPersonPopover, openSearchPopover, type SearchPopoverRow } from './person-popover.js';
-import { collectHouses, findHouse, hasNumberedHouse, houseTitle, type TreeHouse } from '../houses.js';
+import { collectHouses, findHouse, hasNumberedHouse, houseLabel, houseTitle, type TreeHouse } from '../houses.js';
 import { loadBookHouseResearch, type BookHouseResearch } from '../book-house-research.js';
 import { houseMatches, houseSearchText } from '../houses-view.js';
 import { readRecent } from './tree-overview.js';
@@ -292,7 +292,7 @@ function defaultHouse(s: DialogState): { place: string; house: string } | null {
  * shortens the town and never the number ("Horní Bělok… čp. 16"); its text is houseTitle's.
  */
 function houseTitleHtml(house: TreeHouse): string {
-    return `<span class="book-ht">${esc(house.ref.town)}</span> <span class="book-hn">${esc(house.text)}</span>`;
+    return `<span class="book-ht">${esc(house.ref.town)}</span> <span class="book-hn">${esc(houseLabel(house.text))}</span>`;
 }
 
 function houseScopeText(s: DialogState, house: TreeHouse): string {
@@ -466,14 +466,14 @@ function optionsHtml(s: DialogState): string {
         + `<p class="book-hint book-detail-hint"></p></div></section>`
         + `<section class="book-sec" data-sec="notes"><h3 class="book-sec-h book-sub-only">${esc(D.notesRow)}</h3>`
         + sw('notes', D.notes, D.notesHint) + sw('research', D.research, D.researchHint) + `</section>`
-        + `<div class="book-pair">`
+        // Privacy, then the book's language across the column (all four names whole at every width; question 20).
         + `<section class="book-sec" data-sec="privacy"><h3 class="book-sec-h" id="book-privacy-h">${esc(D.privacy)}</h3>`
         + privacyRadios + `<p class="book-hint">${esc(D.privacyHint)}</p>`
         // A book of a house: people of the last ~100 years by name only (K1.4a), under the protection of the living.
         + `<div class="book-house-recent" hidden>${sw('houseRecent', D.houseRecent, D.houseRecentHint)}</div></section>`
         + `<section class="book-sec" data-sec="lang"><h3 class="book-sec-h">${esc(D.lang)}</h3>`
         + seg('lang', LANGS.map(l => [l, D.langName[l]] as [string, string]), D.lang)
-        + `<p class="book-hint">${esc(D.langHint)}</p></section></div>`
+        + `<p class="book-hint">${esc(D.langHint)}</p></section>`
         + `<section class="book-sec" data-sec="title"><h3 class="book-sec-h"><label for="book-title-input">${esc(D.title)}</label></h3>`
         + `<input type="text" id="book-title-input" class="book-title-input" autocomplete="off" spellcheck="false">`
         + `<p class="book-hint book-title-note"></p></section>`;

@@ -110,11 +110,11 @@ describe('a book of a house: people of the last ~100 years by name and role only
         // The option on: no year of the last ~100 years, and no name after the farm where they lived.
         const on = bookTitlePage(houseTree(), { ...base, selection: HOUSE, privacy: 'initials' }, { now: HOUSE_NOW });
         expect(on.period).toBe('1820–1920');
-        expect(on.title).toBe('Bělokamen čp. 16');
+        expect(on.title).toBe('Bělokamen čp.\u00a016');
         // Without any protection the data as it is.
         const open = bookTitlePage(houseTree(), { ...base, selection: HOUSE, privacy: 'full', houseRecent: false }, { now: HOUSE_NOW });
         expect(open.period).toBe('1820–2001');
-        expect(open.title).toBe('Bělokamen čp. 16 · U Prouzalů');
+        expect(open.title).toBe('Bělokamen čp.\u00a016 · U Prouzalů');
     });
 
     it('the option: on unless switched off, for a book of a house only; remembered like the other options', () => {

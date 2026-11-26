@@ -218,7 +218,7 @@ test.describe('the Houses window on a phone', () => {
         const box = (await modal.boundingBox())!;
         expect(Math.round(box.width)).toBe(390);
         expect(Math.round(box.height)).toBe(844);
-        // No footer on a phone: Terms come from the header's ⋯.
+        // No footer on a phone: Terms is a text button in the header, left of ? (question 3).
         await expect(win(page).locator('.houses-footer')).toBeHidden();
         await row(page, 'belokamen|16').locator('.house-main .seq').click();
         await expect(win(page).locator('.house-detail[data-house="belokamen|16"]')).toBeVisible();
@@ -233,8 +233,13 @@ test.describe('the Houses window on a phone', () => {
         const seq = (await row(page, 'belokamen|16').locator('.seq').boundingBox())!;
         expect(Math.abs(per.y - no.y)).toBeLessThan(no.height);
         expect(seq.y).toBeGreaterThanOrEqual(no.y + no.height - 1);
-        await win(page).locator('#houses-head-more').click();
-        await page.locator('.houses-menu [data-action="terms"]').click();
+        const head = win(page).locator('#houses-head-terms');
+        await expect(head).toHaveText('Terms');
+        const headBox = (await head.boundingBox())!;
+        const help = (await win(page).locator('.modal-header > .help-mark').boundingBox())!;
+        expect(headBox.x + headBox.width).toBeLessThanOrEqual(help.x + 1);
+        await head.click();
+        await expect(head).toHaveAttribute('aria-expanded', 'true');
         await expect(win(page).locator('#houses-terms')).toBeVisible();
         const terms = (await win(page).locator('#houses-terms').boundingBox())!;
         expect(terms.x).toBeGreaterThanOrEqual(0);

@@ -40,6 +40,7 @@ import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
 import { HOUSE_PAGE_CSS, HOUSE_PAGE_FILE_TOKENS } from './house-page-css.js';
 import { buildHousePage } from './house-page.js';
 import { houseOfAddress } from './person-houses.js';
+import { houseLabel, houseTitle } from './houses.js';
 import { FamilyTogetherEvent, familyTogetherEvents, familyTogetherLineHtml, sharedIndexOf } from './shared-with-line.js';
 import { RodPickerItem, rodPickKey, rodPickerHtml, rodPickerItems } from './rod-picker.js';
 import { pluralTemplates, searchPageSetIndex } from './family-pages-search.js';
@@ -185,7 +186,7 @@ function housesSectionHtml(r: Render, rod: Rod): string {
     const rows = protectedHouseOutputs(r.set.protectedTree, r.set.options.now).houses
         .filter(h => r.set.houseSlug!.has(h.house.id) && h.facts.some(f => people.has(f.personId)));
     if (!rows.length) return '';
-    const body = rows.map(h => `<tr><td>${houseLinkHtml(r, h.house.id, esc(`${h.house.ref.town} ${h.house.text}`))}</td>`
+    const body = rows.map(h => `<tr><td>${houseLinkHtml(r, h.house.id, esc(houseTitle(h.house)))}</td>`
         + `<td>${h.period ? (h.period.from === h.period.to ? h.period.from : `${h.period.from}–${h.period.to}`) : ''}</td>`
         + `<td>${h.generations}</td></tr>`).join('');
     return `<section class="sp-block sp-houses"><h2 class="sp-h2">${esc(I.sectionTitle)} <span class="sp-houses-note">${esc(I.sectionNote)}</span></h2>`
@@ -205,7 +206,7 @@ function housesIndexHtml(r: Render): string {
         list.push(h);
     }
     return [...towns].map(([town, list]) => `<div class="sp-ix-group"><h2 class="sp-ix-letter">${esc(town)}</h2><ul class="sp-ix-list">`
-        + list.map(h => `<li class="sp-ix-row">${houseLinkHtml(r, h.house.id, esc(h.house.text), `${town} ${h.house.text}`)}`
+        + list.map(h => `<li class="sp-ix-row">${houseLinkHtml(r, h.house.id, esc(houseLabel(h.house.text)), `${town} ${h.house.text}`)}`
             + `${h.period ? ` <span class="sp-ix-y">${h.period.from === h.period.to ? h.period.from : `${h.period.from}–${h.period.to}`}</span>` : ''}`
             + ` <span class="sp-ix-t">${esc(r.S.houses.integration.colGens)} ${h.generations}</span></li>`).join('')
         + '</ul></div>').join('');
@@ -1704,7 +1705,7 @@ function tlRowHtml(r: Render, ctx: BookCtx, e: RodTimelineEvent): string {
         const text = h.kind === 'marriedIn' ? I.marriedIn('\u0000', '\u0001', h.sex)
             : h.kind === 'left' ? I.left('\u0000', '\u0001', h.to ?? '', h.sex) : I.last('\u0000', '\u0001', h.sex);
         const sentence = esc(text).replace('\u0000', () => who || '?')
-            .replace('\u0001', () => houseLinkHtml(r, h.houseId, esc(h.house), `${h.town} ${h.house}`));
+            .replace('\u0001', () => houseLinkHtml(r, h.houseId, esc(houseLabel(h.house)), `${h.town} ${h.house}`));
         return `<li class="sp-tl-row sp-tl-row--house" data-k="${chip}"><span class="sp-tl-y">${e.year}</span>`
             + `<div class="sp-tl-b"><span class="sp-tl-k">${esc(F.tlEv.house)}</span><span class="sp-tl-t">${sentence}</span></div></li>`;
     }

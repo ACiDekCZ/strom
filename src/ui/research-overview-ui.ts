@@ -88,6 +88,7 @@ import { focusOverviewWindow, overviewChanged, overviewInWindow } from '../windo
 import { agentMirror } from '../windows/agent-mirror.js';
 import { greyOverviewActions } from './overview-window-states.js';
 import { markShowcaseOff, sampleNoteEl, showcaseDayText, showcaseItemActions, researchLastWork } from './sample-why.js';
+import { houseLabel } from '../houses.js';
 import { arrangeOverviewColumns, beginOverviewColumns, noteOverviewSectionRows, nodesAfter, resetOverviewColumns } from './overview-columns-ui.js';
 
 /**
@@ -2550,7 +2551,7 @@ export const researchOverviewMethods = uiModule({
             meta.appendChild(el('span', 'research-overview__muted', L.wholeResearch));
         }
         if (house) {
-            const link = el('button', 'link-button house-page-link live-waiting-house', strings.houses.integration.houseLink(house.text));
+            const link = el('button', 'link-button house-page-link live-waiting-house', strings.houses.integration.houseLink(houseLabel(house.text)));
             link.type = 'button';
             link.dataset.house = house.id;
             link.onclick = () => this.openHouse(house.id);

@@ -33,7 +33,7 @@ import {
 import { BookChapter, BookModel } from './book-model.js';
 import { familyTogetherEvents, familyTogetherLineHtml, sharedIndexOf } from './shared-with-line.js';
 import { BookDetail, BookLang, BookParts } from './book-options.js';
-import type { HouseFact, HouseNumber, TreeHouse } from './houses.js';
+import { houseLabel, type HouseFact, type HouseNumber, type TreeHouse } from './houses.js';
 import type { HouseOutput } from './house-privacy.js';
 
 export type BookMode = 'book' | 'app' | 'file';
@@ -1003,8 +1003,8 @@ export function houseIndexHtml(ctx: BookCtx, entries: readonly BookHouseEntry[],
         if (!rows.length) continue;
         if (e.out.hidden.events || e.out.hidden.facts || e.out.hidden.location) shielded = true;
         const numbers = e.numbers.length > 1
-            ? `<span class="book-house-numbers">${e.numbers.map(n => esc([n.house, span(n.from, n.to)].filter(Boolean).join(' '))).join(' → ')}</span>` : '';
-        const head = `<div class="book-house-head"><strong>${esc(h.text)}</strong>${e.name ? ` <em>${esc(e.name)}</em>` : ''}${numbers}</div>`;
+            ? `<span class="book-house-numbers">${e.numbers.map(n => esc([houseLabel(n.house), span(n.from, n.to)].filter(Boolean).join(' '))).join(' → ')}</span>` : '';
+        const head = `<div class="book-house-head"><strong>${esc(houseLabel(h.text))}</strong>${e.name ? ` <em>${esc(e.name)}</em>` : ''}${numbers}</div>`;
         const events = e.out.timeline.map(ev => {
             const y = yearOf(ev.date);
             return esc([y !== null ? String(y) : '', ev.text].filter(Boolean).join(' '));

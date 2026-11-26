@@ -58,6 +58,7 @@ import { sourcePlaceLine } from './source-location.js';
 import { SharedWithLine, sharedIndexOf, sharedWithLine, sharedWithLineHtml } from './shared-with-line.js';
 import { type DerivedParticipation, derivedParticipations, derivedRoleLabel, derivedRoleWord, derivedEventWord } from './derived-participations.js';
 import { cleanEmails } from './person-contact.js';
+import { houseLabel } from './houses.js';
 import { houseOfAddress, personHouses, treeHouseIndex, type PersonHouse, type TreeHouseIndex } from './person-houses.js';
 import type { HouseId } from './types.js';
 import { houseOutputs, type HouseOutputs } from './house-events.js';
@@ -1020,7 +1021,7 @@ function houseAddressHtml(c: Ctx, place: string | undefined, address: string): s
     const id = index ? houseOfAddress(index, place, address) : null;
     const house = id ? index!.houses.find(h => h.id === id) : undefined;
     if (!house) return esc(address);
-    return houseLinkHtml(c, house.id, esc(address), c.S.houses.integration.houseTip(house.text)) ?? esc(address);
+    return houseLinkHtml(c, house.id, esc(houseLabel(address)), c.S.houses.integration.houseTip(house.text)) ?? esc(address);
 }
 
 /** The Places section's row "Houses" (spec 030 §12): the person's houses with the years there; '' without one. */
@@ -1030,8 +1031,8 @@ function housesRowHtml(c: Ctx): string {
     const I = c.S.houses.integration;
     const items = list.map(h => {
         const years = h.from === undefined ? '' : h.from === h.to ? String(h.from) : `${h.from}–${h.to}`;
-        const link = houseLinkHtml(c, h.id, esc(I.houseLink(h.text)), `${h.town} ${h.text}`);
-        const what = link ? `${esc(h.town)} ${link}` : esc(`${h.town} ${h.text}`);
+        const link = houseLinkHtml(c, h.id, esc(I.houseLink(houseLabel(h.text))), `${h.town} ${h.text}`);
+        const what = link ? `${esc(h.town)} ${link}` : esc(`${h.town} ${houseLabel(h.text)}`);
         return `<li class="pp-house">${what}${years ? ` <span class="pp-house-y">${esc(years)}</span>` : ''}</li>`;
     }).join('');
     return `<div class="pp-houses"><span class="pp-houses-k">${esc(I.ppHouses)}</span><ul class="pp-houses-list">${items}</ul></div>`;
