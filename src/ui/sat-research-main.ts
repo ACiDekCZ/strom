@@ -7,10 +7,12 @@
  */
 
 import {
-    HOUSES_OPEN_ACTION, PLACES_LIVE_ACTION, PLACES_OPEN_ACTION, PLACES_QUEUE_ACTION,
-    readHousesOpenArgs, readPlacesLiveArgs, readPlacesOpenArgs, readPlacesQueueArgs, registerMainResearchAction,
+    CARD_SIGNAL_ACTION, HOUSES_OPEN_ACTION, PLACES_LIVE_ACTION, PLACES_OPEN_ACTION, PLACES_QUEUE_ACTION,
+    readCardSignalArgs, readHousesOpenArgs, readPlacesLiveArgs, readPlacesOpenArgs, readPlacesQueueArgs, registerMainResearchAction,
 } from '../windows/window-sat-research.js';
 import type { PlacesIdentifyBody, PlacesIdentifyResult, PlacesReadResult } from '../places-bridge.js';
+import type { LiveWaiting } from '../research-link.js';
+import type { PersonId } from '../types.js';
 import type { MapScope } from './map-ui.js';
 
 /** What the actions need of the app (the UI in the app, fakes in a test). */
@@ -22,6 +24,12 @@ export interface SatResearchMainDeps {
     /** The research's places read through this window's bridge (null: no bridge here). */
     placesLiveHere(rev?: string): Promise<PlacesReadResult | null>;
     showHousesWindow(opts: { town?: string; house?: string }): void;
+    /** A card's signal as its badge here opens it (the answer, "What the research knows"). */
+    openCardSignal(personId: PersonId, signal: string): void;
+    personWaitingItems(personId: PersonId): LiveWaiting[];
+    showPersonWaiting(items: readonly LiveWaiting[]): void;
+    openWaitingStoryCompare(personId: PersonId): boolean;
+    showResearchWaiting(): void;
 }
 
 /** Register every action a satellite may ask the main window for. */
@@ -51,6 +59,19 @@ export function registerSatelliteResearchActions(ui: SatResearchMainDeps): void 
         read: readHousesOpenArgs,
         run: (a) => {
             ui.showHousesWindow({ town: a.town, ...(a.house ? { house: a.house } : {}) });
+            return true;
+        },
+    });
+    // A card's signal of a satellite (its "!", the person menu's answer, "Awaiting action", the story's new
+    // version, what the research knows): opened here as this window's own card opens it.
+    registerMainResearchAction(CARD_SIGNAL_ACTION, {
+        read: readCardSignalArgs,
+        run: (a) => {
+            const personId = a.personId as PersonId;
+            if (a.signal === 'waiting-list') ui.showPersonWaiting(ui.personWaitingItems(personId));
+            else if (a.signal === 'story-compare') {
+                if (!ui.openWaitingStoryCompare(personId)) ui.showResearchWaiting();
+            } else ui.openCardSignal(personId, a.signal);
             return true;
         },
     });

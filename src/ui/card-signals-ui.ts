@@ -26,6 +26,7 @@ import { DataManager } from '../data.js';
 import { LiveWaiting } from '../research-link.js';
 import { personWaiting } from '../research-waiting.js';
 import { storyWaitingTarget, storyWithDraft } from './story-compare-ui.js';
+import { CARD_SIGNAL_ACTION, satMainForward, type CardSignalKind } from '../windows/window-sat-research.js';
 
 /** A swipe down this far closes the stack's bottom sheet (as the person sheet). */
 const STACK_SHEET_SWIPE_PX = 80;
@@ -102,6 +103,8 @@ export const cardSignalsUiMethods = uiModule({
     /** A click on a card's badge (desktop): open what it signals. */
     openCardSignal(personId: PersonId, signal: string): void {
         this.hideContextMenu();
+        // A window of its own (no bridge here): the main window opens it for the person and comes forward.
+        if ((signal === 'waiting' || signal === 'conflict' || signal === 'question') && this.cardSignalInMain(personId, signal)) return;
         if (signal === 'waiting') this.answerPersonWaiting(personId);
         else if (signal === 'conflict') {
             // At the first open conflict's card.
@@ -111,6 +114,17 @@ export const cardSignalsUiMethods = uiModule({
         else if (signal === 'agent') this.showLiveResearchNow();
         // The question: what the research knows, at the question.
         else this.showPersonResearchDialog(personId, { questions: true });
+    },
+
+    /**
+     * In a satellite whose main window answers (it holds the bridge, this window does not): the card's signal
+     * opened there for the person (`card-signal`), the main window forward. False: this window opens it.
+     */
+    cardSignalInMain(personId: PersonId, signal: CardSignalKind): boolean {
+        const main = satMainForward();
+        if (!main) return false;
+        main.run(CARD_SIGNAL_ACTION, { personId, signal }, true);
+        return true;
     },
 
     /**
@@ -147,6 +161,7 @@ export const cardSignalsUiMethods = uiModule({
      */
     answerPersonWaiting(personId: PersonId): void {
         this.hideContextMenu();
+        if (this.cardSignalInMain(personId, 'waiting')) return;
         if (this.openWaitingStoryCompare(personId)) return;
         const items = this.personWaitingItems(personId);
         const runs = items.map(w => this.waitingAnswerAction(w));

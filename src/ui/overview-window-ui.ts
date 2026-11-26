@@ -170,8 +170,11 @@ export const overviewWindowMethods = uiModule({
                 return d ? this.showDirectionFoundInTree(d, 'docked') : false;
             }
             case 'person-research':
-                this.showPersonResearchDialog(a.args.personId as PersonId,
-                    a.args.conflict ? { conflict: a.args.conflict } : a.args.hypo ? { hypo: { id: a.args.hypo } } : {});
+                this.showPersonResearchDialog(a.args.personId as PersonId, {
+                    ...(a.args.conflict ? { conflict: a.args.conflict }
+                        : a.args.hypo ? { hypo: { id: a.args.hypo, ...(a.args.variant ? { variant: a.args.variant } : {}) } } : {}),
+                    ...(a.args.edge ? { edge: true } : {}), ...(a.args.questions ? { questions: true } : {}),
+                });
                 return true;
             case 'tree-overview':
                 if (!treeId) return false;

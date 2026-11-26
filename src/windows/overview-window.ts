@@ -339,8 +339,11 @@ export type OverviewAction =
     | { action: 'show-direction'; args: { directionId: string } }
     /** "{n} persons" of what a line found: those people lit up in the tree. */
     | { action: 'direction-found'; args: { directionId: string } }
-    /** A conflict's or hypothesis's row of "What the research knows": its person's research dialog. */
-    | { action: 'person-research'; args: { personId: string; conflict?: string; hypo?: string } }
+    /**
+     * A conflict's or hypothesis's row of "What the research knows": its person's research dialog (a tree
+     * satellite's too: at a hypothesis's variant, the research edges' section, the question).
+     */
+    | { action: 'person-research'; args: { personId: string; conflict?: string; hypo?: string; variant?: string; edge?: boolean; questions?: boolean } }
     /** "Where evidence is missing": the tree overview's Data quality. */
     | { action: 'tree-overview'; args?: Record<string, never> }
     /** A place's questions of "Awaiting action" (the places dialog). */
@@ -513,7 +516,13 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
         case 'person-research': {
             if (!str(a.personId)) return null;
             if ((a.conflict !== undefined && !str(a.conflict)) || (a.hypo !== undefined && !str(a.hypo))) return null;
-            return { action, args: { personId: a.personId, ...(a.conflict ? { conflict: a.conflict as string } : {}), ...(a.hypo ? { hypo: a.hypo as string } : {}) } };
+            if ((a.variant !== undefined && !str(a.variant)) || (a.edge !== undefined && a.edge !== true) || (a.questions !== undefined && a.questions !== true)) return null;
+            return {
+                action, args: {
+                    personId: a.personId, ...(a.conflict ? { conflict: a.conflict as string } : {}), ...(a.hypo ? { hypo: a.hypo as string } : {}),
+                    ...(a.hypo && a.variant ? { variant: a.variant as string } : {}), ...(a.edge ? { edge: true } : {}), ...(a.questions ? { questions: true } : {}),
+                },
+            };
         }
         case 'tree-overview':
         case 'line-new':

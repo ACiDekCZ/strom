@@ -705,10 +705,11 @@ export const contextMenuMethods = uiModule({
             case 'signal-waiting-list':
                 // Touch: the person's items in Waiting for you, lit (each answered from its row).
                 this.hideContextMenu();
-                this.showPersonWaiting(this.personWaitingItems(personId));
+                if (!this.cardSignalInMain(personId, 'waiting-list')) this.showPersonWaiting(this.personWaitingItems(personId));
                 break;
             case 'signal-story-compare':
-                if (!this.openWaitingStoryCompare(personId)) this.showResearchWaiting();
+                // Nothing to compare here: "Awaiting action" (the main window's in a window of its own).
+                if (!this.openWaitingStoryCompare(personId) && !this.cardSignalInMain(personId, 'story-compare')) this.showResearchWaiting();
                 break;
             case 'signal-knows':
                 this.clearDialogStack();

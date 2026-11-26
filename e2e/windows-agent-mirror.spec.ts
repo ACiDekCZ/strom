@@ -141,6 +141,23 @@ test.describe('desktop (1440)', () => {
         await sat.close();
     });
 
+    test('a card\'s conflict badge in a family window: What the research knows opens in the main window, at the conflict (1126)', async ({ page, context }) => {
+        await routeBridge(context);
+        const treeId = await follow(page);
+        const sat = await context.newPage();
+        await sat.clock.setFixedTime(NOW);
+        await sat.goto(`/strom.html?okno=family&tree=${encodeURIComponent(treeId)}&w=am2`);
+        const marieId = await sat.evaluate(() => Object.values(window.Strom.DataManager.getData().persons).find(p => p.refn === 'P0006')!.id);
+        await sat.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), marieId);
+        const badge = card(sat, 'Marie').locator('.card-signal');
+        await expect(badge).toHaveText('≠');
+        await badge.click();
+        // Decided there through its bridge; nothing of it here.
+        await expect(page.locator('#person-research-modal [data-conflict-card="X0001"]')).toBeVisible();
+        await expect(sat.locator('#person-research-modal')).toHaveCount(0);
+        await sat.close();
+    });
+
     test('a saved view with a research filter shows the same rows in another window', async ({ page, context }) => {
         await routeBridge(context);
         const treeId = await follow(page);

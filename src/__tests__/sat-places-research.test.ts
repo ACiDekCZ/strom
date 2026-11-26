@@ -197,7 +197,7 @@ describe('place research actions in a satellite window', () => {
     describe('the main window runs places-open', () => {
         it('with valid arguments only', () => {
             const fake = { showPlacesManager: vi.fn(), openPlacesBulk: vi.fn(), placesIdentifyHere: vi.fn(), placesLiveHere: vi.fn(), showHousesWindow: vi.fn() };
-            registerSatelliteResearchActions(fake);
+            registerSatelliteResearchActions(fake as never);
             expect(runMainResearchAction(PLACES_OPEN_ACTION, { scope: 'tree', unplaced: true, bulk: 'look' })).toEqual({ handled: true, result: true });
             expect(fake.showPlacesManager).toHaveBeenCalledWith(undefined, undefined, 'tree', { unplaced: true });
             expect(fake.openPlacesBulk).toHaveBeenCalledWith('look');
@@ -211,7 +211,7 @@ describe('place research actions in a satellite window', () => {
         });
 
         it('an id it does not know is left to the other handlers', () => {
-            registerSatelliteResearchActions({ showPlacesManager: vi.fn(), openPlacesBulk: vi.fn(), placesIdentifyHere: vi.fn(), placesLiveHere: vi.fn(), showHousesWindow: vi.fn() });
+            registerSatelliteResearchActions({ showPlacesManager: vi.fn(), openPlacesBulk: vi.fn(), placesIdentifyHere: vi.fn(), placesLiveHere: vi.fn(), showHousesWindow: vi.fn() } as never);
             expect(runMainResearchAction('waiting-places', {})).toEqual({ handled: false });
             expect(runMainResearchAction(7, {})).toEqual({ handled: false });
         });

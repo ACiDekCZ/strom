@@ -42,6 +42,7 @@ import { helpMark } from './help-mark.js';
 import type { HelpTopic } from '../help/topics.js';
 import { researchClaimValue } from '../research-claim.js';
 import { conflictKeepOffered, conflictKeepOutcome, keepConflict, type KeepDone, type RetractResult } from '../source-retract.js';
+import { personResearchArgs, satMainForward } from '../windows/window-sat-research.js';
 
 const DIALOG_ID = 'person-research-modal';
 /** How long a conflict's card opened at stays lit up (DEV §6.2). */
@@ -291,6 +292,13 @@ export const personResearchMethods = uiModule({
      * conflict) — the person's open question comes into view and takes the focus.
      */
     showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean; hypo?: { id: string; variant?: string }; conflict?: string; questions?: boolean } = {}): void {
+        // A window of its own (no bridge here: deciding, keeping, asking would fail): the main window's dialog,
+        // at the same place, the main window forward.
+        const main = satMainForward();
+        if (main) {
+            main.run('person-research', personResearchArgs(personId, opts), true);
+            return;
+        }
         // Drawn again from inside itself: the one that opened it first keeps it.
         const active = document.activeElement as HTMLElement | null;
         if (active && active !== document.body && !active.closest(`#${DIALOG_ID}`)) dialogOpener = active;

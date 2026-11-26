@@ -41,6 +41,7 @@ import {
 import { readResearchTreeFile, researchDateLabel } from './research-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { uiModule } from './module.js';
+import { personResearchArgs, satMainForward } from '../windows/window-sat-research.js';
 
 const DIALOG_ID = 'person-research-modal';
 
@@ -409,6 +410,14 @@ export const conflictDecideMethods = uiModule({
      * deciding (a second ask meanwhile does nothing), then the answer.
      */
     async decideResearchConflict(personId: PersonId, conflictId: string, take: ResearchConflictTake): Promise<void> {
+        // A window of its own (no bridge here): the edit form's panel leads to the conflict's card in the main
+        // window, decided there through its bridge (the main window forward).
+        const main = satMainForward();
+        if (main) {
+            this.closeResearchConflictPanel({ focus: false });
+            main.run('person-research', personResearchArgs(personId, { conflict: conflictId }), true);
+            return;
+        }
         if (this.researchConflictCardState(conflictId)?.kind === 'busy') return;
         const c = this.researchConflictsShown(personId).find(x => researchConflictRef(x.id) === conflictId);
         if (!c) return;

@@ -16,6 +16,7 @@
 
 import type { PlaceCheckFlag, PlacesIdentifyBody } from '../places-bridge.js';
 import { researchLinkActionOf } from '../research-link.js';
+import { isBridgelessWindow } from '../research-device.js';
 
 /** What a satellite's UI needs from its client to have an action run in the main window. */
 export interface SatResearchForward {
@@ -36,6 +37,15 @@ export function setSatResearchForward(f: SatResearchForward | null): void {
 
 export function satResearchForward(): SatResearchForward | null {
     return forward;
+}
+
+/**
+ * The forward of a satellite (no bridge of its own) whose main window answers now: what the research shows
+ * there (a card's signal, "What the research knows") opens in the main window. Null in the main window, the
+ * overview window, or with the main window closed: the window runs it itself, as before.
+ */
+export function satMainForward(): SatResearchForward | null {
+    return isBridgelessWindow() && forward?.mainOpen() ? forward : null;
 }
 
 // ==================== THE MAIN WINDOW'S ACTIONS ====================
@@ -197,6 +207,57 @@ export function readHousesOpenArgs(raw: unknown): HousesOpenArgs | null {
     if (typeof a.town !== 'string' || !a.town.trim() || a.town.length > MAX_TEXT) return null;
     if (a.house !== undefined && (typeof a.house !== 'string' || !a.house || a.house.length > MAX_TEXT)) return null;
     return { town: a.town, ...(typeof a.house === 'string' ? { house: a.house } : {}) };
+}
+
+/** A card's research signal opened in the main window (a satellite's card "!", its person menu's signal rows). */
+export const CARD_SIGNAL_ACTION = 'card-signal';
+
+/**
+ * What a card's signal opens: `waiting` its answer (or the person's items of "Awaiting action"),
+ * `waiting-list` the person's items lit (touch), `story-compare` the story's new version (else
+ * "Awaiting action"), `conflict` / `question` "What the research knows" at the first open conflict / the question.
+ */
+export type CardSignalKind = 'waiting' | 'waiting-list' | 'story-compare' | 'conflict' | 'question';
+
+const CARD_SIGNALS: readonly CardSignalKind[] = ['waiting', 'waiting-list', 'story-compare', 'conflict', 'question'];
+
+export interface CardSignalArgs {
+    personId: string;
+    signal: CardSignalKind;
+}
+
+/** A person's id as a message names it (the app's ids are short). */
+const personIdOf = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 200;
+
+/** `card-signal`'s arguments as they came (null: malformed). */
+export function readCardSignalArgs(raw: unknown): CardSignalArgs | null {
+    const a = argsObject(raw);
+    if (!a || Object.keys(a).some(k => k !== 'personId' && k !== 'signal')) return null;
+    if (!personIdOf(a.personId) || !CARD_SIGNALS.includes(a.signal as CardSignalKind)) return null;
+    return { personId: a.personId, signal: a.signal as CardSignalKind };
+}
+
+/** How "What the research knows" opens (person-research-ui.ts). */
+export interface PersonResearchOpen {
+    edge?: boolean;
+    hypo?: { id: string; variant?: string };
+    conflict?: string;
+    questions?: boolean;
+}
+
+/**
+ * "What the research knows" of a satellite's person as the main window's `person-research` takes it (the
+ * overview window's action): the person, the conflict or hypothesis it opens at, its variant, the research
+ * edges' section, the question.
+ */
+export function personResearchArgs(personId: string, opts: PersonResearchOpen): Record<string, unknown> {
+    return {
+        personId,
+        ...(opts.conflict ? { conflict: opts.conflict } : {}),
+        ...(opts.hypo?.id ? { hypo: opts.hypo.id, ...(opts.hypo.variant ? { variant: opts.hypo.variant } : {}) } : {}),
+        ...(opts.edge ? { edge: true } : {}),
+        ...(opts.questions ? { questions: true } : {}),
+    };
 }
 
 /** A research link the main window can build again for its tree (`research-link`): what the satellite's link asks. */
