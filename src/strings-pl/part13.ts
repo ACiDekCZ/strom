@@ -197,5 +197,56 @@ export const plPart13: Pick<StringsType, 'giftTree'> = {
             deadH: 'U zmarłych',
             dead: { causes: 'Przyczyny śmierci', notes: 'Notatki i historie', sources: 'Źródła i ich skany' },
         },
+        /** Krok 2 „Kto w nim będzie” (§3): głębokość, podgląd, gałęzie. */
+        cut: {
+            depthH: 'Rodziny przodków do',
+            depthHint: 'rodzeństwo przodków z partnerami i potomkami',
+            depth: ['Nikt', 'Kuzyni', 'Kuzyni drugiego stopnia', 'Wszyscy'],
+            depthDesc: [
+                'tylko bezpośredni przodkowie i ich partnerzy',
+                'rodzeństwo rodziców z rodzinami',
+                'także rodzeństwo dziadków z rodzinami',
+                'wszyscy krewni przodków',
+            ],
+            defaultMark: (label: string) => `${label} (domyślnie)`,
+            count: (n: number) => `${n.toLocaleString('pl-PL')} ${plPl(n, 'osoba', 'osoby', 'osób')}`,
+            outLine: 'Przodkowie partnerów i osoby spoza drzewa nie należą do rodowodu.',
+            noAncestors: (name: string, who: 'm' | 'f' | 'pair') => (who === 'pair'
+                ? `W drzewie nie ma przodków osób ${name} – rodowód to oboje i ich potomkowie. Głębokość rodzin przodków nie ma zastosowania.`
+                : `W drzewie nie ma przodków osoby ${name} – rodowód to ${who === 'f' ? 'ona' : 'on'}, partnerzy i potomkowie. Głębokość rodzin przodków nie ma zastosowania.`),
+            sameCounts: 'Przodkowie nie mają w drzewie rodzeństwa z rodzinami – każdy wybór daje ten sam rodowód.',
+            largeLead: (generations: string, living: string, size: string) =>
+                ` · ${generations} · ${living}. Paczka tej wielkości ma ze zdjęciami około ${size}, a jej tworzenie wymaga dużo pamięci; mniejsza będzie przy mniejszej głębokości lub w kroku 4 bez zdjęć.`,
+            previewLabel: 'Podgląd rodowodu',
+            previewMoves: 'podgląd pomniejszony, przesuwanie przeciąganiem',
+            zoomOut: 'Oddalić',
+            zoomIn: 'Przybliżyć',
+            zoomFit: 'Całość',
+            zoomFitLabel: 'Pokazać cały rodowód',
+            stubFamily: (n: number) => `+ rodzina (${n})`,
+            stubFamilyLabel: (name: string, n: number) => `Dodać rodzinę: ${name} (${n} ${plPl(n, 'osoba', 'osoby', 'osób')})`,
+            stubGenerations: (gens: number, n: number) => `▲ jeszcze ${gens} ${plPl(gens, 'pokolenie', 'pokolenia', 'pokoleń')} (${n})`,
+            stubSide: (surname: string, n: number) => (surname ? `▲ przodkowie rodu ${surname} (${n})` : `▲ przodkowie (${n})`),
+            stubOpenLabel: 'Pokazać tych przodków',
+            menuRemove: (who: string, n: number) => `Usunąć rodzinę: ${who} (${n} ${plPl(n, 'osoba', 'osoby', 'osób')})`,
+            menuAdd: (n: number) => `Dodać rodzinę (${n} ${plPl(n, 'osoba', 'osoby', 'osób')})`,
+            menuFocus: 'Wyśrodkować podgląd tutaj',
+            branchesH: 'Rodziny rodzeństwa przodków',
+            branchesNote: 'Zaznaczone = z partnerami i wszystkimi potomkami. Zmiana od razu pojawia się w podglądzie i liczbach.',
+            branchesNoteShort: 'Zaznaczone = z partnerami i wszystkimi potomkami.',
+            noBranches: 'Przodkowie nie mają w drzewie rodzeństwa.',
+            branchGroup: (g: number) => (g === 1 ? 'Rodzeństwo rodziców'
+                : g === 2 ? 'Rodzeństwo dziadków'
+                : g === 3 ? 'Rodzeństwo pradziadków'
+                : g === 4 ? 'Rodzeństwo prapradziadków'
+                : `Rodzeństwo przodków ${g}. pokolenia`),
+            branchWith: 'z rodziną',
+            branchWithN: (n: number) => `z rodziną ${n}`,
+            branchAlone: 'bez rodziny',
+            otherParent: (gender: 'male' | 'female' | 'unknown', name: string) =>
+                `${gender === 'female' ? 'inna matka' : gender === 'male' ? 'inny ojciec' : 'inny rodzic'} (${name})`,
+            branchesOpen: 'Cały podgląd i gałęzie ›',
+            branchesSub: 'Gałęzie',
+        },
     },
 };

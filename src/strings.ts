@@ -12949,6 +12949,57 @@ const stringsEN = {
             deadH: 'For the deceased',
             dead: { causes: 'Causes of death', notes: 'Notes and stories', sources: 'Sources and their scans' },
         },
+        /** Step 2 "Who is in it" (§3): the depth, the preview, the branches. */
+        cut: {
+            depthH: 'Families of the ancestors up to',
+            depthHint: 'the ancestors’ siblings with partners and descendants',
+            depth: ['No one', 'First cousins', 'Second cousins', 'Everyone'],
+            depthDesc: [
+                'only the direct ancestors and their partners',
+                'the parents’ siblings with their families',
+                'the grandparents’ siblings with their families too',
+                'all blood relatives of the ancestors',
+            ],
+            defaultMark: (label: string) => `${label} (default)`,
+            count: (n: number) => `${n.toLocaleString('en-US')} ${plural('en', n, 'person', 'people')}`,
+            outLine: 'Partners’ ancestors and people outside the tree are not part of it.',
+            noAncestors: (name: string, who: 'm' | 'f' | 'pair') => (who === 'pair'
+                ? `There are no ancestors of ${name} in the tree – the family tree is the two of them and their descendants. The depth of the ancestors’ families does not apply.`
+                : `There are no ancestors of ${name} in the tree – the family tree is ${who === 'f' ? 'her' : 'him'}, partners and descendants. The depth of the ancestors’ families does not apply.`),
+            sameCounts: 'The ancestors have no siblings with families in the tree – every choice gives the same family tree.',
+            largeLead: (generations: string, living: string, size: string) =>
+                ` · ${generations} · ${living}. A package this size is about ${size} with photos, and making it needs a lot of memory; it gets smaller with a lower depth or without photos in step 4.`,
+            previewLabel: 'Preview of the family tree',
+            previewMoves: 'preview scaled down, moves by dragging',
+            zoomOut: 'Zoom out',
+            zoomIn: 'Zoom in',
+            zoomFit: 'Whole',
+            zoomFitLabel: 'Show the whole family tree',
+            stubFamily: (n: number) => `+ family (${n})`,
+            stubFamilyLabel: (name: string, n: number) => `Add the family of ${name} (${n} ${plural('en', n, 'person', 'people')})`,
+            stubGenerations: (gens: number, n: number) => `▲ ${gens} more ${plural('en', gens, 'generation', 'generations')} (${n})`,
+            stubSide: (surname: string, n: number) => (surname ? `▲ ${surname} ancestors (${n})` : `▲ ancestors (${n})`),
+            stubOpenLabel: 'Show these ancestors',
+            menuRemove: (who: string, n: number) => `Remove the family: ${who} (${n} ${plural('en', n, 'person', 'people')})`,
+            menuAdd: (n: number) => `Add the family (${n} ${plural('en', n, 'person', 'people')})`,
+            menuFocus: 'Centre the preview here',
+            branchesH: 'Families of the ancestors’ siblings',
+            branchesNote: 'Checked = with partners and all descendants. A change shows at once in the preview and the counts.',
+            branchesNoteShort: 'Checked = with partners and all descendants.',
+            noBranches: 'The ancestors have no siblings in the tree.',
+            branchGroup: (g: number) => (g === 1 ? 'Siblings of the parents'
+                : g === 2 ? 'Siblings of the grandparents'
+                : g === 3 ? 'Siblings of the great-grandparents'
+                : g === 4 ? 'Siblings of the great-great-grandparents'
+                : `Siblings of ancestors, generation ${g}`),
+            branchWith: 'with family',
+            branchWithN: (n: number) => `with family ${n}`,
+            branchAlone: 'no family',
+            otherParent: (gender: 'male' | 'female' | 'unknown', name: string) =>
+                `${gender === 'female' ? 'other mother' : gender === 'male' ? 'other father' : 'other parent'} (${name})`,
+            branchesOpen: 'Full preview and branches ›',
+            branchesSub: 'Branches',
+        },
     },
 };
 
@@ -25315,6 +25366,57 @@ const stringsCZ: StringsType = {
             deadH: 'U zemřelých',
             dead: { causes: 'Příčiny úmrtí', notes: 'Poznámky a příběhy', sources: 'Prameny a jejich snímky' },
         },
+        /** Krok 2 „Kdo v rodokmenu bude“ (§3): hloubka, náhled, větve. */
+        cut: {
+            depthH: 'Rodiny předků po',
+            depthHint: 'sourozenci předků s partnery a potomky',
+            depth: ['Nikdo', 'Bratranci', 'Druzí bratranci', 'Všichni'],
+            depthDesc: [
+                'jen přímí předci a jejich partneři',
+                'sourozenci rodičů s rodinami',
+                'i sourozenci prarodičů s rodinami',
+                'všichni pokrevní příbuzní předků',
+            ],
+            defaultMark: (label: string) => `${label} (výchozí)`,
+            count: (n: number) => `${n.toLocaleString('cs-CZ')} ${plural('cs', n, 'osoba', 'osoby', 'osob')}`,
+            outLine: 'Předci partnerů a osoby mimo strom nejsou součástí rodokmenu.',
+            noAncestors: (name: string, who: 'm' | 'f' | 'pair') => (who === 'pair'
+                ? `Ve stromu nejsou předci osob ${name} – rodokmen tvoří oba a jejich potomci. Hloubka rodin předků se nepoužije.`
+                : `Ve stromu nejsou předci osoby ${name} – rodokmen tvoří ${who === 'f' ? 'ona' : 'on'}, partneři a potomci. Hloubka rodin předků se nepoužije.`),
+            sameCounts: 'Předci nemají ve stromu sourozence s rodinami – všechny volby dávají stejný rodokmen.',
+            largeLead: (generations: string, living: string, size: string) =>
+                ` · ${generations} · ${living}. Balíček takové velikosti má s fotkami asi ${size} a jeho vytváření potřebuje hodně paměti; menší bude s nižší hloubkou nebo v kroku 4 bez fotek.`,
+            previewLabel: 'Náhled rodokmenu',
+            previewMoves: 'náhled zmenšený, posun tažením',
+            zoomOut: 'Oddálit',
+            zoomIn: 'Přiblížit',
+            zoomFit: 'Celý',
+            zoomFitLabel: 'Ukázat celý rodokmen',
+            stubFamily: (n: number) => `+ rodina (${n})`,
+            stubFamilyLabel: (name: string, n: number) => `Přidat rodinu: ${name} (${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')})`,
+            stubGenerations: (gens: number, n: number) => `▲ další ${gens} ${plural('cs', gens, 'generace', 'generace', 'generací')} (${n})`,
+            stubSide: (surname: string, n: number) => (surname ? `▲ předci rodu ${surname} (${n})` : `▲ předci (${n})`),
+            stubOpenLabel: 'Ukázat tyto předky',
+            menuRemove: (who: string, n: number) => `Odebrat rodinu: ${who} (${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')})`,
+            menuAdd: (n: number) => `Přidat rodinu (${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')})`,
+            menuFocus: 'Zaměřit náhled sem',
+            branchesH: 'Rodiny sourozenců předků',
+            branchesNote: 'Zaškrtnuté = s partnery a všemi potomky. Změna se hned ukáže v náhledu a počtech.',
+            branchesNoteShort: 'Zaškrtnuté = s partnery a všemi potomky.',
+            noBranches: 'Předci nemají ve stromu sourozence.',
+            branchGroup: (g: number) => (g === 1 ? 'Sourozenci rodičů'
+                : g === 2 ? 'Sourozenci prarodičů'
+                : g === 3 ? 'Sourozenci praprarodičů'
+                : g === 4 ? 'Sourozenci prapraprarodičů'
+                : `Sourozenci předků ${g}. generace`),
+            branchWith: 's rodinou',
+            branchWithN: (n: number) => `s rodinou ${n}`,
+            branchAlone: 'bez rodiny',
+            otherParent: (gender: 'male' | 'female' | 'unknown', name: string) =>
+                `${gender === 'female' ? 'jiná matka' : gender === 'male' ? 'jiný otec' : 'jiný rodič'} (${name})`,
+            branchesOpen: 'Celý náhled a větve ›',
+            branchesSub: 'Větve',
+        },
     },
 };
 
@@ -37588,6 +37690,57 @@ const stringsDE: StringsType = {
             },
             deadH: 'Bei Verstorbenen',
             dead: { causes: 'Todesursachen', notes: 'Notizen und Geschichten', sources: 'Quellen und ihre Scans' },
+        },
+        /** Schritt 2 „Wer dazugehört“ (§3): Tiefe, Vorschau, Zweige. */
+        cut: {
+            depthH: 'Familien der Vorfahren bis',
+            depthHint: 'Geschwister der Vorfahren mit Partnern und Nachkommen',
+            depth: ['Niemand', 'Cousins', 'Cousins 2. Grades', 'Alle'],
+            depthDesc: [
+                'nur die direkten Vorfahren und ihre Partner',
+                'Geschwister der Eltern mit ihren Familien',
+                'auch Geschwister der Großeltern mit ihren Familien',
+                'alle Blutsverwandten der Vorfahren',
+            ],
+            defaultMark: (label: string) => `${label} (Standard)`,
+            count: (n: number) => `${n.toLocaleString('de-DE')} ${plural('de', n, 'Person', 'Personen')}`,
+            outLine: 'Vorfahren von Partnern und Personen außerhalb des Stammbaums gehören nicht dazu.',
+            noAncestors: (name: string, who: 'm' | 'f' | 'pair') => (who === 'pair'
+                ? `Im Stammbaum gibt es keine Vorfahren von ${name} – der Stammbaum besteht aus beiden und ihren Nachkommen. Die Tiefe der Familien der Vorfahren gilt nicht.`
+                : `Im Stammbaum gibt es keine Vorfahren von ${name} – der Stammbaum besteht aus ${who === 'f' ? 'ihr' : 'ihm'}, Partnern und Nachkommen. Die Tiefe der Familien der Vorfahren gilt nicht.`),
+            sameCounts: 'Die Vorfahren haben im Stammbaum keine Geschwister mit Familien – jede Auswahl ergibt denselben Stammbaum.',
+            largeLead: (generations: string, living: string, size: string) =>
+                ` · ${generations} · ${living}. Ein Paket dieser Größe hat mit Fotos etwa ${size}, und seine Erstellung braucht viel Speicher; kleiner wird es mit geringerer Tiefe oder in Schritt 4 ohne Fotos.`,
+            previewLabel: 'Vorschau des Stammbaums',
+            previewMoves: 'Vorschau verkleinert, Verschieben durch Ziehen',
+            zoomOut: 'Verkleinern',
+            zoomIn: 'Vergrößern',
+            zoomFit: 'Ganz',
+            zoomFitLabel: 'Den ganzen Stammbaum zeigen',
+            stubFamily: (n: number) => `+ Familie (${n})`,
+            stubFamilyLabel: (name: string, n: number) => `Familie hinzufügen: ${name} (${n} ${plural('de', n, 'Person', 'Personen')})`,
+            stubGenerations: (gens: number, n: number) => `▲ ${gens} weitere ${plural('de', gens, 'Generation', 'Generationen')} (${n})`,
+            stubSide: (surname: string, n: number) => (surname ? `▲ Vorfahren ${surname} (${n})` : `▲ Vorfahren (${n})`),
+            stubOpenLabel: 'Diese Vorfahren zeigen',
+            menuRemove: (who: string, n: number) => `Familie entfernen: ${who} (${n} ${plural('de', n, 'Person', 'Personen')})`,
+            menuAdd: (n: number) => `Familie hinzufügen (${n} ${plural('de', n, 'Person', 'Personen')})`,
+            menuFocus: 'Vorschau hierher zentrieren',
+            branchesH: 'Familien der Geschwister der Vorfahren',
+            branchesNote: 'Angehakt = mit Partnern und allen Nachkommen. Eine Änderung erscheint sofort in der Vorschau und den Zahlen.',
+            branchesNoteShort: 'Angehakt = mit Partnern und allen Nachkommen.',
+            noBranches: 'Die Vorfahren haben im Stammbaum keine Geschwister.',
+            branchGroup: (g: number) => (g === 1 ? 'Geschwister der Eltern'
+                : g === 2 ? 'Geschwister der Großeltern'
+                : g === 3 ? 'Geschwister der Urgroßeltern'
+                : g === 4 ? 'Geschwister der Ururgroßeltern'
+                : `Geschwister der Vorfahren, ${g}. Generation`),
+            branchWith: 'mit Familie',
+            branchWithN: (n: number) => `mit Familie ${n}`,
+            branchAlone: 'ohne Familie',
+            otherParent: (gender: 'male' | 'female' | 'unknown', name: string) =>
+                `${gender === 'female' ? 'andere Mutter' : gender === 'male' ? 'anderer Vater' : 'anderer Elternteil'} (${name})`,
+            branchesOpen: 'Ganze Vorschau und Zweige ›',
+            branchesSub: 'Zweige',
         },
     },
 };

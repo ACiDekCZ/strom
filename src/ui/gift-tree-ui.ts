@@ -23,8 +23,15 @@ import { formatTreeSize } from '../format.js';
 import { iconSvg } from '../icons.js';
 import { type PrivacyMode } from '../privacy.js';
 import { giftPersonKey, loadGiftMemory } from '../gift-memory.js';
-import { giftNamesLabel } from '../gift-package.js';
-import { GIFT_DEPTHS, type GiftLang } from '../gift-tree.js';
+import { estimateGiftSize, giftNamesLabel } from '../gift-package.js';
+import {
+    GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftBranchCandidates, giftCutIds, giftDepthCounts,
+    type GiftBranch, type GiftCut, type GiftDepth, type GiftLang,
+} from '../gift-tree.js';
+import { ancestorGenerations, descentParentIds } from '../lineage.js';
+import { findRelationship } from '../kinship.js';
+import { giftBranchAdds, giftPreviewModel, type GiftPreviewModel, type GiftPreviewStub } from '../gift-preview-model.js';
+import { giftPreviewCentreOn, renderGiftPreview, type GiftPreviewView } from './gift-preview.js';
 import {
     GIFT_GUIDE_STEPS, giftCanProceed, giftDepthIndex, giftFullSet, giftGoTo, giftGuideStart, giftHasFamily,
     giftIsoDate, giftLivingModel, giftRecipients, giftRemember, giftSuggestedPartner, giftSummary, giftToggleFull,
@@ -38,6 +45,9 @@ export const GIFT_MODAL_ID = 'gift-modal';
 
 /** From this many living people step 3 offers a search over its list (§4 [24]). */
 export const GIFT_LIVING_SEARCH_FROM = 50;
+
+/** From this many people step 2 leads with the package's size and the preview is a scaled-down overview (§3 [21]). */
+export const GIFT_CUT_LARGE_FROM = 600;
 
 /** How the guide is opened: a person (or a couple), the mode, a list (B4), the first step. */
 export interface GiftTreeOpenOptions {
@@ -65,6 +75,32 @@ interface GiftUi {
     living: GiftLivingModel | null;
     mq: MediaQueryList | null;
     onMq: (() => void) | null;
+    /** Step 2 on a phone: the full preview with the branches (its own screen, "… › Branches"). */
+    branchesScreen: boolean;
+    /** Step 2's preview: where it looks (kept over changes of the cut), for which recipients and box. */
+    view: GiftPreviewView | null;
+    viewKey: string;
+    /** The ancestors' stubs unfolded by a click. */
+    expanded: Set<string>;
+    /** Step 2's numbers for the cut now (computed again only when the cut changes). */
+    cutInfo: GiftCutInfo | null;
+    /** The branches' relation words, for these recipients. */
+    relKey: string;
+    rel: Map<PersonId, { kin: string; path: string }>;
+    /** The preview's window listeners (its menu). */
+    dropPreview: (() => void) | null;
+}
+
+interface GiftCutInfo {
+    key: string;
+    ids: Set<PersonId>;
+    branches: GiftBranch[];
+    counts: Record<GiftDepth, number>;
+    noAncestors: boolean;
+    model: GiftPreviewModel | null;
+    modelKey: string;
+    /** The size with photos (only for a large cut). */
+    withPhotos: number | null;
 }
 
 let ui: GiftUi | null = null;
@@ -159,6 +195,97 @@ function avatar(p: Person): HTMLElement {
     return av;
 }
 
+/** A branch's family in or out: an exception only where it differs from what the depth gives. */
+export function giftSetBranch(cut: GiftCut, b: Pick<GiftBranch, 'siblingId' | 'generation'>, on: boolean): GiftCut {
+    const byDepth = cut.depth === 'all' || b.generation <= cut.depth;
+    const branches = { ...cut.branches };
+    if (on === byDepth) delete branches[b.siblingId];
+    else branches[b.siblingId] = on;
+    return { ...cut, branches };
+}
+
+/** Step 2's numbers for the cut now: its people, the branches, the four depths' counts (cached by the cut). */
+function cutInfoOf(u: GiftUi): GiftCutInfo {
+    const cut = u.g.settings.cut;
+    const key = JSON.stringify(cut);
+    if (u.cutInfo && u.cutInfo.key === key) return u.cutInfo;
+    const noAncestors = cut.recipients.every(r => ancestorGenerations(u.data, r).length === 0);
+    const ids = giftCutIds(u.data, cut);
+    u.cutInfo = {
+        key, ids, noAncestors,
+        branches: giftBranchCandidates(u.data, cut),
+        counts: giftDepthCounts(u.data, cut),
+        model: null, modelKey: '',
+        withPhotos: ids.size >= GIFT_CUT_LARGE_FROM
+            ? estimateGiftSize(u.data, { ...u.g.settings, photos: true }, { now: new Date() }).total
+            : null,
+    };
+    return u.cutInfo;
+}
+
+/** A stub's text in the language now. */
+function stubLabel(stub: GiftPreviewStub): string {
+    const T = strings.giftTree.cut;
+    if (stub.kind === 'family') return T.stubFamily(stub.count);
+    if (stub.kind === 'generations') return T.stubGenerations(stub.generations, stub.count);
+    return T.stubSide(stub.surname, stub.count);
+}
+
+/** The preview's drawing for the cut now and the unfolded stubs (cached). */
+function previewModelOf(u: GiftUi, info: GiftCutInfo): GiftPreviewModel {
+    const key = `${[...u.expanded].sort().join(',')}|${getCurrentLanguage()}`;
+    if (!info.model || info.modelKey !== key) {
+        info.model = giftPreviewModel({
+            data: u.data, ids: info.ids, recipients: u.g.settings.cut.recipients,
+            branches: info.branches, expanded: u.expanded, stubLabel,
+        });
+        info.modelKey = key;
+    }
+    return info.model;
+}
+
+/**
+ * The path from a recipient up to an ancestor ('F' through a man, 'M' through
+ * a woman, nearest first), for the relation's words; null when not found.
+ */
+function pathUp(data: StromData, from: PersonId, to: PersonId): string[] | null {
+    const seen = new Map<PersonId, string[]>([[from, []]]);
+    const queue: PersonId[] = [from];
+    for (let i = 0; i < queue.length; i++) {
+        const id = queue[i];
+        const path = seen.get(id)!;
+        if (id === to) return path;
+        for (const p of descentParentIds(data, id)) {
+            if (seen.has(p)) continue;
+            seen.set(p, [...path, data.persons[p]?.gender === 'female' ? 'M' : 'F']);
+            queue.push(p);
+        }
+    }
+    return null;
+}
+
+/** A branch's relation words: the kinship term ("aunt") and the path ("father's sister"). */
+function branchRelation(u: GiftUi, b: GiftBranch): { kin: string; path: string } {
+    const recipients = u.g.settings.cut.recipients;
+    const key = `${recipients.join('|')}|${getCurrentLanguage()}`;
+    if (u.relKey !== key) { u.rel = new Map(); u.relKey = key; }
+    const known = u.rel.get(b.siblingId);
+    if (known) return known;
+    const sib = u.data.persons[b.siblingId];
+    let path = '';
+    let kin = '';
+    for (const r of recipients) {
+        const up = pathUp(u.data, r, b.ancestorId);
+        if (!up) continue;
+        path = strings.treeOverview.remRelation(up, { gender: sib?.gender, half: b.half });
+        kin = findRelationship(u.data, r, b.siblingId)?.term[lang()] ?? '';
+        break;
+    }
+    const out = { kin: kin && kin !== path ? kin : '', path };
+    u.rel.set(b.siblingId, out);
+    return out;
+}
+
 export const giftTreeMethods = uiModule({
     /**
      * Open the guide (`window.Strom.UI.showGiftTree`): for a person (default:
@@ -186,6 +313,8 @@ export const giftTreeMethods = uiModule({
         ui = {
             g, data, focusId, listId: opts.listId, query: '', listWhy: false, closePicker: null,
             summaryKey: '', summary: null, livingKey: '', living: null, mq: null, onMq: null,
+            branchesScreen: false, view: null, viewKey: '', expanded: new Set(), cutInfo: null,
+            relKey: '', rel: new Map(), dropPreview: null,
         };
         if (opts.step && giftCanProceed(g, data)) giftGoTo(g, opts.step);
         // A window turned between phone and wider: the steps drawn again (the greyed list choice, the footer).
@@ -219,6 +348,7 @@ export const giftTreeMethods = uiModule({
         });
         overlay.querySelector('#gift-back')?.addEventListener('click', () => {
             if (!ui) return;
+            if (ui.branchesScreen) { this.giftBranchesScreen(false); return; }
             if (ui.g.step <= 1) this.closeGiftTree();
             else this.giftStep(-1);
         });
@@ -238,6 +368,7 @@ export const giftTreeMethods = uiModule({
     /** Escape: the open person choice first, then the window (nothing made, the settings remembered). */
     giftEscape(): void {
         if (ui?.closePicker) { ui.closePicker(); return; }
+        if (ui?.branchesScreen) { this.giftBranchesScreen(false); return; }
         this.closeGiftTree();
     },
 
@@ -247,6 +378,7 @@ export const giftTreeMethods = uiModule({
         ui = null;
         if (u) {
             u.closePicker?.();
+            u.dropPreview?.();
             if (u.mq && u.onMq) u.mq.removeEventListener('change', u.onMq);
             if (giftCanProceed(u.g, u.data)) giftRemember(u.g, summaryOf(u).persons, new Date());
         }
@@ -272,6 +404,7 @@ export const giftTreeMethods = uiModule({
         ui.closePicker?.();
         giftGoTo(ui.g, step);
         ui.query = '';
+        ui.branchesScreen = false;
         this.giftRender();
         const pane = document.getElementById('gift-pane');
         if (pane) pane.scrollTop = 0;
@@ -293,10 +426,11 @@ export const giftTreeMethods = uiModule({
 
         // Header: ‹ the step before (a phone: ‹ always, from step 1 it closes), the title, "step N of 6: …".
         const back = overlay.querySelector<HTMLButtonElement>('#gift-back');
+        const sub2 = g.step === 2 && u.branchesScreen && isPhone();
         if (back) {
-            back.classList.toggle('is-first', g.step <= 1);
+            back.classList.toggle('is-first', g.step <= 1 && !sub2);
             back.innerHTML = MODAL_BACK_CHEVRON;
-            const label = g.step > 1 ? names[g.step - 2] : strings.buttons.close;
+            const label = sub2 ? names[g.step - 1] : g.step > 1 ? names[g.step - 2] : strings.buttons.close;
             back.appendChild(el('span', 'gift-back-name', g.step > 1 ? label : ''));
             back.setAttribute('aria-label', g.step > 1 ? `${t.guide.back}: ${label}` : strings.buttons.close);
         }
@@ -304,7 +438,7 @@ export const giftTreeMethods = uiModule({
         if (sub) sub.textContent = t.step(g.step, names[g.step - 1]);
         const subBtn = overlay.querySelector('#gift-sub-btn');
         if (subBtn) {
-            subBtn.textContent = `${t.stepPhone(g.step, names[g.step - 1])} `;
+            subBtn.textContent = `${t.stepPhone(g.step, names[g.step - 1])}${sub2 ? ` › ${t.cut.branchesSub}` : ''} `;
             const caret = el('span', 'gift-sub-caret', '▾');
             caret.setAttribute('aria-hidden', 'true');
             subBtn.appendChild(caret);
@@ -345,8 +479,11 @@ export const giftTreeMethods = uiModule({
         const pane = overlay.querySelector<HTMLElement>('#gift-pane');
         if (pane) {
             const top = pane.scrollTop;
+            u.dropPreview?.();
+            u.dropPreview = null;
             pane.replaceChildren();
             if (g.step === 1) this.giftRenderForWhom(pane);
+            else if (g.step === 2) this.giftRenderCut(pane);
             else if (g.step === 3) this.giftRenderLiving(pane);
             else pane.appendChild(el('h3', 'gift-h3', names[g.step - 1]));
             pane.scrollTop = top;
@@ -829,5 +966,311 @@ export const giftTreeMethods = uiModule({
         }
         if (!householdEnded && rows.some(x => x.household)) householdNote();
         host.appendChild(list);
+    },
+
+    // ---- Step 2: Who is in it (§3) ----
+
+    /** The depth of the ancestors' families, the preview of the cut, the branches (a phone: the branches on their own screen). */
+    giftRenderCut(pane: HTMLElement): void {
+        const u = ui!;
+        const s = u.g.settings;
+        const T = strings.giftTree.cut;
+        const G = strings.giftTree.guide;
+        const phone = isPhone();
+        const info = cutInfoOf(u);
+        const sum = summaryOf(u);
+        // The view and the unfolded stubs belong to these recipients; the view also to this screen.
+        const rk = s.cut.recipients.join('|');
+        const viewKey = `${rk}#${phone ? (u.branchesScreen ? 'sub' : 'phone') : 'wide'}`;
+        if (u.viewKey !== viewKey) {
+            if (!u.viewKey.startsWith(`${rk}#`)) u.expanded = new Set();
+            u.view = null;
+            u.viewKey = viewKey;
+        }
+
+        if (phone && u.branchesScreen) {
+            const wrap = el('div', 'gift-cut-sub');
+            const host = el('div', 'gift-prev-host');
+            wrap.appendChild(host);
+            wrap.appendChild(el('p', 'gift-note gift-br-note', T.branchesNoteShort));
+            wrap.appendChild(this.giftBranchList(info));
+            pane.appendChild(wrap);
+            this.giftMountPreview(host, info, sum, false);
+            return;
+        }
+
+        const cols = el('div', 'gift-cols is-s2');
+        const left = el('div', 'gift-col gift-cut');
+        if (info.ids.size >= GIFT_CUT_LARGE_FROM) {
+            // §3 [21]: a cut this big leads with what the package would be.
+            const lead = el('p', 'structure-who-lead gift-cut-lead');
+            lead.innerHTML = `<b>${esc(T.count(info.ids.size))}</b>${esc(T.largeLead(
+                `${sum.generations} ${G.generations(sum.generations)}`,
+                `${sum.living.toLocaleString(lang())} ${G.living(sum.living)}`,
+                formatTreeSize(info.withPhotos ?? sum.bytes, lang()),
+            ))}`;
+            left.appendChild(lead);
+        }
+        const head = el('div', 'gift-cut-head');
+        head.append(el('h3', 'gift-h3', T.depthH), el('span', 'gift-faint gift-cut-hint', T.depthHint));
+        left.appendChild(head);
+        left.appendChild(phone ? this.giftDepthRows(info) : this.giftDepthSeg(info));
+
+        // The sentence under the depth: no ancestors [19], every choice the same [20], else what is never in it.
+        const same = !info.noAncestors && GIFT_DEPTHS.every(d => info.counts[d] === info.counts.all);
+        let note: string = T.outLine;
+        if (info.noAncestors) {
+            const names = s.cut.recipients.map(id => realPerson(u.data, id)).filter((p): p is Person => !!p);
+            const who = names.length > 1 ? 'pair' : names[0]?.gender === 'female' ? 'f' : 'm';
+            note = T.noAncestors(giftNamesLabel(lang(), names.map(p => shownName(p) || '?')), who);
+        } else if (same) note = `${T.sameCounts} ${T.outLine}`;
+        const noteEl = el('p', 'gift-note gift-cut-note', note);
+        noteEl.id = 'gift-cut-note';
+        left.appendChild(noteEl);
+
+        const host = el('div', 'gift-prev-host');
+        left.appendChild(host);
+        if (phone) {
+            const open = button('secondary gift-br-open', T.branchesOpen, () => this.giftBranchesScreen(true));
+            open.dataset.gk = 'branches-open';
+            left.appendChild(open);
+        }
+        cols.appendChild(left);
+
+        if (!phone) {
+            const right = el('div', 'gift-col gift-branches');
+            right.appendChild(el('h3', 'gift-h3', T.branchesH));
+            right.appendChild(el('p', 'gift-note gift-br-note', T.branchesNote));
+            right.appendChild(this.giftBranchList(info));
+            cols.appendChild(right);
+        }
+        pane.appendChild(cols);
+        this.giftMountPreview(host, info, sum, phone);
+    },
+
+    /** The depth as a segment of four, each with its count (wider than a phone). */
+    giftDepthSeg(info: GiftCutInfo): HTMLElement {
+        const u = ui!;
+        const T = strings.giftTree.cut;
+        const cut = u.g.settings.cut;
+        const seg = el('div', 'sel-seg gift-seg');
+        seg.setAttribute('role', 'radiogroup');
+        seg.setAttribute('aria-label', T.depthH);
+        if (info.noAncestors) seg.setAttribute('aria-disabled', 'true');
+        GIFT_DEPTHS.forEach((d, i) => {
+            const b = el('button', 'sel-opt gift-seg-o');
+            b.type = 'button';
+            b.dataset.selForm = 'seg';
+            b.dataset.depth = String(d);
+            b.dataset.gk = `depth-${i}`;
+            b.setAttribute('role', 'radio');
+            const on = !info.noAncestors && cut.depth === d;
+            b.setAttribute('aria-checked', String(on));
+            b.tabIndex = on || (info.noAncestors && i === 0) ? 0 : -1;
+            if (info.noAncestors) b.setAttribute('aria-disabled', 'true');
+            b.append(el('span', 'gift-seg-l', T.depth[i]), el('span', 'gift-seg-n', info.noAncestors ? '—' : T.count(info.counts[d])));
+            b.addEventListener('click', () => this.giftSetDepth(d));
+            seg.appendChild(b);
+        });
+        seg.addEventListener('keydown', (e) => this.giftDepthKey(e));
+        return seg;
+    },
+
+    /** A phone: the depth as rows with a dot, what each means and its count. */
+    giftDepthRows(info: GiftCutInfo): HTMLElement {
+        const u = ui!;
+        const T = strings.giftTree.cut;
+        const cut = u.g.settings.cut;
+        const group = el('div', 'structure-choice gift-depths');
+        group.setAttribute('role', 'radiogroup');
+        group.setAttribute('aria-label', T.depthH);
+        if (info.noAncestors) group.setAttribute('aria-disabled', 'true');
+        GIFT_DEPTHS.forEach((d, i) => {
+            const b = el('button', 'sel-opt gift-depth');
+            b.type = 'button';
+            b.setAttribute('role', 'radio');
+            b.dataset.depth = String(d);
+            b.dataset.gk = `depth-${i}`;
+            const on = !info.noAncestors && cut.depth === d;
+            b.setAttribute('aria-checked', String(on));
+            b.tabIndex = on || (info.noAncestors && i === 0) ? 0 : -1;
+            if (info.noAncestors) b.setAttribute('aria-disabled', 'true');
+            const dot = el('span', 'structure-dot');
+            dot.setAttribute('aria-hidden', 'true');
+            const text = el('span', 'option-text');
+            text.append(
+                el('span', 'option-title', d === GIFT_DEFAULT_DEPTH ? T.defaultMark(T.depth[i]) : T.depth[i]),
+                el('span', 'option-desc', T.depthDesc[i]),
+            );
+            b.append(dot, text, el('b', 'gift-depth-n', info.noAncestors ? '—' : T.count(info.counts[d])));
+            b.addEventListener('click', () => this.giftSetDepth(d));
+            group.appendChild(b);
+        });
+        group.addEventListener('keydown', (e) => this.giftDepthKey(e));
+        return group;
+    },
+
+    /** Arrows move the depth (not without ancestors). */
+    giftDepthKey(e: KeyboardEvent): void {
+        const u = ui;
+        if (!u || !['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+        if (cutInfoOf(u).noAncestors) return;
+        e.preventDefault();
+        const at = GIFT_DEPTHS.indexOf(u.g.settings.cut.depth);
+        const next = GIFT_DEPTHS[(at + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : GIFT_DEPTHS.length - 1)) % GIFT_DEPTHS.length];
+        this.giftSetDepth(next);
+        document.querySelector<HTMLElement>(`#${GIFT_MODAL_ID} [data-gk="depth-${GIFT_DEPTHS.indexOf(next)}"]`)?.focus({ preventScroll: true });
+    },
+
+    /** Change the depth: the preview, the counts and the summary follow. */
+    giftSetDepth(depth: GiftDepth): void {
+        const u = ui;
+        if (!u || cutInfoOf(u).noAncestors || u.g.settings.cut.depth === depth) return;
+        u.g.settings.cut = { ...u.g.settings.cut, depth };
+        this.giftRender();
+    },
+
+    /** A branch's family in or out of the cut. */
+    giftSetBranch(b: GiftBranch, on: boolean): void {
+        const u = ui;
+        if (!u) return;
+        u.g.settings.cut = giftSetBranch(u.g.settings.cut, b, on);
+        this.giftRender();
+    },
+
+    /** The phone's own screen with the full preview and the branches (open), or back to step 2 (closed). */
+    giftBranchesScreen(open: boolean): void {
+        const u = ui;
+        if (!u) return;
+        u.closePicker?.();
+        u.branchesScreen = open;
+        this.giftRender();
+        const pane = document.getElementById('gift-pane');
+        if (pane) pane.scrollTop = 0;
+        if (!open) document.querySelector<HTMLElement>(`#${GIFT_MODAL_ID} [data-gk="branches-open"]`)?.focus({ preventScroll: true });
+    },
+
+    /** The siblings of the ancestors by generation: a box (their family in), the relation, the counts. */
+    giftBranchList(info: GiftCutInfo): HTMLElement {
+        const u = ui!;
+        const T = strings.giftTree.cut;
+        const list = el('div', 'gift-brl');
+        if (!info.branches.length) {
+            list.appendChild(el('p', 'gift-faint gift-br-none', T.noBranches));
+            return list;
+        }
+        let gen = -1;
+        let group: HTMLElement | null = null;
+        for (const b of info.branches) {
+            if (b.generation !== gen || !group) {
+                gen = b.generation;
+                const title = el('div', 'gift-br-g', T.branchGroup(gen));
+                title.id = `gift-br-g-${gen}`;
+                group = el('div', 'gift-br-list');
+                group.setAttribute('role', 'group');
+                group.setAttribute('aria-labelledby', title.id);
+                list.append(title, group);
+            }
+            const p = u.data.persons[b.siblingId];
+            const has = giftBranchAdds(b) > 0;
+            const row = el(has ? 'label' : 'div', 'gift-br-r' + (has && !b.included ? ' is-off' : ''));
+            row.dataset.id = b.siblingId;
+            if (has) {
+                const input = el('input');
+                input.type = 'checkbox';
+                input.checked = b.included;
+                input.dataset.gk = `br-${b.siblingId}`;
+                input.addEventListener('change', () => this.giftSetBranch(b, input.checked));
+                row.appendChild(input);
+            } else {
+                row.appendChild(el('span', 'gift-br-x'));
+            }
+            const text = el('span', 'gift-br-t');
+            text.appendChild(el('span', 'gift-br-n', p ? shownName(p) || '?' : '?'));
+            const rel = branchRelation(u, b);
+            const parts = [rel.kin, rel.path].filter(Boolean);
+            const other = b.half && b.otherParentId ? u.data.persons[b.otherParentId] : undefined;
+            if (other) parts.push(T.otherParent(other.gender ?? 'unknown', shownName(other) || '?'));
+            if (parts.length) text.appendChild(el('span', 'gift-br-s', parts.join(' · ')));
+            row.appendChild(text);
+            const count = el('span', 'gift-br-c');
+            count.innerHTML = !has
+                ? `<b>${b.aloneCount}</b> · ${esc(T.branchAlone)}`
+                : b.included
+                    ? `<b>${b.familyCount}</b> ${esc(T.branchWith)}`
+                    : `<b>${b.aloneCount}</b> · ${esc(T.branchWithN(b.familyCount))}`;
+            row.appendChild(count);
+            group!.appendChild(row);
+        }
+        return list;
+    },
+
+    /** Draw the preview into its place (`still`: the phone's small one, no controls). */
+    giftMountPreview(host: HTMLElement, info: GiftCutInfo, sum: GiftSummary, still: boolean): void {
+        const u = ui!;
+        const T = strings.giftTree.cut;
+        const G = strings.giftTree.guide;
+        const model = previewModelOf(u, info);
+        const n = info.ids.size;
+        const num = (x: number): string => x.toLocaleString(lang());
+        const top = n >= GIFT_CUT_LARGE_FROM
+            ? `<b>${num(n)}</b> ${esc(G.persons(n))} · ${esc(T.previewMoves)}`
+            : still
+                ? `<b>${num(n)}</b> ${esc(G.persons(n))} · ${sum.generations} ${esc(G.generations(sum.generations))}`
+                : `<b>${num(n)}</b> ${esc(G.persons(n))} · ${sum.generations} ${esc(G.generations(sum.generations))} · <b>${num(sum.living)}</b> ${esc(G.living(sum.living))}`;
+        const branchOf = new Map(info.branches.map(b => [b.siblingId, b]));
+        u.dropPreview = renderGiftPreview(host, {
+            model, topHtml: top, label: T.previewLabel, still,
+            view: u.view,
+            onView: (v) => { if (ui) ui.view = v; },
+            card: (id) => {
+                const p = u.data.persons[id];
+                return {
+                    name: p ? shownName(p) || '?' : '?',
+                    years: p ? yearsOf(p) : '',
+                    initials: p ? personInitials(p.firstName, p.lastName) : '?',
+                    female: p?.gender === 'female',
+                };
+            },
+            stubTitle: (stub) => {
+                if (stub.kind !== 'family') return `${T.stubOpenLabel} (${stub.count})`;
+                const p = u.data.persons[stub.personId];
+                return T.stubFamilyLabel(p ? shownName(p) || '?' : '?', stub.count);
+            },
+            onStub: (stub) => {
+                const b = stub.kind === 'family' ? branchOf.get(stub.personId) : undefined;
+                if (b) { this.giftSetBranch(b, true); return; }
+                if (stub.kind !== 'family') { u.expanded.add(stub.key); this.giftRender(); }
+            },
+            menu: (id) => {
+                const p = u.data.persons[id];
+                if (!p) return null;
+                const name = shownName(p) || '?';
+                const items: Array<{ label: string; run: () => void }> = [];
+                const b = branchOf.get(id);
+                const adds = b ? giftBranchAdds(b) : 0;
+                if (b && adds > 0) {
+                    if (b.included) {
+                        const rel = branchRelation(u, b);
+                        const who = rel.kin ? `${rel.kin} ${name}` : name;
+                        items.push({ label: T.menuRemove(who, adds), run: () => this.giftSetBranch(b, false) });
+                    } else {
+                        items.push({ label: T.menuAdd(adds), run: () => this.giftSetBranch(b, true) });
+                    }
+                }
+                items.push({
+                    label: T.menuFocus,
+                    run: () => {
+                        const stage = host.querySelector<HTMLElement>('.gift-prev-stage');
+                        if (!ui?.view || !stage) return;
+                        ui.view = giftPreviewCentreOn(model, ui.view, id, stage.clientWidth, stage.clientHeight);
+                        this.giftRender();
+                    },
+                });
+                return { title: name, items };
+            },
+            onMenu: (close) => { if (ui) ui.closePicker = close; },
+            texts: { zoomIn: T.zoomIn, zoomOut: T.zoomOut, fit: T.zoomFit, fitLabel: T.zoomFitLabel },
+        });
     },
 });
