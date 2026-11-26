@@ -65,7 +65,7 @@ import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { fileLooksLikeShowcase, showcaseLangParam } from '../showcase-download.js';
 import { returnFocusAfterViewer } from './sources.js';
-import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink, type ResearchLinkMarkParams } from '../research-link.js';
+import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink, researchLinkActionOf, type ResearchLinkMarkParams } from '../research-link.js';
 import { deviceEventSource, isDeviceTunnelled } from '../device/device-bridge.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn, waitingGainOn } from '../research-link.js';
 import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
@@ -109,8 +109,9 @@ import { safeFileName } from '../filenames.js';
 import {
     noteResearchLinks, announcedResearchLinks, announcedResearchScheme, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
     noteResearchBridge, noteResearchBridgeStatus, researchTreeOfStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
-    storedResearchBridge,
+    storedResearchBridge, isBridgelessWindow,
 } from '../research-device.js';
+import { satResearchForward } from '../windows/window-sat-research.js';
 import { rememberBridgeStatus, researchSendMode, researchStatusNow, researchMediaFirstAgain, researchBridgeDownNow } from './research-sync-ui.js';
 import { openResearchBusy, withHandoff, type OpenBusyResult, type OpenBusyOpts } from './research-open-busy.js';
 import { endResearchAdoptWait } from './research-adopt-ui.js';
@@ -3394,6 +3395,19 @@ export const researchUiMethods = uiModule({
             this.handOverResearchLink(url);
             this.awaitResearchVersion();
             return Promise.resolve('opened');
+        }
+        // A window of its own (no bridge here): the main window builds the link for its tree and hands it over, its
+        // bridge proving it (no false "did not open" here); the element's state a moment, the main window stays where it is.
+        const main = isBridgelessWindow() ? satResearchForward() : null;
+        const relayed = main?.mainOpen() ? researchLinkActionOf(url) : null;
+        if (main && relayed) {
+            const args = { ...relayed, ...(kind === 'agent' ? { kind: 'agent' as const } : {}) };
+            return openResearchBusy(el ?? null, url, { ...opts, agent: kind === 'agent', relayed: true }, {
+                handOver: () => main.run('research-link', args, false),
+                ask: async () => null,
+                statusNow: () => null,
+                bridgeDown: () => false,
+            });
         }
         // A device of the home network: the agent's work starts through the gateway (device/agent), its own
         // confirmation and state (device-agent-ui.ts); the computer opens the link as before.

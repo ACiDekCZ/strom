@@ -984,6 +984,80 @@ export function houseImportLink(tree: string, scheme: string = DEFAULT_RESEARCH_
     return researchSchemeUrl('house', { tree, houseDo: 'import' }, scheme);
 }
 
+/** Each action's query words and the parameter of `researchSchemeUrl` each one comes from (`tree` aside). */
+const LINK_QUERY_PARAMS: Partial<Record<ResearchLinkAction, Readonly<Record<string, keyof ResearchLinkParams>>>> = {
+    live: { do: 'liveDo' },
+    excerpt: { source: 'source', clip: 'clip' },
+    chat: { research: 'research', person: 'person' },
+    direction: { id: 'research', do: 'directionDo' },
+    finish: { run: 'run', session: 'session' },
+    archive: { host: 'host' },
+    experiment: { name: 'experiment', do: 'experimentDo' },
+    history: { place: 'place', do: 'historyDo' },
+    house: { do: 'houseDo' },
+    'history-kinds': { scope: 'kindsScope', kinds: 'kinds', inherit: 'inherit' },
+    hypothesis: { id: 'hypothesis', do: 'hypothesisDo', variant: 'variant' },
+    hypotheses: { do: 'hypothesesDo', ids: 'ids', decide: 'decide' },
+    'history-align': { prune: 'prune' },
+    work: { do: 'workDo', n: 'n', task: 'workTasks', research: 'research', agent: 'agent' },
+    book: { id: 'book', do: 'bookDo' },
+    places: { do: 'placesDo', place: 'place' },
+    fixes: { id: 'fix', do: 'fixDo' },
+    media: { sha: 'sha' },
+    task: { task: 'task', do: 'taskDo' },
+    conflict: { id: 'conflict', do: 'conflictDo', take: 'take' },
+    story: { person: 'person', partner: 'partner', do: 'storyDo' },
+    'sync-undo': { intake: 'intake' },
+    review: { person: 'person', scope: 'scope' },
+    research: { person: 'person', direction: 'direction' },
+};
+
+/** Parameters given as a comma-separated list in the link. */
+const LINK_LIST_PARAMS: ReadonlySet<string> = new Set(['ids', 'workTasks']);
+
+/** A link's query as a set of words (order aside); null when a word comes twice. */
+function linkQueryOf(u: URL): Map<string, string> | null {
+    const out = new Map<string, string>();
+    for (const [k, v] of u.searchParams) {
+        if (out.has(k)) return null;
+        out.set(k, v);
+    }
+    return out;
+}
+
+/**
+ * A research link read back as its action and parameters (`researchSchemeUrl`'s, without the tree): what
+ * another window can build again for its own open tree, never the address itself. Only a link that
+ * `researchSchemeUrl` would build exactly so (same action, same words) is read; null for anything else
+ * (another scheme's page, an unknown or repeated word, a `new` link with its token).
+ */
+export function researchLinkActionOf(url: string): { link: ResearchLinkAction; params: Record<string, string | string[]> } | null {
+    let u: URL;
+    try { u = new URL(url); } catch { return null; }
+    const link = u.host as ResearchLinkAction;
+    if (!(RESEARCH_LINK_ACTIONS as readonly string[]).includes(link) || u.pathname && u.pathname !== '/' || u.hash) return null;
+    const scheme = u.protocol.replace(/:$/, '');
+    const query = linkQueryOf(u);
+    const tree = query?.get('tree');
+    if (!query || !tree) return null;
+    const names = LINK_QUERY_PARAMS[link] ?? {};
+    const params: Record<string, string | string[]> = {};
+    for (const [k, v] of query) {
+        if (k === 'tree') continue;
+        const name = names[k];
+        if (!name) return null;
+        params[name] = LINK_LIST_PARAMS.has(name) ? v.split(',') : v;
+    }
+    // Built again from what was read: the same link (its words in any order), or it is not one of ours.
+    const again = researchSchemeUrl(link, { tree, ...params } as unknown as ResearchLinkParams, scheme);
+    let back: URL;
+    try { back = new URL(again ?? ''); } catch { return null; }
+    const backQuery = linkQueryOf(back);
+    if (back.protocol !== u.protocol || back.host !== u.host || !backQuery || backQuery.size !== query.size) return null;
+    for (const [k, v] of query) if (backQuery.get(k) !== (k === 'tree' ? v.toLowerCase() : v)) return null;
+    return { link, params };
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Longest tree name taken from a file or a bridge (longer is cut). */
 const MAX_NAME = 120;

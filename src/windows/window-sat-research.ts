@@ -15,6 +15,7 @@
  */
 
 import type { PlaceCheckFlag, PlacesIdentifyBody } from '../places-bridge.js';
+import { researchLinkActionOf } from '../research-link.js';
 
 /** What a satellite's UI needs from its client to have an action run in the main window. */
 export interface SatResearchForward {
@@ -209,21 +210,9 @@ export interface RelayedResearchLink {
  * them: the action and its parameters, never the address itself (null: not one of these links).
  */
 export function relayedPlacesLink(url: string): RelayedResearchLink | null {
-    let u: URL;
-    try { u = new URL(url); } catch { return null; }
-    const q = u.searchParams;
-    const one = (k: string): string | null => q.getAll(k).length === 1 ? q.get(k) : null;
-    if (u.host === 'places') {
-        if (one('do') !== 'run') return null;
-        const place = one('place');
-        if (q.has('place') && !place) return null;
-        return { link: 'places', params: { placesDo: 'run', ...(place ? { place } : {}) } };
-    }
-    if (u.host === 'fixes') {
-        const fix = one('id');
-        if (q.has('id') && !fix) return null;
-        if (q.has('do') && (!fix || one('do') !== 'undo')) return null;
-        return { link: 'fixes', params: { ...(fix ? { fix } : {}), ...(q.has('do') ? { fixDo: 'undo' } : {}) } };
-    }
-    return null;
+    const r = researchLinkActionOf(url);
+    if (!r || r.link !== 'places' && r.link !== 'fixes') return null;
+    const params: Record<string, string> = {};
+    for (const [k, v] of Object.entries(r.params)) if (typeof v === 'string') params[k] = v;
+    return { link: r.link, params };
 }
