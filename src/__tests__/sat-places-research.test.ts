@@ -10,6 +10,7 @@
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { DataManager } from '../data.js';
+import { strings } from '../strings.js';
 import { TreeManager } from '../tree-manager.js';
 import { setBridgelessWindow } from '../research-device.js';
 import { setMirroredResearchStatus } from '../ui/research-sync-ui.js';
@@ -28,6 +29,7 @@ const STATUS = { treeId: RID, features: ['places.identify'] } as unknown as Live
 
 type Ui = {
     placesResearchContext(): PlacesResearchContext;
+    placesResearchNote(access: PlacesResearchContext['stepAccess']): string;
     mapBarAction(action: 'research' | 'confirm'): void;
     openWaitingPlaces(place?: string): void;
     showToast: ReturnType<typeof vi.fn>;
@@ -147,13 +149,16 @@ describe('place research actions in a satellite window', () => {
             expect(u.showPlacesManager).not.toHaveBeenCalled();
         });
 
-        it('with the main window closed: as before (where the steps go)', () => {
+        it('with the main window closed: nothing sent, the note says the actions go through the main window (not another computer)', () => {
             satellite(true);
             const f = forward(false);
             const u = ui();
             u.mapBarAction('research');
             expect(f.run).not.toHaveBeenCalled();
             expect(u.showToast).toHaveBeenCalledTimes(1);
+            expect(u.showToast).toHaveBeenCalledWith(strings.places.dialog.mainClosed, 8000);
+            expect(u.placesResearchContext().mainClosed).toBe(true);
+            expect(u.placesResearchNote('elsewhere')).toBe(strings.places.dialog.mainClosed);
         });
 
         it('with the main window\'s bridge down: as before (where the steps go), nothing sent', () => {
@@ -163,6 +168,8 @@ describe('place research actions in a satellite window', () => {
             u.mapBarAction('research');
             expect(f.run).not.toHaveBeenCalled();
             expect(u.showToast).toHaveBeenCalledTimes(1);
+            expect(u.showToast).toHaveBeenCalledWith(strings.places.dialog.elsewhere, 8000);
+            expect(u.placesResearchContext().mainClosed).toBe(false);
         });
 
         it('the main window\'s own map is unchanged: Places here with the preview', () => {

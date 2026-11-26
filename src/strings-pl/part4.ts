@@ -370,6 +370,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
             ctxNone: (n: number) => `Mapa nie znalazła: ${nPl(n, 'miejsce', 'miejsca', 'miejsc')}, albo nikt jeszcze nie szukał.`,
             ctxCheck: 'Kontrola w aplikacji (bez sieci) znalazła podejrzane położenie. Nic nie zmienia się samo.',
             elsewhere: 'Odszukać i sprawdzić można w badaniu na komputerze, na którym jest uruchomione. Stan miejsc przenosi się tutaj razem z drzewem.',
+            mainClosed: 'Działania badania idą przez okno główne aplikacji; okno główne nie jest teraz otwarte.',
             phoneLine: 'Odszukać i sprawdzić można na komputerze z badaniem. Na pytania o miejsca można odpowiedzieć także tutaj, w zakładce Czeka.',
             answer: 'Odpowiedz w zakładce Czeka ›',
             why: 'Dlaczego tutaj',

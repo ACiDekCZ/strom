@@ -37,6 +37,11 @@ export interface PlacesResearchContext {
      * with the main window closed they do not go from here (where they go instead).
      */
     stepAccess: PlacesResearchAccess;
+    /**
+     * A satellite whose steps would go through the main window, which is not open now: stepAccess
+     * says 'elsewhere', and the note says where they go (the main window), not another computer.
+     */
+    mainClosed: boolean;
     /** The research's place steps go from here (stepAccess 'ok'). */
     canResearch: boolean;
     /** What a refusal's `places` link is checked against. */
@@ -62,22 +67,23 @@ export const placesResearchMethods = uiModule({
         const access = placesResearchAccess({
             hasResearch: !!researchId, bridgeLocal: up && (viaMain || !!base), features, phoneLayout: isPhoneBar(),
         });
-        const stepAccess: PlacesResearchAccess = viaMain && access === 'ok' && !satResearchForward()?.mainOpen() ? 'elsewhere' : access;
+        const mainClosed = viaMain && access === 'ok' && !satResearchForward()?.mainOpen();
+        const stepAccess: PlacesResearchAccess = mainClosed ? 'elsewhere' : access;
         return {
-            researchId, base, features, access, viaMain, stepAccess, canResearch: stepAccess === 'ok',
+            researchId, base, features, access, viaMain, stepAccess, mainClosed, canResearch: stepAccess === 'ok',
             linkCheck: researchId ? { tree: researchId, scheme: announcedResearchScheme() } : null,
         };
     },
 
     /**
      * Where the research's place steps go when they do not go here ('' when they do, or without a
-     * research): its computer, the computer (a phone), a newer research. The Places dialog's context
-     * line says the same.
+     * research): its computer, the computer (a phone), a newer research; in a satellite with the main
+     * window closed, the main window. The Places dialog's context line says the same.
      */
     placesResearchNote(access: PlacesResearchAccess): string {
         const d = strings.places.dialog;
         switch (access) {
-            case 'elsewhere': return d.elsewhere;
+            case 'elsewhere': return this.placesResearchContext().mainClosed ? d.mainClosed : d.elsewhere;
             case 'phone': return d.phoneLine;
             case 'old': return strings.places.research.oldResearch;
             default: return '';

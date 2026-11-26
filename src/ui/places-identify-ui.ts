@@ -365,7 +365,7 @@ export const placesIdentifyMethods = uiModule({
                 ${act ? `<button type="button" class="places-context-act ${act.cls}"${act.title ? ` title="${this.escapeHtml(act.title)}"` : ''}>${researchActionLabel(act.label, act.mark ?? 'none')}</button>` : ''}
             </div>`;
         switch (kind) {
-            case 'elsewhere': return line('ⓘ', 'muted', d.elsewhere);
+            case 'elsewhere': return line('ⓘ', 'muted', this.placesResearchNote('elsewhere'));
             case 'phone': return line('ⓘ', 'muted', d.phoneLine);
             case 'old': return line('ⓘ', 'muted', r.oldResearch);
             case 'confirm': return line('?', 'warn', d.ctxConfirm, { label: d.openWaiting(summary.confirm), cls: 'is-primary' });
