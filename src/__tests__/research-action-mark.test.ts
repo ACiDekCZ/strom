@@ -10,7 +10,7 @@ import {
     RESEARCH_LINK_ACTIONS, RESEARCH_LINK_MARKS, RESEARCH_ACTION_MARKS, researchLinkMark, researchUrlMark, researchSchemeUrl,
     RESEARCH_BRIDGE_ACTIONS, RESEARCH_BRIDGE_MARKS, researchBridgeMark, setResearchDeviceState, researchDeviceAllows,
     researchDeviceMark, deviceAllows, deviceActionOfBridgeWrite, noteResearchDeviceRefused, researchDeviceLinkAllows,
-    researchDeviceAgentLink, DEVICE_AGENT_START, DEVICE_AGENT_BRIDGE,
+    researchDeviceAgentLink, DEVICE_AGENT_START, DEVICE_AGENT_BRIDGE, houseImportLink,
 } from '../research-link.js';
 import { researchActionLabel, researchBridgeActionLabel, researchBridgeAgentLabel, researchLinkFlags } from '../ui/research-open-mark.js';
 import { syncActionMark } from '../ui/research-sync-ui.js';
@@ -51,6 +51,19 @@ describe('the map of research actions to their marks', () => {
         expect(researchLinkMark('fixes')).toBe('terminal');
         expect(researchLinkMark('fixes', { fixPaid: true })).toBe('agent');
         expect(researchLinkMark('fixes', { fixPaid: true, fixDo: 'undo' })).toBe('terminal');
+    });
+
+    it('marks a house\'s history (spec 030 §2.10): asked for is the agent\'s, taking one\'s own research over only the terminal', () => {
+        expect(researchLinkMark('house')).toBe('agent');
+        expect(researchLinkMark('house', { houseDo: 'search' })).toBe('agent');
+        expect(researchLinkMark('house', { houseDo: 'import' })).toBe('terminal');
+        const link = houseImportLink(TREE)!;
+        expect(link).toBe(`strom-research://house?tree=${TREE}&do=import`);
+        expect(researchUrlMark(link)).toBe('terminal');
+        expect(researchLinkFlags(link)).toEqual({ research: true, ai: false });
+        expect(houseImportLink(TREE, 'strom-research-beta')).toBe(`strom-research-beta://house?tree=${TREE}&do=import`);
+        expect(houseImportLink('not a tree')).toBeNull();
+        expect(researchSchemeUrl('house', { tree: TREE })).toBeNull();
     });
 
     it('marks the state block\'s actions by the link they launch', () => {

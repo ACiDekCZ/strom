@@ -62,7 +62,7 @@ export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
     'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes', 'doctor', 'places',
-    'history-kinds', 'history-align', 'hypothesis', 'hypotheses', 'work', 'book',
+    'history-kinds', 'history-align', 'hypothesis', 'hypotheses', 'work', 'book', 'house',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -99,6 +99,9 @@ export const RESEARCH_LINK_MARKS: Readonly<Record<ResearchLinkAction, ResearchAc
     // Work on the queue (spec 052 §5): the terminal shows what runs and starts the agent's sessions on a yes;
     // "Process now" after a try of the verification (`do=tasks&task=`, spec 065 K7.2) the same.
     work: 'agent',
+    // A house's history (spec 030 §2.10): asked for, the terminal says the estimate and the agent works at once on a
+    // yes; taking one's own research over (`do=import`) only asks for its files there — `researchLinkMark` refines it.
+    house: 'agent',
 };
 
 /** What a link asks of the research besides its action (the `do=` of a task, a conflict, an experiment, a fix). */
@@ -109,6 +112,7 @@ export interface ResearchLinkMarkParams {
     fixDo?: string;
     /** `fixes`: the fix's own word that its agent reads again and costs (`paid` in the bridge's list; not in the link). */
     fixPaid?: boolean;
+    houseDo?: string;
 }
 
 /** The mark of an action of the research, by its link (see `ResearchActionMark`). */
@@ -129,6 +133,8 @@ function computerLinkMark(action: ResearchLinkAction, p: ResearchLinkMarkParams)
     if (action === 'experiment' && p.experimentDo === 'off') return 'none';
     // A fix whose agent reads again (paid) starts its work in the terminal on a yes; its undo does not.
     if (action === 'fixes' && p.fixPaid && p.fixDo !== 'undo') return 'agent';
+    // Taking one's own research of a house over: the terminal asks for the files, no agent works on the click.
+    if (action === 'house' && p.houseDo === 'import') return 'terminal';
     return RESEARCH_LINK_MARKS[action];
 }
 
@@ -168,7 +174,7 @@ export function researchUrlMark(url: string): ResearchActionMark | null {
     if (!m || !(RESEARCH_LINK_ACTIONS as readonly string[]).includes(m[1])) return null;
     const action = m[1] as ResearchLinkAction;
     const what = new URLSearchParams(m[2] ?? '').get('do') ?? undefined;
-    return researchLinkMark(action, { taskDo: what, conflictDo: what, experimentDo: what, fixDo: what });
+    return researchLinkMark(action, { taskDo: what, conflictDo: what, experimentDo: what, fixDo: what, houseDo: what });
 }
 
 /**
@@ -315,6 +321,8 @@ const DEVICE_ALLOWS: Readonly<Record<ResearchDeviceAction, boolean | string>> = 
     open: false, review: false, research: false, new: false, update: false, sessions: false,
     story: false, 'sync-undo': false, setup: false, finish: false, archive: false, seal: false, experiment: false,
     doctor: false, 'history-kinds': false, 'history-align': false, 'run-limit': false,
+    // A house's research taken over from files on the computer (spec 030 §2.8): only there.
+    house: false,
     devices: false, 'research-tools': false, 'tree-settings': false, 'load-version': false, 'direction-new': false,
 };
 
@@ -594,6 +602,8 @@ export interface ResearchLinkParams {
     place?: string;
     /** `history`: search the place's history (the research's terminal says the estimate and asks). */
     historyDo?: 'search';
+    /** `house`: take one's own research of houses over (spec 030 §2.8; the terminal asks for the files). */
+    houseDo?: 'import';
     /** `fixes`: one tree fix by its id ("street-places"); without it the list of fixes. */
     fix?: string;
     /** `fixes`: ask to undo what the fix fixed (only with `fix`); the research asks in its terminal. */
@@ -846,6 +856,9 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             const place = typeof p.place === 'string' && /^L\d{1,7}$/.test(p.place) ? p.place : null;
             return place && p.historyDo === 'search' ? `${base}&place=${place}&do=search` : null;
         }
+        case 'house':
+            // spec 030 §2.8: only the fixed `do=import` in part 1 (the request of a house comes with part 2).
+            return p.houseDo === 'import' ? `${base}&do=import` : null;
         case 'history-kinds': {
             // spec 035: a fixed scope and kinds from the fixed list (or inherit) — nothing else.
             if (p.kindsScope !== 'tree' && p.kindsScope !== 'default') return null;
@@ -959,6 +972,16 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         }
     }
     return null;
+}
+
+/**
+ * The link that takes one's own research of houses over (spec 030 §2.8,
+ * `strom-research://house?tree=…&do=import`): the research's terminal asks
+ * for the files on the computer and runs `strom house import` (terminal mark,
+ * no agent on the click). Null without a valid tree.
+ */
+export function houseImportLink(tree: string, scheme: string = DEFAULT_RESEARCH_SCHEME): string | null {
+    return researchSchemeUrl('house', { tree, houseDo: 'import' }, scheme);
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
