@@ -443,7 +443,9 @@ export const giftTreeMethods = uiModule({
             dot.setAttribute('aria-hidden', 'true');
             const text = el('span', 'option-text');
             text.append(el('span', 'option-title', G.mode[m].t), el('span', 'option-desc', off ? G.listPhoneWhy : G.mode[m].d));
-            b.append(dot, text);
+            const ic = el('span', 'gift-mode-ic');
+            ic.innerHTML = iconSvg(m === 'single' ? 'user' : m === 'pair' ? 'users' : 'list', { size: 16, strokeWidth: 1.7 });
+            b.append(dot, text, ic);
             if (off) b.setAttribute('aria-disabled', 'true');
             b.addEventListener('click', () => {
                 if (off) { u.listWhy = true; this.giftRender(); return; }

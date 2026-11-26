@@ -98,7 +98,8 @@ export function twoFiguresSvg(options: TwoFiguresOptions = {}): string {
 export type IconName =
     | 'trash' | 'pencil' | 'book' | 'file' | 'folder' | 'info' | 'check'
     | 'star' | 'pin' | 'timer' | 'play' | 'pause' | 'user' | 'lock' | 'chevron-down'
-    | 'file-unsaved' | 'file-saved' | 'alert-triangle' | 'image' | 'image-off' | 'home' | 'home-filled';
+    | 'file-unsaved' | 'file-saved' | 'alert-triangle' | 'image' | 'image-off' | 'home' | 'home-filled'
+    | 'users' | 'list';
 
 /** Stroked 24×24 drawings (same stroke language as the chain/figures glyphs). */
 const ICON_PATHS: Record<IconName, string> = {
@@ -117,6 +118,9 @@ const ICON_PATHS: Record<IconName, string> = {
     pause: '<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>'
         + '<rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/>',
+    users: '<circle cx="8.5" cy="8" r="3"/><circle cx="15.5" cy="8" r="3"/>'
+        + '<path d="M3 19c.8-3.4 3-5 5.5-5s4.7 1.6 5.5 5M10 19c.8-3.4 3-5 5.5-5s4.7 1.6 5.5 5"/>',
+    list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h1M4 12h1M4 18h1"/>',
     lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     'chevron-down': '<path d="m6 9 6 6 6-6"/>',
     // A document with the editors' "unsaved" dot in its corner — calm, not an error.
