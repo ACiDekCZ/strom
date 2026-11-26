@@ -140,6 +140,21 @@ test.describe('Family houses on the map', () => {
         await expect(pin).toBeFocused();
     });
 
+    test('a long house name in the bubble wraps as a whole under the number, not word by word after it', async ({ page }) => {
+        await seedHouses(page);
+        await page.evaluate(() => window.Strom.DataManager.setHouseUserData('belokamen|16' as never,
+            { name: 'U Prouzalů pod Kvitelkovým vrchem za Zálesnou', location: { lat: 49.503, lng: 15.204, how: 'manual' } }, 'seed'));
+        await openMap(page);
+        await pill(page).click();
+        const name = popup(page).locator('.map-popup-hname');
+        await expect(name).toHaveText('U Prouzalů pod Kvitelkovým vrchem za Zálesnou');
+        // One box: the name moved to its own line whole (a word-by-word wrap leaves "U" after the number).
+        expect(await name.evaluate(el => el.getClientRects().length)).toBe(1);
+        const title = (await popup(page).locator('.map-popup-head strong').boundingBox())!;
+        const box = (await name.boundingBox())!;
+        expect(box.y).toBeGreaterThan(title.y + 4);
+    });
+
     test('On the map from the house page\'s ⋯ menu: the map with the house in the middle and its bubble open', async ({ page }) => {
         await seedHouses(page);
         // Switched off earlier: On the map turns the layer on again.
