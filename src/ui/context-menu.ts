@@ -6,6 +6,8 @@
  */
 
 import { researchOpenMark } from './research-open-mark.js';
+import { showcaseOffAttrs } from './sample-why.js';
+import type { ResearchShowcaseAction } from '../research-link.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
@@ -83,6 +85,8 @@ export interface PersonMenuAction {
     strong?: boolean;
     /** Greyed and not run, still read out (`aria-disabled`): "Edit" while following a research. */
     disabled?: boolean;
+    /** A main action of the showcase's research (with `disabled`): greyed with its mark, a click says why (spec 143 K4.1). */
+    showcase?: ResearchShowcaseAction;
     /** Faded (with `disabled`): the research's rows of a satellite while the main window is closed (spec 079 §2). */
     dim?: boolean;
     /** A section's heading before the item's own heading (a satellite's "Research · runs in the main window"). */
@@ -236,6 +240,11 @@ export function menuItemBody(a: PersonMenuAction): string {
 }
 
 /** ` aria-label="…"` when the item carries one. */
+/** A greyed row's attributes: the showcase's (its bubble says why) or `aria-disabled`. */
+export function menuItemOffAttrs(a: PersonMenuAction): string {
+    return (a.showcase ? showcaseOffAttrs(a.showcase, a.label) : '') || ' aria-disabled="true"';
+}
+
 export function menuItemAria(a: PersonMenuAction): string {
     return a.ariaLabel ? ` aria-label="${a.ariaLabel.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : '';
 }
@@ -779,7 +788,7 @@ export const contextMenuMethods = uiModule({
                 : a.disabled ? 'context-menu-item is-disabled' : a.link ? 'context-menu-item is-link' : 'context-menu-item';
             // Greyed: reached by the arrows and read out, nothing to run (no data-action).
             const dimCls = a.dim ? `${cls} is-dim` : cls;
-            if (a.disabled) return `${divider}${header}<div class="${dimCls}" role="menuitem" tabindex="-1" aria-disabled="true"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
+            if (a.disabled) return `${divider}${header}<div class="${dimCls}" role="menuitem" tabindex="-1"${menuItemOffAttrs(a)}${menuItemAria(a)}>${menuItemBody(a)}</div>`;
             return `${divider}${header}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
         }).join('');
     },

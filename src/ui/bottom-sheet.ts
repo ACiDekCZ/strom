@@ -17,7 +17,7 @@ import { DataManager } from '../data.js';
 import { ZoomPan, CARD_PAN_THRESHOLD_PX } from '../zoom.js';
 import { isPhoneBar, isTabletOrMobile, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import { currentFullscreenOffer, toggleFullscreen } from './fullscreen.js';
-import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
+import { menuItemBody, menuItemAria, menuItemOffAttrs, PersonMenuAction } from './context-menu.js';
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
@@ -166,7 +166,7 @@ export const bottomSheetMethods = uiModule({
             const note = a.sheetNote ? `<p class="bottom-sheet-row-note">${esc(a.sheetNote)}</p>` : '';
             // Greyed: read out, a tap runs nothing and the sheet stays (no data-action).
             const dimCls = a.dim ? `${cls} is-dim` : cls;
-            if (a.disabled) return `${divider}${header}<button type="button" class="${dimCls}" role="menuitem" aria-disabled="true"${menuItemAria(a)}>${menuItemBody(a)}</button>${note}`;
+            if (a.disabled) return `${divider}${header}<button type="button" class="${dimCls}" role="menuitem"${menuItemOffAttrs(a)}${menuItemAria(a)}>${menuItemBody(a)}</button>${note}`;
             return `${divider}${header}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>${note}`;
         };
         const tilesHtml = tiles.length === 0 ? '' : `<div class="sheet-tiles" style="--tiles: ${tiles.length}">`

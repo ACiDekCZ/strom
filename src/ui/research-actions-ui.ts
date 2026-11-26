@@ -18,7 +18,9 @@ import {
     RESEARCH_LINK_ACTIONS, RESEARCH_TOOL_ACTIONS, RESEARCH_TOOL_GROUPS, ResearchLinkAction, ResearchReviewScope, ResearchStoryDo,
     ResearchToolAction, researchPersonRef, researchLinkMark, type ResearchActionMark,
     researchBridgeMark, researchDeviceAllows, researchDeviceState, type ResearchDeviceAction,
+    inShowcase, showcaseActionMark, showcaseOff, type ResearchShowcaseAction,
 } from '../research-link.js';
+import { showcaseOffAttrs } from './sample-why.js';
 import { uiModule } from './module.js';
 import { updateBusyText, researchHere, researchReachable, researchDevice } from './research-ui.js';
 import { PersonMenuAction } from './context-menu.js';
@@ -187,6 +189,32 @@ const MENU_ITEM_ACTIONS: Readonly<Record<string, ResearchDeviceAction>> = {
     'research-item-tree-settings': 'tree-settings', 'research-item-setup': 'setup', 'research-item-undo-this': 'sync-undo-this',
 };
 
+/**
+ * "Research ›" of a person in the showcase (spec 143 K4.1): "Send to research" and "Ask the agent" greyed, each
+ * with its group's mark; a click, Enter or a tap says why (sample-why.ts) and runs nothing.
+ */
+export function showcasePersonResearchActions(): PersonMenuAction[] {
+    const r = strings.research;
+    const row = (action: string, what: ResearchShowcaseAction, label: string): PersonMenuAction[] => {
+        if (!showcaseOff(what)) return [];
+        const mark = showcaseActionMark(what);
+        return [{
+            action, label, disabled: true, showcase: what, external: mark !== 'none', badge: mark === 'agent' ? 'ai' : undefined,
+            ariaLabel: [label, mark === 'agent' ? r.aiBadge : '', mark !== 'none' ? r.opensInResearchSr : ''].filter(Boolean).join(', '),
+        }];
+    };
+    return [...row('research-send', 'send', strings.sync.sendButton), ...row('research-ask', 'chat', r.askAgent)];
+}
+
+/** The menu's rows of the showcase's main actions (spec 143 K4.1): drawn greyed with their marks, a click says why. */
+const SHOWCASE_MENU_OFF: ReadonlySet<string> = new Set(['research-item-send', 'research-item-chat', 'research-item-queue-work']);
+
+/** The showcase's attributes of a greyed row ('' : not one). */
+function itemShowcaseOff(item: SubmenuItem): string {
+    const action = MENU_ITEM_ACTIONS[item.id];
+    return action && SHOWCASE_MENU_OFF.has(item.id) ? showcaseOffAttrs(action, item.label) : '';
+}
+
 /** An item of the menu drawn here (always outside the device mode). */
 function itemAllowed(item: SubmenuItem): boolean {
     const action = MENU_ITEM_ACTIONS[item.id];
@@ -231,8 +259,9 @@ function submenuItemHtml(item: SubmenuItem, desc = ''): string {
             + ` aria-label="${esc(item.link.label)}, ${esc(r.opensInResearchSr)}"${described} onclick="${call(item.link.method)}">`
             + `<span class="research-item-label">${esc(item.link.label)}</span>${researchActionMark(item.link.mark, { sr: false })}</div>`
         : '';
+    const off = itemShowcaseOff(item);
     return `<div class="tree-switcher-action${item.disabled ? ' is-disabled' : ''}${item.sub ? ' research-item--two' : ''}" id="${item.id}" role="menuitem" tabindex="0"`
-        + ` aria-label="${esc(itemAria(item))}"${item.title ? ` title="${esc(item.title)}"` : ''}${item.ext ? described : ''}${item.submenu ? ' aria-haspopup="menu"' : ''}${item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`}>`
+        + ` aria-label="${esc(itemAria(item))}"${item.title ? ` title="${esc(item.title)}"` : ''}${item.ext && !off ? described : ''}${item.submenu ? ' aria-haspopup="menu"' : ''}${off || (item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`)}>`
         + (item.dot ? '<span class="research-item-dot" aria-hidden="true"></span>' : '')
         + (item.sub
             ? `<span class="research-item-label research-item-label--two"><span>${esc(item.label)}</span><span class="research-item-sub">${esc(item.sub)}</span></span>`
@@ -1108,6 +1137,8 @@ export const researchActionsMethods = uiModule({
      * locked people and read-only trees too.
      */
     personResearchActions(personId: PersonId): PersonMenuAction[] {
+        // The showcase (spec 143 K4.1): "Send to research" and "Ask the agent" in sight greyed with their marks.
+        if (inShowcase()) return showcasePersonResearchActions();
         // An archive has no agent: only "What the research knows" stays.
         if (!this.personResearchRef(personId) || this.activeResearchNoAgent()) return [];
         const r = strings.research;
