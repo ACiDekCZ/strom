@@ -282,6 +282,23 @@ test.describe('The house page', () => {
         await expect(win.locator('.hp-state')).toHaveCount(0);
     });
 
+    test('the person page: the address and the row Houses open the house page', async ({ page }) => {
+        await openResearch(page, { bridge: false });
+        await placeFamily(page);
+        const jan = await page.evaluate(() =>
+            (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate(id => window.Strom.UI.showPersonPage(id as never), jan);
+        const person = page.locator('#person-page-modal');
+        // The birth's address is a button to the house; the row Houses names it with Jan's year there.
+        await expect(person.locator(`#pp-sec-timeline [data-pp-house="${KEY}"]`)).toHaveText('čp. 16');
+        const row = person.locator('.pp-houses .pp-house');
+        await expect(row).toHaveText('Bělokamen House čp. 16 › 1850');
+        await row.locator(`[data-pp-house="${KEY}"]`).click();
+        const win = pageWin(page);
+        await expect(win.locator('#hp-title')).toHaveText('Bělokamen čp. 16');
+        await expect(win.locator('#hp-sec-timeline')).toContainText('Jan Fíšek');
+    });
+
     test('the map: today with the point, the research\'s layer as tiles with its attribution, the maps to open by hand, Confirm location', async ({ page }) => {
         const asked = await stubMapServers(page);
         const houses = await setup(page, { map: HOUSE_MAP });
