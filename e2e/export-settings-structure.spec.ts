@@ -38,9 +38,9 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
     expect(descs.length).toBeGreaterThanOrEqual(7);
     for (const d of descs) expect(d.trim().length).toBeGreaterThan(0);
 
-    // The whole tree / current view / list switch, singular for one person (the person just made
-    // is in the ready-made list Added in the last 30 days, spec 084 §12).
-    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Whole tree', 'Current view only (1 person)', 'List of people']);
+    // The whole tree / current view / list / a person's family tree switch, singular for one person (the person just made
+    // is in the ready-made list Added in the last 30 days, spec 084 §12; a person's family tree: spec 093 §10).
+    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Whole tree', 'Current view only (1 person)', 'List of people', 'Person’s family tree…']);
 
     // Rows have no fill and no frame.
     const row = page.locator('#export-modal .menu-option').first();
@@ -55,7 +55,7 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
         'sdílet', 'uložit a zálohovat', 'tisk a obraz', 'pro jiné programy',
     ]);
     expect(cs[2].rows).toEqual(['Plakát', 'Kniha rodu', 'Propojené stránky']);
-    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Celý strom', 'Jen aktuální pohled (1 osoba)', 'Seznam osob']);
+    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Celý strom', 'Jen aktuální pohled (1 osoba)', 'Seznam osob', 'Rodokmen osoby…']);
     await page.evaluate(() => window.Strom.UI.closeExportDialog());
 
     await page.evaluate(() => window.Strom.UI.setLanguage('de'));
@@ -90,8 +90,10 @@ test('one Export…: whole tree by default, the view disables what cannot do it,
 
     await view.click();
     await expect(view).toHaveAttribute('aria-checked', 'true');
-    await expect(gedcom).toBeDisabled();
-    await expect(gedcom.locator('.option-scope-note')).toHaveText('This format exports the whole tree');
+    // Every format takes the view (spec 093 §10); only Save to file stays with the whole tree.
+    await expect(gedcom).toBeEnabled();
+    await expect(modal.locator('.menu-option', { hasText: 'App with data' })).toBeEnabled();
+    await expect(modal.locator('.menu-option', { hasText: 'Family book' })).toBeEnabled();
     await expect(modal.locator('#export-backup-btn')).toBeEnabled();
     await expect(modal.locator('#export-backup-btn .option-desc:visible')).toHaveText('Only the people shown now, as a JSON file');
     await expect(modal.locator('.menu-option', { hasText: 'Poster' })).toBeEnabled();

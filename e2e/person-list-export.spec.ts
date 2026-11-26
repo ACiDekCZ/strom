@@ -130,7 +130,7 @@ test.describe('Export of a list: a computer', () => {
         await family(page);
         await page.evaluate(() => window.Strom.UI.showExportDialog());
         const m = exportModal(page);
-        await expect(m.locator('.export-scope .segment-btn:visible')).toHaveCount(3);
+        await expect(m.locator('.export-scope .segment-btn:visible')).toHaveCount(4);
         await expect(m.locator('#export-scope-list')).toHaveAttribute('aria-checked', 'false');
         await expect(m.locator('#export-list-pick')).toBeHidden();
         await m.locator('#export-scope-list').click();
@@ -203,8 +203,8 @@ test.describe('Export of a list: a phone', () => {
             expect(b.x).toBeGreaterThanOrEqual(0);
             expect(b.x + b.width).toBeLessThanOrEqual(390);
         }
-        // The segment's three choices stay on one row.
+        // The segment's four choices in two rows of two (spec 093 §10).
         const tops = await m.locator('.export-scope .segment-btn:visible').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)));
-        expect(new Set(tops).size).toBe(1);
+        expect(new Set(tops).size).toBe(2);
     });
 });
