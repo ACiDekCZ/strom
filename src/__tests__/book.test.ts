@@ -650,5 +650,9 @@ describe('a person’s family tree as the book’s choice (spec 093 §10)', () =
         // A deeper cut never has fewer people.
         expect(buildBookModel(d, { kind: 'gift', personId, depth: 'all' }, index).personIds.size).toBeGreaterThanOrEqual(model.personIds.size);
         expect(autoBookTitle(d, { kind: 'gift', personId, depth: 1 }, 'en')).toMatch(/^Family tree of /);
+        // Its chapters count the generations from the oldest ancestors, the oldest family first.
+        const gens = model.chapters.map(c => c.gen);
+        expect(Math.max(...gens)).toBeGreaterThan(1);
+        expect(gens[0]).toBe(1);
     });
 });

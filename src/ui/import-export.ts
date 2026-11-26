@@ -275,7 +275,7 @@ export const importExportMethods = uiModule({
         const nameEl = box.querySelector('.export-person-name');
         if (nameEl) nameEl.textContent = name;
         const count = document.getElementById('export-person-count');
-        if (count) count.textContent = `· ${strings.giftTree.cut.count(this.exportPersonCutIds().size)}`;
+        if (count) count.textContent = strings.giftTree.cut.count(this.exportPersonCutIds().size);
         const select = document.getElementById('export-person-depth') as HTMLSelectElement | null;
         if (select) {
             if (select.options.length !== GIFT_DEPTHS.length) {

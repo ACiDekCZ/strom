@@ -23,7 +23,7 @@ async function sampleOnDaniel(page: Page): Promise<void> {
 }
 
 const exportModal = (page: Page) => page.locator('#export-modal');
-const peopleIn = (text: string): number => Number(/· ([\d,]+) (?:person|people)/.exec(text)?.[1].replace(/,/g, '') ?? NaN);
+const peopleIn = (text: string): number => Number(/([\d,]+) (?:person|people)/.exec(text)?.[1].replace(/,/g, '') ?? NaN);
 
 async function gedcomOf(page: Page): Promise<{ name: string; text: string }> {
     await exportModal(page).locator('#export-gedcom-btn').click();

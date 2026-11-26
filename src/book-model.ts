@@ -63,6 +63,30 @@ export interface BookModel {
     rodGeneration: (personId: PersonId) => number;
 }
 
+/** Each chosen person's generation relative to the person (parents −1, children +1, partners and siblings the same), within the chosen. */
+function giftLevels(data: StromData, from: PersonId, members: ReadonlySet<PersonId>): Map<PersonId, number> {
+    const level = new Map<PersonId, number>([[from, 0]]);
+    const queue: PersonId[] = [from];
+    for (let i = 0; i < queue.length; i++) {
+        const id = queue[i];
+        const p = data.persons[id];
+        if (!p) continue;
+        const l = level.get(id)!;
+        const partners = p.partnerships.map(uid => data.partnerships[uid]).map(u => u && (u.person1Id === id ? u.person2Id : u.person1Id));
+        const next: Array<[PersonId | undefined, number]> = [
+            ...p.parentIds.map(n => [n, l - 1] as [PersonId, number]),
+            ...p.childIds.map(n => [n, l + 1] as [PersonId, number]),
+            ...partners.map(n => [n, l] as [PersonId | undefined, number]),
+        ];
+        for (const [n, nl] of next) {
+            if (!n || !members.has(n) || level.has(n)) continue;
+            level.set(n, nl);
+            queue.push(n);
+        }
+    }
+    return level;
+}
+
 /** The lineage module's selection for the book's choice (a person's family tree: the gift's cut, its one evaluation). */
 export function lineageSpec(spec: BookSelectionSpec, index: LineageIndex): SelectionSpec {
     switch (spec.kind) {
@@ -152,7 +176,13 @@ export function buildBookModel(data: StromData, spec: BookSelectionSpec, prebuil
     } else if (spec.kind === 'persons' || spec.kind === 'gift') {
         // Chosen people (a person's family tree too): the families of two chosen partners, oldest first.
         const members = new Set(sel.memberIds);
-        for (const uid of sel.familyIds) add(uid, null, 1, memberOf(uid, id => members.has(id)));
+        // A person's family tree counts its generations from the oldest ancestors (spec 093 §10).
+        const level = spec.kind === 'gift' ? giftLevels(data, spec.personId, members) : null;
+        const top = level ? Math.min(0, ...level.values()) : 0;
+        for (const uid of sel.familyIds) {
+            const m = memberOf(uid, id => members.has(id));
+            add(uid, null, level && m ? (level.get(m) ?? top) - top + 1 : 1, m);
+        }
     } else {
         const members = new Set(sel.memberIds);
         const dist = new Map<PersonId, number>();

@@ -10582,6 +10582,11 @@
         .export-person-pick { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; }
         .export-person-pick[hidden] { display: none; }
         .export-person-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+        /* The person's row: the label above, the button and the count on one line (the name shortens). */
+        .export-person-pick > .export-person-row:first-child { display: grid; grid-template-columns: minmax(0, max-content) max-content; justify-content: start; }
+        .export-person-pick > .export-person-row:first-child .export-person-l { grid-column: 1 / -1; }
+        #export-modal .export-person-btn { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--r-md); }
+        #export-modal .export-person-note .link-button { padding: 0; border-radius: 0; }
         .export-person-l { font-size: 12.5px; color: var(--text-light); }
         .export-person-btn { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-family: var(--font-serif); font-size: 15px; cursor: pointer; }
         .export-person-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
