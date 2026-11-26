@@ -97,6 +97,25 @@ test.describe('the showcase with research', () => {
 
 });
 
+test.describe('the showcase on a phone', () => {
+    test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+
+    test('the bottom sheet: Research › greyed, a tap says why, Escape closes', async ({ page }) => {
+        await openShowcase(page);
+        await card(page, 'Josef').tap();
+        const sub = await openPersonSubmenu(page, 'research');
+        const ask = sub.locator('[data-showcase-label="Ask the agent"]');
+        await expectOff(page, ask, 'agent', 'Ask the agent');
+        await expectOff(page, sub.locator('[data-showcase-label="Send to research"]'), 'terminal', 'Send to research');
+        await ask.tap({ force: true });
+        await expect(why(page)).toBeVisible();
+        await expect(why(page).locator('.what')).toHaveText('In full research: Ask the agent · AI + terminal');
+        expect(await launched(page)).toEqual([]);
+        await page.keyboard.press('Escape');
+        await expect(why(page)).toBeHidden();
+    });
+});
+
 test.describe('a research made by strom demo (tree.demo)', () => {
     const LINKS = ['send', 'open', 'live', 'app', 'setup', 'chat', 'task', 'research'];
 

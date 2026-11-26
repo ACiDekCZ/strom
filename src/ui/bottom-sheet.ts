@@ -284,6 +284,8 @@ export const bottomSheetMethods = uiModule({
             } else if (dy > 0 && dy > Math.abs(dx)) sheet.style.transform = `translateY(${dy}px)`;
         }, { passive: true });
         sheet.addEventListener('touchend', (e) => {
+            // A touch whose start the sheet never saw (a greyed control of the showcase stops it) is no swipe.
+            if (!dragging) return;
             dragging = false;
             sheet.style.transition = '';
             const dy = e.changedTouches[0].clientY - dragStartY;
@@ -1058,6 +1060,8 @@ export const bottomSheetMethods = uiModule({
             if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
         }, { passive: true });
         sheet.addEventListener('touchend', (e) => {
+            // A touch whose start the sheet never saw (a greyed control of the showcase stops it) is no swipe.
+            if (!dragging) return;
             dragging = false;
             sheet.style.transition = '';
             const dy = e.changedTouches[0].clientY - dragStartY;
