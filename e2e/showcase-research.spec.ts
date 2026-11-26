@@ -74,6 +74,16 @@ async function clickSaysWhy(page: Page, el: ReturnType<Page['locator']>, what: s
     await expect(why(page)).toBeHidden();
 }
 
+/** A greyed row dimmed once: the opacity alone, its words in the colour of an action that runs. */
+async function expectDimmedOnce(off: ReturnType<Page['locator']>, on: ReturnType<Page['locator']>): Promise<void> {
+    const colour = (el: ReturnType<Page['locator']>) => el.evaluate((e) => {
+        const label = e.querySelector('.research-item-label, .menu-item-label, .bottom-sheet-label') ?? e;
+        return getComputedStyle(label).color;
+    });
+    await expect(off).toHaveCSS('opacity', '0.55');
+    expect(await colour(off)).toBe(await colour(on));
+}
+
 test.describe('the showcase with research', () => {
     test.beforeEach(async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
@@ -163,6 +173,10 @@ test.describe('the showcase with research', () => {
         const dialog = page.locator('.person-research-modal');
         await expect(dialog).toBeVisible();
         await expect(dialog.locator('.person-research-body > .sample-note').first()).toContainText('strom demo');
+        // Its Copy as small as in the overview, not a dialog's button (10px 18px, 14px).
+        const copy = dialog.locator('.sample-note .sample-copy');
+        await expect(copy).toHaveCSS('font-size', '11.5px');
+        expect((await copy.boundingBox())!.height).toBeLessThan(24);
         const conflict = dialog.locator('.person-research-conflict');
         await expect(conflict).toContainText('Rok narození Josefa Horáka');
         await expectOff(page, conflict.locator('[data-do="decide"]'), 'terminal', 'Decide in the research');
@@ -201,6 +215,15 @@ test.describe('the showcase with research', () => {
         await openShowcase(page);
         await openResearchMenu(page);
         await expectOff(page, page.locator('#research-item-chat'), 'agent', 'Continue with the agent');
+        // Dimmed once (the design's opacity), its words and AI badge in their own colours.
+        await expectDimmedOnce(page.locator('#research-item-chat'), page.locator('#research-item-overview'));
+        const badge = await page.evaluate(() => {
+            const b = document.body.appendChild(Object.assign(document.createElement('span'), { className: 'research-ai-badge' }));
+            const bg = getComputedStyle(b).backgroundColor;
+            b.remove();
+            return bg;
+        });
+        await expect(page.locator('#research-item-chat .research-ai-badge')).toHaveCSS('background-color', badge);
         await clickSaysWhy(page, page.locator('#research-item-chat'), 'In full research: Continue with the agent · AI + terminal');
         await page.keyboard.press('Escape');
         await card(page, 'Josef').click();
@@ -210,6 +233,7 @@ test.describe('the showcase with research', () => {
         const ask = sub.locator('[data-showcase-label="Ask the agent"]');
         await expectOff(page, send, 'terminal', 'Send to research');
         await expectOff(page, ask, 'agent', 'Ask the agent');
+        await expectDimmedOnce(send, sub.locator('[data-action="research-knows"]'));
         await ask.click({ force: true });
         await expect(why(page)).toBeVisible();
         await expect(why(page).locator('.what')).toHaveText('In full research: Ask the agent · AI + terminal');
@@ -235,6 +259,20 @@ test.describe('the showcase with research', () => {
         await page.keyboard.press('Escape');
         await expect(why(page)).toBeHidden();
         await expect(page.locator('#research-overview')).toBeVisible();
+    });
+
+    test('the regular ask of the snapshot redraws nothing: the bubble and the focus stay', async ({ page }) => {
+        await openShowcase(page);
+        await page.evaluate(() => window.Strom.UI.openResearchOverview({}));
+        const work = page.locator('#research-overview .research-overview__work');
+        await page.keyboard.press('Tab');
+        await work.focus();
+        await expect(why(page)).toBeVisible();
+        const before = await work.elementHandle();
+        await poll(page);
+        await poll(page);
+        await expect(why(page)).toBeVisible();
+        expect(await before!.evaluate(e => e.isConnected && e === document.activeElement)).toBe(true);
     });
 });
 

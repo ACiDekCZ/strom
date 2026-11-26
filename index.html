@@ -998,12 +998,13 @@
             border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text);
         }
         .sample-code code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; white-space: nowrap; }
-        .sample-copy {
+        /* `.modal button.sample-copy`: in a dialog (What the research knows) as small as everywhere, not a dialog's button. */
+        .sample-copy, .modal button.sample-copy {
             padding: 1px 6px; border: 0; border-radius: var(--r-tag); background: none; cursor: pointer;
             font-family: var(--font-sans); font-size: 11.5px; font-weight: 600; color: var(--primary); white-space: nowrap;
         }
         .sample-copy:focus-visible, .sample-howto:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        @media (hover: hover) { .sample-copy:hover { background: var(--hover-bg); } }
+        @media (hover: hover) { .sample-copy:hover, .modal button.sample-copy:hover { background: var(--hover-bg); } }
         .sample-note {
             display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0;
             font-size: 12.5px; line-height: 1.45; color: var(--text-light);
@@ -1011,6 +1012,11 @@
         .sample-note__asof { flex-basis: 100%; color: var(--text-faint); }
         .research-overview .sample-note { padding: 6px 16px 8px; }
         [data-showcase-off], [data-showcase-off][aria-disabled="true"] { opacity: .55; cursor: default; }
+        /* Dimmed once (the opacity): a greyed menu row keeps its words and its AI badge in their own colours. */
+        :is(.context-menu-item, .bottom-sheet-item).is-disabled[data-showcase-off],
+        .bottom-sheet-item[aria-disabled="true"][data-showcase-off] { color: var(--text); }
+        .tree-switcher-action.is-disabled[data-showcase-off] .research-item-label > span:first-child { color: var(--text); }
+        .tree-switcher-action.is-disabled[data-showcase-off] .research-ai-badge { background: var(--warning-soft); color: var(--warning-text); }
         /* The showcase's Queue: its order and "Process now" under the tasks, greyed (spec 143 K4.1). */
         .research-overview__queue-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0 16px; margin-top: 6px; }
         .research-overview__queue-acts > .link-button {

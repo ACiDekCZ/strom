@@ -3805,6 +3805,9 @@ export const researchUiMethods = uiModule({
             if (draw) this.renderLivePanel();
             return;
         }
+        // The showcase's research never moves (its snapshot): once read, a redraw at each ask says
+        // nothing new, and it closed the bubble of a greyed action and took its focus.
+        if (inShowcase() && v.kind === 'bridge') return;
         const status = researchReachable() ? this.researchStatusOf(v.researchId) : null;
         const bridge = status ? parseLiveBridge(storedResearchBridge(v.researchId)?.base) : null;
         if (status && bridge && status.treeId === v.researchId) {
