@@ -293,6 +293,8 @@ test.describe('The house page', () => {
         await expect(person.locator(`#pp-sec-timeline [data-pp-house="${KEY}"]`)).toHaveText('čp. 16');
         const row = person.locator('.pp-houses .pp-house');
         await expect(row).toHaveText('Bělokamen House čp. 16 › 1850');
+        // The years stay together when a long town wraps the row on a phone ("1850–" / "1912" read apart).
+        expect(await row.locator('.pp-house-y').evaluate(el => getComputedStyle(el).whiteSpace)).toBe('nowrap');
         await row.locator(`[data-pp-house="${KEY}"]`).click();
         const win = pageWin(page);
         await expect(win.locator('#hp-title')).toHaveText('Bělokamen čp. 16');
