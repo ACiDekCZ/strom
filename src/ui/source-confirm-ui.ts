@@ -23,6 +23,7 @@ import {
     postSourceConfirm, sourceConfirmAction, sourceConfirmOffer, sourceConfirmRef, sourceReadState,
     type SourceConfirmAction, type SourceConfirmOffer, type SourceReadState,
 } from '../source-confirm.js';
+import { bridgeHereOrMain } from '../windows/window-sat-research.js';
 
 function esc(text: string): string {
     return text
@@ -85,7 +86,11 @@ export const sourceConfirmMethods = uiModule({
         if (note && note.mark !== state.txt) notes.delete(key);
         else if (note?.blocks) return { kind: 'none' };
         const rid = ctx.link.id;
-        const up = this.researchBridgeUp(rid) && !!bridgeBase(rid);
+        const where = bridgeHereOrMain(this.researchBridgeUp(rid), bridgeBase(rid));
+        // A window of its own while the main window holds the bridge: the confirmation is written with this window's
+        // address of the bridge, so it is not offered here (never "when the research runs" while it runs there).
+        if (where === 'main') return { kind: 'none' };
+        const up = where === 'here';
         const features = up ? this.researchStatusOf(rid)?.features : (this.researchStatusOf(rid) ?? lastBridgeStatus(rid))?.features;
         return sourceConfirmOffer(sourceConfirmAction(src, state), {
             features,

@@ -30,6 +30,7 @@ import {
     loadResearchImage, pendingClips, primeResearchImages, pruneDeliveredImages, removeResearchImages,
     researchImagesPrimed, researchImagesTotal, shownExcerpts, sourceRefOf, storedImagesOf,
 } from '../research-images.js';
+import { bridgeHereOrMain } from '../windows/window-sat-research.js';
 
 function esc(text: string): string {
     return text
@@ -47,6 +48,8 @@ interface ImagesEnv {
     head: string | undefined;
     mode: HeldImageMode;
     auto: boolean;
+    /** A window of its own while the main window holds the running bridge: images load there, nothing loads here. */
+    viaMain: boolean;
 }
 
 /** The source viewer's load (one source, its excerpts one by one). */
@@ -95,13 +98,14 @@ export const researchImagesMethods = uiModule({
         const ctx = this.researchSyncLink();
         const link = ctx?.link;
         const base = link ? parseLiveBridge(storedResearchBridge(link.id)?.base)?.base ?? '' : '';
+        const where = bridgeHereOrMain(!!link && this.researchBridgeUp(link.id), base);
         const mode = heldImageMode({
             onComputer: researchReachable(),
             linked: !!link,
-            bridgeUp: !!link && !!base && this.researchBridgeUp(link.id),
+            bridgeUp: where === 'here',
             features: link ? this.researchStatusOf(link.id)?.features : null,
         });
-        return { treeId, researchId: link?.id ?? null, base, head: link?.head, mode, auto: link?.autoLoadImages !== false };
+        return { treeId, researchId: link?.id ?? null, base, head: link?.head, mode, auto: link?.autoLoadImages !== false, viaMain: where === 'main' };
     },
 
     /** Listen once for stored images changing (a load, a removal, the first read of a tree). */
@@ -312,6 +316,9 @@ export const researchImagesMethods = uiModule({
             if (env.mode === 'fetch') {
                 const bytes = this.heldBytesOf(ref);
                 chunks.push(row(esc(text), ` <button type="button" class="secondary viewer-load-images">${esc(n > 1 ? r.loadMany : r.load)}</button>${bytes ? `<span class="muted viewer-load-size"> · ${esc(size(bytes))}</span>` : ''}`));
+            } else if (env.mode === 'bridgeOff' && env.viaMain) {
+                // A window of its own: the research runs (in the main window), so only that the image is in the research.
+                chunks.push(row(esc(text)));
             } else if (env.mode === 'bridgeOff') chunks.push(row(esc(`${shown > 0 ? r.heldMore(n) : r.heldN(n)} ${r.heldBridgeOff(n)}`)));
             else if (env.mode === 'device') chunks.push(row(esc(r.heldDevice)));
             else chunks.push(row(esc(r.held[heldReasonKey(src.imageHeld)])));

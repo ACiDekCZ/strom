@@ -485,3 +485,78 @@ export function readHistoryWriteResult(raw: unknown): HistoryWriteResult {
         bridgeCode: textOf(r.bridgeCode) ? r.bridgeCode : '', ...(link ? { link } : {}),
     };
 }
+
+// ==================== DIALOGS THAT NEED THE BRIDGE'S ADDRESS ====================
+
+/**
+ * Where a research write or fetch of a dialog goes, the bridge answering
+ * (`up`, in a satellite the main window's state) and this window's address
+ * of it (`base`): 'here' — this window holds it; 'main' — a window of its
+ * own whose main window is open: the research's part goes through the main
+ * window (its dialog opens there) or is not offered here, never said as not
+ * running; 'down' — not running (and a window of its own with its main
+ * window closed, as before).
+ */
+export type BridgeWhere = 'here' | 'main' | 'down';
+
+export function bridgeHereOrMain(up: boolean, base: string | null | undefined): BridgeWhere {
+    if (up && base) return 'here';
+    return up && satMainForward() ? 'main' : 'down';
+}
+
+/** A research dialog of a satellite opened in the main window (with its bridge), the main window coming forward. */
+export const RESEARCH_DIALOG_ACTION = 'research-dialog';
+
+export type MaterialsGroup = 'date' | 'batch' | 'added' | 'person';
+
+export type ResearchDialogArgs =
+    /** The Materials window, filtered to a person (a REFN or a PersonId) or a batch. */
+    | { dialog: 'materials'; person?: string; batch?: string; group?: MaterialsGroup }
+    /** "Send material…" for a person or a source. */
+    | { dialog: 'material'; personId: string }
+    | { dialog: 'material'; sourceId: string }
+    /** "Read document…": a reading's result, a source's reading, a person's new reading (none: the dialog as the menu opens it). */
+    | { dialog: 'read'; readId?: string; sourceId?: string; personId?: string }
+    /** "Read again…" of a source (an excerpt's clip, '' the whole source). */
+    | { dialog: 'read-again'; sourceId: string; clip: string };
+
+const MATERIALS_GROUPS: readonly MaterialsGroup[] = ['date', 'batch', 'added', 'person'];
+const DIALOG_KEYS: Record<ResearchDialogArgs['dialog'], ReadonlySet<string>> = {
+    materials: new Set(['dialog', 'person', 'batch', 'group']),
+    material: new Set(['dialog', 'personId', 'sourceId']),
+    read: new Set(['dialog', 'readId', 'sourceId', 'personId']),
+    'read-again': new Set(['dialog', 'sourceId', 'clip']),
+};
+/** An id or a key of the app (a person, a source, a reading, a batch): short, without spaces or controls. */
+const idOf = (v: unknown): v is string => typeof v === 'string' && /^[^\s\u0000-\u001f]{1,200}$/.test(v);
+
+/** A satellite's research dialog, read strictly (unknown keys, a malformed id: null). */
+export function readResearchDialogArgs(raw: unknown): ResearchDialogArgs | null {
+    const a = argsObject(raw);
+    if (!a || typeof a.dialog !== 'string' || !Object.prototype.hasOwnProperty.call(DIALOG_KEYS, a.dialog)) return null;
+    const dialog = a.dialog as ResearchDialogArgs['dialog'];
+    if (Object.keys(a).some(k => !DIALOG_KEYS[dialog].has(k))) return null;
+    switch (dialog) {
+        case 'materials': {
+            if (a.person !== undefined && !idOf(a.person)) return null;
+            if (a.batch !== undefined && !idOf(a.batch)) return null;
+            if (a.group !== undefined && !MATERIALS_GROUPS.includes(a.group as MaterialsGroup)) return null;
+            return {
+                dialog, ...(a.person ? { person: a.person as string } : {}), ...(a.batch ? { batch: a.batch as string } : {}),
+                ...(a.group ? { group: a.group as MaterialsGroup } : {}),
+            };
+        }
+        case 'material':
+            if (idOf(a.personId) && a.sourceId === undefined) return { dialog, personId: a.personId };
+            if (idOf(a.sourceId) && a.personId === undefined) return { dialog, sourceId: a.sourceId };
+            return null;
+        case 'read': {
+            const keys = (['readId', 'sourceId', 'personId'] as const).filter(k => a[k] !== undefined);
+            if (keys.length > 1 || keys.some(k => !idOf(a[k]))) return null;
+            return keys.length ? { dialog, [keys[0]]: a[keys[0]] as string } : { dialog };
+        }
+        case 'read-again':
+            if (!idOf(a.sourceId) || typeof a.clip !== 'string' || a.clip.length > MAX_TEXT) return null;
+            return { dialog, sourceId: a.sourceId, clip: a.clip };
+    }
+}

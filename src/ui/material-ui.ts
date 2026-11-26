@@ -31,6 +31,7 @@ import { shownName } from '../person-name.js';
 import { yearOf } from '../dates.js';
 import { selectionIndex } from './view-selection-ui.js';
 import { closeConcernMenu, concernFieldHtml, concernListRows, concernMenuOpen, openConcernMenu, type ConcernShown } from './material-concern-ui.js';
+import { RESEARCH_DIALOG_ACTION, satMainForward } from '../windows/window-sat-research.js';
 
 const DIALOG_ID = 'material-modal';
 /** At most this many files in one go (more: a whole folder belongs to "Add materials"). */
@@ -113,6 +114,15 @@ export const materialMethods = uiModule({
 
     showMaterialDialog(target: MaterialTarget): void {
         if (!this.materialAvailable()) return;
+        // A window of its own: the files are sent from the main window, which holds the bridge (sent at once, or
+        // waiting there as its own); that window comes forward with the dialog.
+        const main = satMainForward();
+        if (main) {
+            this.closeActionsMenu();
+            this.hideContextMenu?.();
+            main.run(RESEARCH_DIALOG_ACTION, { dialog: 'material', ...target }, true);
+            return;
+        }
         this.closeActionsMenu();
         this.hideContextMenu?.();
         document.getElementById(DIALOG_ID)?.remove();

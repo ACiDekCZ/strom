@@ -8,9 +8,10 @@
 
 import {
     CARD_SIGNAL_ACTION, FACT_CONFIRM_ACTION, FACT_REVERT_ACTION, HISTORY_HIDE_ACTION, HISTORY_STEP_ACTION, HOUSES_OPEN_ACTION,
-    PLACES_LIVE_ACTION, PLACES_OPEN_ACTION, PLACES_QUEUE_ACTION, VERIFY_PERSON_ACTION, readCardSignalArgs, readFactConfirmArgs,
-    readFactRevertArgs, readHistoryHideArgs, readHistoryStepArgs, readHousesOpenArgs, readPlacesLiveArgs, readPlacesOpenArgs,
-    readPlacesQueueArgs, readVerifyPersonArgs, registerMainResearchAction, type HistoryWriteStep,
+    PLACES_LIVE_ACTION, PLACES_OPEN_ACTION, PLACES_QUEUE_ACTION, RESEARCH_DIALOG_ACTION, VERIFY_PERSON_ACTION, readCardSignalArgs,
+    readFactConfirmArgs, readFactRevertArgs, readHistoryHideArgs, readHistoryStepArgs, readHousesOpenArgs, readPlacesLiveArgs,
+    readPlacesOpenArgs, readPlacesQueueArgs, readResearchDialogArgs, readVerifyPersonArgs, registerMainResearchAction,
+    type HistoryWriteStep, type MaterialsGroup,
 } from '../windows/window-sat-research.js';
 import type { HistoryHideOp } from '../history.js';
 import type { ManageTab } from '../history-manage.js';
@@ -48,6 +49,10 @@ export interface SatResearchMainDeps {
     openHistoryAlignDialog(): void;
     /** A history write through this window's bridge, its answer as a satellite reads it. */
     historyWriteHere(step: HistoryWriteStep): Promise<unknown>;
+    openMaterials(opts?: { person?: string; batch?: string; group?: MaterialsGroup }): void;
+    showMaterialDialog(target: { personId: PersonId } | { sourceId: string }): void;
+    showReadDocumentDialog(opts?: { readId?: string; sourceId?: string; personId?: string }): void;
+    showReadSourceAgain(sourceId: string, clip?: string): void;
 }
 
 /** Register every action a satellite may ask the main window for. */
@@ -137,6 +142,31 @@ export function registerSatelliteResearchActions(ui: SatResearchMainDeps): void 
                 return true;
             }
             return ui.historyWriteHere(a);
+        },
+    });
+    // A research dialog of a satellite that needs the bridge's address (Materials, "Send material…", a reading,
+    // "Read again…"): opened here, with this window's bridge, as this window's own button opens it.
+    registerMainResearchAction(RESEARCH_DIALOG_ACTION, {
+        read: readResearchDialogArgs,
+        run: (a) => {
+            switch (a.dialog) {
+                case 'materials':
+                    ui.openMaterials({ ...(a.person ? { person: a.person } : {}), ...(a.batch ? { batch: a.batch } : {}), ...(a.group ? { group: a.group } : {}) });
+                    break;
+                case 'material':
+                    ui.showMaterialDialog('personId' in a ? { personId: a.personId as PersonId } : { sourceId: a.sourceId });
+                    break;
+                case 'read':
+                    ui.showReadDocumentDialog({
+                        ...(a.readId ? { readId: a.readId } : {}), ...(a.sourceId ? { sourceId: a.sourceId } : {}),
+                        ...(a.personId ? { personId: a.personId } : {}),
+                    });
+                    break;
+                case 'read-again':
+                    ui.showReadSourceAgain(a.sourceId, a.clip);
+                    break;
+            }
+            return true;
         },
     });
 }

@@ -34,6 +34,7 @@ import { onBridgeStatus } from './research-sync-ui.js';
 import type { TreeId } from '../types.js';
 import { uiModule } from './module.js';
 import { barHtml } from './prog-bar.js';
+import { bridgeHereOrMain } from '../windows/window-sat-research.js';
 
 /** The accept / reject toast (its Undo stands above the dialog, index.html). */
 const SUGGEST_TOAST_KIND = 'surname-suggest';
@@ -250,7 +251,9 @@ export const surnameSuggestMethods = uiModule({
         const modal = document.querySelector('#surnames-modal .surnames-modal');
         if (!box || !modal) return;
         const rid = treeResearchId();
-        const supported = this.surnameSuggestSupported();
+        // A window of its own while the main window holds the bridge: the research's suggestions are read and
+        // answered there (this window has no address of it), so the part is not shown here rather than said as not running.
+        const supported = this.surnameSuggestSupported() && !(rid && bridgeHereOrMain(this.researchBridgeUp(rid), bridgeBase(rid)) === 'main');
         modal.classList.toggle('modal--lg', supported);
         modal.classList.toggle('modal--md', !supported);
         modal.classList.toggle('is-suggest', supported);

@@ -33,6 +33,7 @@ import {
     sourceRowHtml, sourceRowKind, sourceRowChoices, proposalHtml, proposalActions, readIdDate, readStateShortDate, readStateLongDate,
     type SourceRowAct, type ProposalAct,
 } from './read-source-state-view.js';
+import { bridgeHereOrMain } from '../windows/window-sat-research.js';
 
 function esc(text: string): string {
     return text
@@ -173,7 +174,11 @@ export const readSourceMethods = uiModule({
         }
         // The agent's proposal: with the newer reading's state, else from the waiting list (a source with no differing newer reading).
         const proposal = state?.proposal ?? said?.proposal ?? status?.sourceProposals?.[refn] ?? null;
-        return { rid, key, refn, state, proposal, features, up: this.researchBridgeUp(rid), phone: !researchHere() };
+        // A window of its own while the main window holds the bridge: the choices, the counts and the proposal's
+        // Accept / Keep need this window's address of it, so they are not offered here (the state stays, and nothing
+        // says the research is not running); its result and "Read again…" open in the main window.
+        const up = this.researchBridgeUp(rid) && bridgeHereOrMain(true, this.readBridgeBase(rid)) !== 'main';
+        return { rid, key, refn, state, proposal, features, up, phone: !researchHere() };
     },
 
     /** §2: the row under the links (and §3 the proposal under it); '' when the research says nothing of the source. */

@@ -47,6 +47,7 @@ import { uiModule } from './module.js';
 import { openBridgeFile } from '../device/device-bridge.js';
 import { canEditPortrait, treePortraitCopy } from './portrait-actions-ui.js';
 import { windowAddOffered } from '../materials-overview.js';
+import { bridgeHereOrMain, RESEARCH_DIALOG_ACTION, satMainForward } from '../windows/window-sat-research.js';
 
 const MODAL_ID = 'materials-modal';
 const SECTION_ID = 'materials-section';
@@ -434,6 +435,18 @@ export const materialsMethods = uiModule({
     openMaterials(opts: MaterialsOpenOptions = {}): void {
         if (!this.materialsWindowOn()) return;
         const archive = this.materialsListOn();
+        // A window of its own beside a research archive: the Materials window opens in the main window, whose
+        // bridge lists and fetches the files (this window has no address of it), and that window comes forward.
+        const main = archive ? satMainForward() : null;
+        if (main) {
+            this.closeActionsMenu();
+            this.hideContextMenu?.();
+            main.run(RESEARCH_DIALOG_ACTION, {
+                dialog: 'materials', ...(opts.person ? { person: opts.person } : {}), ...(opts.batch ? { batch: opts.batch } : {}),
+                ...(opts.group ? { group: opts.group } : {}),
+            }, true);
+            return;
+        }
         this.closeMaterialsItemMenu();
         this.closeActionsMenu();
         this.hideContextMenu?.();
@@ -779,12 +792,32 @@ export const materialsMethods = uiModule({
     openSectionMaterial(key: string): void {
         const item = sectionItems.get(key);
         if (!item || !this.currentId) return;
+        // A research file in a window of its own: viewed in the main window's Materials (its bridge gives the file).
+        if (item.file && !item.attachment && this.materialsViaMain()) {
+            this.openMaterialsOfCurrentPerson();
+            return;
+        }
         const all = this.personMaterialItems(this.currentId);
         const index = all.findIndex(i => i.key === key);
         const person = DataManager.getPerson(this.currentId);
         const label = person ? strings.materials.ctxPerson(`${person.firstName} ${person.lastName}`.trim()) : '';
         if (index >= 0) this.openMaterialItems(all, index, { where: 'section', label, personId: this.currentId });
         else this.openMaterial(item);
+    },
+
+    /**
+     * A window of its own whose main window holds the running bridge (this one has no address of it): the
+     * research's files are opened and changed in the main window's Materials, never "opens once it runs" here.
+     */
+    materialsViaMain(): boolean {
+        const ctx = this.materialsContext();
+        return !!ctx?.caps.list && bridgeHereOrMain(ctx.caps.bridgeUp, ctx.base) === 'main';
+    },
+
+    /** The Materials window filtered to the open person (their REFN), the whole window without one. */
+    openMaterialsOfCurrentPerson(): void {
+        const refn = this.currentId ? DataManager.getPerson(this.currentId)?.refn : undefined;
+        this.openMaterials(refn ? { person: refn } : {});
     },
 
     /** One item without a viewer: an attachment's preview, an image, a PDF, else the system's program. */
@@ -801,6 +834,13 @@ export const materialsMethods = uiModule({
         const m = strings.materials;
         const startAction = this.researchStartUrl() ? { action: { label: strings.sync.startResearch, run: () => this.researchSyncAction('startResearch'), ...researchMarkFlags(this.researchSyncActionMark('startResearch')) } } : {};
         const mime = (file.mime ?? '').toLowerCase();
+        // A window of its own: the file opens from the Materials window of the main window, which holds the bridge
+        // (never "opens once the research runs" while it runs there).
+        if (this.materialsViaMain()) {
+            const person = file.persons[0];
+            this.openMaterials(person ? { person } : {});
+            return;
+        }
         if (!ctx.caps.bridgeUp || !ctx.base) {
             // Not running: a remembered preview of an image, else it opens once the research runs.
             if (materialType(file.mime, file.name) === 'image') {
@@ -842,6 +882,11 @@ export const materialsMethods = uiModule({
         const item = sectionItems.get(key);
         const ctx = this.materialsContext();
         if (!item || !ctx) return;
+        // A research file in a window of its own: what can be done with it is in the main window's Materials.
+        if (item.file && !item.attachment && this.materialsViaMain()) {
+            this.openMaterialsOfCurrentPerson();
+            return;
+        }
         this.showMaterialItemMenu(item, anchor, ctx.caps);
     },
 

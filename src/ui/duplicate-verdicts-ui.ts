@@ -28,6 +28,7 @@ import { strings } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import { uiModule } from './module.js';
 import type { ValidationRowExtra } from './tree-stats.js';
+import { bridgeHereOrMain } from '../windows/window-sat-research.js';
 
 interface TreeVerdicts {
     rid: string;
@@ -81,8 +82,11 @@ export const duplicateVerdictsMethods = uiModule({
     async startDuplicateVerdicts(treeId: string, data: StromData, issues: readonly ValidationIssue[]): Promise<void> {
         const opening = ++openings;
         const rid = researchOf(treeId);
-        const up = !!rid && this.researchBridgeUp(rid) && !!bridgeBase(rid);
-        const mode = verdictsMode({
+        const where = rid ? bridgeHereOrMain(this.researchBridgeUp(rid), bridgeBase(rid)) : 'down';
+        const up = where === 'here';
+        // A window of its own while the main window holds the bridge: the research's verdicts are asked there, so
+        // none are shown here (never "when the research runs" while it runs there).
+        const mode = where === 'main' ? 'none' : verdictsMode({
             research: !!rid,
             bridgeUp: up,
             featureNow: !!rid && up && (this.researchStatusOf(rid)?.features ?? []).includes(DUPLICATES_JUDGE_FEATURE),

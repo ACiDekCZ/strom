@@ -62,6 +62,7 @@ import { readerStates } from '../read-choices.js';
 import { READ_READER_STATE_FEATURE, readFailureShown, readOneReaderFailed, type ReadReaderFailure } from '../research-read.js';
 // The scan's place outline (spec 059 P7 §7).
 import { READ_VARIANT_REGION_FEATURE } from '../research-read.js';
+import { RESEARCH_DIALOG_ACTION, satMainForward } from '../windows/window-sat-research.js';
 
 const DIALOG_ID = 'read-document-modal';
 const RECENT_KEY = 'read.recent';
@@ -875,6 +876,16 @@ export const readDocumentMethods = uiModule({
      * running reading, the one read and not opened, or a new input.
      */
     showReadDocumentDialog(opts: ReadDialogOpts = {}): void {
+        // A window of its own beside a research: the reading opens in the main window, whose bridge reads and
+        // answers (this window has no address of it), and that window comes forward. Files dropped here stay here.
+        const main = !opts.files?.length && this.researchOriginalsLink() ? satMainForward() : null;
+        if (main) {
+            this.closeActionsMenu();
+            this.hideContextMenu?.();
+            const one = opts.readId ? { readId: opts.readId } : opts.sourceId ? { sourceId: opts.sourceId } : opts.personId ? { personId: opts.personId } : {};
+            main.run(RESEARCH_DIALOG_ACTION, { dialog: 'read', ...one }, true);
+            return;
+        }
         // A result not fetched yet: fetched first under the element clicked, then the dialog with it (B67, B69, B73).
         const first = opts.asked ? null : this.readResultFirstDue(opts);
         if (first) { void this.readResultFirst(opts, first.researchId, first.id); return; }
@@ -997,6 +1008,12 @@ export const readDocumentMethods = uiModule({
      */
     showReadSourceAgain(sourceId: string, clip = ''): void {
         const link = this.researchOriginalsLink();
+        // A window of its own: read again from the main window, with its bridge (it comes forward).
+        const main = link ? satMainForward() : null;
+        if (main) {
+            main.run(RESEARCH_DIALOG_ACTION, { dialog: 'read-again', sourceId, clip }, true);
+            return;
+        }
         const again = this.readSourceAgainOf(sourceId, clip);
         if (!link || !again) return;
         const running = this.readSourceRunning(again.refn);
