@@ -594,3 +594,41 @@ export function housesFor(part: StromData, houses: Readonly<Record<HouseId, Hous
     for (const [id, entry] of Object.entries(houses)) if (ids.has(id)) out[id] = structuredClone(entry);
     return Object.keys(out).length ? out : undefined;
 }
+
+/**
+ * What was said about houses when another tree is merged in: a house only
+ * the incoming tree speaks of is taken whole; for a house both speak of, ours
+ * keeps its name and location, the houses joined and told apart are the
+ * union of both, except an incoming join that ours told apart (or an incoming
+ * word that tells apart what ours joined), which is left out.
+ */
+export function mergeIncomingHouses(ours: Readonly<Record<HouseId, HouseUserData>> | undefined,
+    incoming: Readonly<Record<HouseId, HouseUserData>> | undefined): Record<HouseId, HouseUserData> | undefined {
+    const clean = sanitizeHouses(incoming);
+    if (!clean) return ours ? structuredClone(ours) as Record<HouseId, HouseUserData> : undefined;
+    const out: Record<HouseId, HouseUserData> = ours ? structuredClone(ours) as Record<HouseId, HouseUserData> : {};
+    const joined = (a: HouseId, b: HouseId): boolean => !!(ours?.[a]?.merged?.includes(b) || ours?.[b]?.merged?.includes(a));
+    const apart = (a: HouseId, b: HouseId): boolean => !!(ours?.[a]?.split?.includes(b) || ours?.[b]?.split?.includes(a));
+    for (const [id, theirs] of Object.entries(clean)) {
+        const merged = (theirs.merged ?? []).filter(x => !apart(id, x));
+        const split = (theirs.split ?? []).filter(x => !joined(id, x));
+        const mine = out[id];
+        if (!mine) {
+            const next: HouseUserData = { ...theirs };
+            if (merged.length) next.merged = merged; else delete next.merged;
+            if (split.length) next.split = split; else delete next.split;
+            if (Object.keys(next).length) out[id] = next;
+            continue;
+        }
+        const union = (a: readonly HouseId[] | undefined, b: readonly HouseId[]): HouseId[] => [...new Set([...(a ?? []), ...b])];
+        const m = union(mine.merged, merged);
+        const s = union(mine.split, split);
+        const r = [...new Set([...(mine.revealInOutputs ?? []), ...(theirs.revealInOutputs ?? [])])];
+        if (m.length) mine.merged = m;
+        if (s.length) mine.split = s;
+        if (r.length) mine.revealInOutputs = r;
+        if (!mine.name && theirs.name) mine.name = theirs.name;
+        if (!mine.location && theirs.location) mine.location = theirs.location;
+    }
+    return Object.keys(out).length ? out : undefined;
+}

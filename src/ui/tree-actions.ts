@@ -20,6 +20,7 @@ import { LAST_FOCUSED } from '../model-values.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { DataManager } from '../data.js';
+import { hasNumberedHouse } from '../houses.js';
 import { countFamilies } from '../ged-exporter.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFileSize, formatRelativeDateTime } from '../format.js';
@@ -216,6 +217,9 @@ export const treeActionsMethods = uiModule({
                 { key: 'lifeline', label: s.lifelineDefaults, value: lifelineDefaultsSummary(id), editOnly: true, run: () => this.showLifelineDefaultsDialog(id, parent) },
                 ...(isActive ? [
                     { key: 'places', label: strings.map.placesMenu, editOnly: true, run: () => this.showPlacesManager(undefined, parent) },
+                    // Houses… only for a tree with a numbered house (spec 030 §1).
+                    ...(hasNumberedHouse(DataManager.getData())
+                        ? [{ key: 'houses', label: strings.houses.menu, run: () => this.showHousesWindow({ parent }) }] : []),
                     { key: 'surnames', label: strings.surnames.menu, editOnly: true, run: () => this.showSurnamesDialog(parent) },
                 ] : []),
             ] : [] },

@@ -178,6 +178,7 @@ import type { LineMode } from '../map-lines.js';
 import { tableMethods } from './table-view/table-ui.js';
 import { tableResearchMethods } from './table-view/table-research-ui.js';
 import { placesManagerMethods } from './places-manager-ui.js';
+import { housesMethods } from './houses-ui.js';
 import { placesResearchMethods } from './places-research-ui.js';
 import { placesIdentifyMethods } from './places-identify-ui.js';
 import { placeMenuMethods } from './place-menu-ui.js';
@@ -1187,6 +1188,9 @@ Object.assign(UIClass.prototype, tableResearchMethods);
 type PlacesManagerMethods = typeof placesManagerMethods;
 export interface UIClass extends PlacesManagerMethods {}
 Object.assign(UIClass.prototype, placesManagerMethods);
+type HousesMethods = typeof housesMethods;
+export interface UIClass extends HousesMethods {}
+Object.assign(UIClass.prototype, housesMethods);
 
 type PlacesResearchMethods = typeof placesResearchMethods;
 export interface UIClass extends PlacesResearchMethods {}

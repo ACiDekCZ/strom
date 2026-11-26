@@ -24,6 +24,9 @@ export const HELP_TOPICS = {
     eventParticipants: 'A5.5', // the event editor → Godparents & witnesses (a couple's event: Witnesses and others)
     story: 'A7.8',           // Edit person → The story
     reliability: 'R3.8',     // a fact's reliability mark → its tap tooltip "What the marks mean" (src/ui/fact-status.ts)
+    // The Houses window (showHousesWindow, spec 030 §1). No chapter of its own yet: "How facts write a
+    // place" (street and house number in the house field) until the help gets one for houses.
+    houses: 'R4.2.1',
 } as const;
 
 export type HelpTopic = keyof typeof HELP_TOPICS;

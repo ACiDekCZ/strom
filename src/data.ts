@@ -2556,6 +2556,33 @@ class DataManagerClass {
         return true;
     }
 
+    /**
+     * Store what was said about several houses at once (houses joined or told
+     * apart touch both sides): `undefined` or an empty record forgets that
+     * house. One undo step and one change-log entry. False while read-only or
+     * when nothing changes.
+     */
+    setHousesUserData(changes: Readonly<Record<HouseId, HouseUserData | undefined>>, label: string): boolean {
+        if (this.isReadOnly()) return false;
+        const next = { ...(this.data.houses ?? {}) };
+        let changed = false;
+        for (const [id, value] of Object.entries(changes)) {
+            if (!isHouseId(id)) continue;
+            const clean = value ? sanitizeHouseUserData(id, value) : null;
+            if (JSON.stringify(next[id] ?? null) === JSON.stringify(clean)) continue;
+            if (clean) next[id] = clean;
+            else delete next[id];
+            changed = true;
+        }
+        if (!changed) return false;
+        this.beginMutation();
+        if (Object.keys(next).length) this.data.houses = next;
+        else delete this.data.houses;
+        this.commitMutation(strings.undo.houseChange(label));
+        if (this.currentTreeId) AuditLogManager.log(this.currentTreeId, 'house.edit', strings.auditLog.houseChanged(label));
+        return true;
+    }
+
     // ==================== LISTS OF PEOPLE (spec 084) ====================
 
     private lineageIndexCache: { data: StromData; revision: number; index: LineageIndex } | null = null;

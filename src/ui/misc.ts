@@ -928,6 +928,8 @@ export const miscMethods = uiModule({
                 }
                 // The Places dialog's menu, preview and selection close one at a time first.
                 if (this.topActiveOverlay()?.id === 'places-modal' && this.placesEscape()) return;
+                // The Houses window: its menu, its glossary and its small dialogs close one at a time first.
+                if (this.housesEscape(this.topActiveOverlay()?.id)) return;
                 // Change structure…: one screen back, from its options back to the dialog it was opened from.
                 if (this.topActiveOverlay()?.id === 'structure-modal' && this.isStructureDialogOpen()) {
                     this.structureEscape();
@@ -2077,6 +2079,7 @@ export const miscMethods = uiModule({
         this.refreshUndoRedoToolbar();  // R3
         this.materialsTreeChanged();    // attachments brought back or gone again
         this.placesManagerTreeChanged();
+        this.housesWindowTreeChanged();
         this.sourceSplitTreeChanged();  // the Sources manager's lines, an open split dialog
         this.citationsTreeChanged();    // an open source viewer's citation bar (spec 095 R9)
         this.showToast(strings.undo.undone(result.description), 3000, { kind: 'undo-result' });
@@ -2097,6 +2100,7 @@ export const miscMethods = uiModule({
         this.refreshUndoRedoToolbar();  // R3
         this.materialsTreeChanged();
         this.placesManagerTreeChanged();
+        this.housesWindowTreeChanged();
         this.sourceSplitTreeChanged();  // the Sources manager's lines, an open split dialog
         this.citationsTreeChanged();
         this.showToast(strings.undo.redone(result.description), 3000, { kind: 'undo-result' });

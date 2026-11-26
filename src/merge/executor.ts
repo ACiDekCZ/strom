@@ -54,6 +54,7 @@ import { sourcePlaceKey } from '../source-location.js';
 import { sameFileRecord } from './id-match.js';
 import { checkMergeResult, isAncestorOrSelf } from './merge-check.js';
 import { MARRIAGE_EVENT_ID, allShareCopies, joinSameShareCopies, shareIdMaker, tidyShares, treeShareIds } from '../shared-events.js';
+import { mergeIncomingHouses } from '../houses.js';
 
 // ==================== BACKUP ====================
 
@@ -505,6 +506,13 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
         for (const group of state.incomingData.surnameVariants ?? []) {
             const next = addSurnameGroup(mergedData, group);
             if (next.length > 0) mergedData.surnameVariants = next;
+        }
+
+        // What was said about houses: the incoming tree's joins and splits
+        // come along where ours says nothing against them; ours keeps names.
+        if (state.incomingData.houses && Object.keys(state.incomingData.houses).length > 0) {
+            const houses = mergeIncomingHouses(mergedData.houses, state.incomingData.houses);
+            if (houses) mergedData.houses = houses;
         }
 
         // Clear focus settings - new tree should start fresh
