@@ -212,11 +212,13 @@ function skippedHtml(ctx: StepContext, v: View): string {
     const list = v.diffsOpen ? `<ul class="merge-s4-diffs">${diffs.map(d =>
         `<li><span class="merge-s4-pname">${escapeHtml(nameOf(ctx.state.existingData.persons[d.person]))}</span>, ${escapeHtml(fieldLabel(d.field))}: `
         + `<span class="tnum">${escapeHtml(valueText(d.field, d.before))} → ${escapeHtml(valueText(d.field, afterText(d.field, d.before, d.after)))}</span></li>`).join('')}</ul>` : '';
+    // "Same person" here resolved the conflicts of relations: said so, not "skipped" and "there are none".
+    const joined = joinedSameHtml(ctx);
     return stepHeading(4)
-        + `<div class="merge-s4 is-skipped"><h4 class="merge-s4-skip-t">${escapeHtml(W.s4SkippedTitle)}</h4>`
+        + `<div class="merge-s4 is-skipped"><h4 class="merge-s4-skip-t">${escapeHtml(joined ? W.s4ResolvedTitle : W.s4SkippedTitle)}</h4>`
         + `<p class="merge-s4-note">${escapeHtml(W.step4Skipped(scopeLabel(ctx.plan!), diffs.length))}`
         + (diffs.length && !v.diffsOpen ? ` <button type="button" class="link-button merge-s4-showdiffs" data-fk="showdiffs">${escapeHtml(W.showDiffs)}</button>` : '')
-        + `</p>${list}<p class="merge-s4-note">${escapeHtml(W.noRelConf)}</p>${joinedSameHtml(ctx)}</div>`;
+        + `</p>${list}${joined ? '' : `<p class="merge-s4-note">${escapeHtml(W.noRelConf)}</p>`}${joined}</div>`;
 }
 
 function fullHtml(ctx: StepContext, v: View, rels: Array<{ c: RelConflict; choice: RelChoice }>): string {

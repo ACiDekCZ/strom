@@ -634,6 +634,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         joinedInStep4: 'ta sama osoba, wybrano w kroku 4',
         step4Skipped: (scope: string, n: number) => `Zakres ${scope}: ${numPl(n)} ${plPl(n, 'różnica', 'różnice', 'różnic')} u połączonych osób się nie zmienia.`,
         s4SkippedTitle: 'Krok 4 zostanie pominięty',
+        s4ResolvedTitle: 'Sprzeczności powiązań rozstrzygnięte',
         showDiffs: 'Pokaż różnice',
         noRelConf: 'Nie ma sprzeczności powiązań. Gdyby były, krok 4 pokazałby tylko je.',
         relOnly: 'Tutaj rozstrzyga się tylko sprzeczności powiązań.',

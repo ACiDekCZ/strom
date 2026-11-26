@@ -58,6 +58,9 @@ test('Same person on a third parent joins the wife once for all six children', a
     await expect(mergeCount(wizard, 'added')).toHaveText('3');
     const joined = wizard.locator('.merge-s4-joined');
     await expect(joined).toContainText('Marie Šeříková = Marie Anna Modřínová');
+    // The step now says the conflicts are resolved, not "Step 4 is skipped" with "There are no relationship conflicts".
+    await expect(wizard.locator('.merge-s4-skip-t')).toHaveText('Relationship conflicts resolved');
+    await expect(wizard.locator('.merge-s4.is-skipped')).not.toContainText('There are no relationship conflicts');
 
     // Undo brings her back as new and the conflicts with her.
     await joined.locator('.merge-s4-unsame').click();
