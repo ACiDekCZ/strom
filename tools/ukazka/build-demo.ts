@@ -31,7 +31,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { addPlaces } from "./demo-places.ts";
 import { add323, prepare323 } from "./demo-323.ts";
-import { SAMPLE, fixedMoment } from "./sample.ts";
+import { SAMPLE, fixedMoment, sampleTreeId } from "./sample.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const lang = (process.argv[2] ?? "cs") as "cs" | "en" | "de" | "pl";
@@ -80,6 +80,8 @@ const NOW = AS_OF ? Date.parse(AS_OF) : Date.now();
 let clock = 4400;
 const at = (minutesAgo: number) => { clock = minutesAgo; };
 let cwd = dir;
+/** The environment of the next strom command only (the sample's `init`: its fixed id). */
+let once: Record<string, string> = {};
 type J = Record<string, unknown>;
 function strom(...args: string[]): J {
   return stromExit(0, ...args);
@@ -89,9 +91,10 @@ function stromExit(exit: number, ...args: string[]): J {
   const when = new Date(NOW - clock * 60_000).toISOString();
   const r = spawnSync(process.execPath, [cli, ...args, "--json"], {
     cwd,
-    env: { ...env, STROM_NONINTERACTIVE: "1", GIT_AUTHOR_DATE: when, GIT_COMMITTER_DATE: when, ...(AS_OF ? { STROM_SAMPLE_CLOCK: when } : {}) },
+    env: { ...env, STROM_NONINTERACTIVE: "1", GIT_AUTHOR_DATE: when, GIT_COMMITTER_DATE: when, ...(AS_OF ? { STROM_SAMPLE_CLOCK: when } : {}), ...once },
     encoding: "utf8",
   });
+  once = {};
   if (r.status !== exit) throw new Error(`strom ${args.join(" ")} → ${r.status} (expected ${exit})\n${r.stdout}\n${r.stderr}`);
   clock = Math.max(clock - 1.5, 0);
   try {
@@ -125,8 +128,15 @@ const clip = (m: string, page: string) => { const c = clips[page]!; return `${m}
 // history groups each change under its task.
 at(4400);
 strom("setup", "--yes", "--lang", lang);
+// the sample's research has the same id in every build (sampleTreeId): the file on the web and `strom demo` are one research
+const TREE_ID = SAMPLE ? sampleTreeId(lang) : "";
+if (TREE_ID) once = { STROM_SAMPLE_TREE_ID: TREE_ID, NODE_OPTIONS: `${env.NODE_OPTIONS} --require ${path.join(here, "fixed-id.cjs")}` };
 strom("init", d.tree);
 cwd = path.join(home, "Documents", "Strom", d.tree);
+if (TREE_ID) {
+  const got = (JSON.parse(fs.readFileSync(path.join(cwd, "strom.json"), "utf8")) as { id?: string }).id;
+  if (got !== TREE_ID) throw new Error(`the sample's tree id: ${got}, expected ${TREE_ID} (fixed-id.cjs)`);
+}
 fs.writeFileSync(path.join(dir, "tree.txt"), cwd);
 // Five generations: Matěj above them is the direction's limit (the muted edge)
 const G1 = id(strom("research", "new", d.research.main, "--new-person", n.anna[0], "--sex", "F", "--born", "1931", "--born-place", d.place, "--generations", "5"), "G");
@@ -513,5 +523,5 @@ if (AS_OF) {
   const inbox = path.join(home, "Documents", "Strom", "shared", "inbox");
   if (fs.existsSync(inbox)) settle(inbox);
 }
-if (AS_OF) fs.writeFileSync(path.join(dir, "sample.json"), JSON.stringify({ asOf: new Date(NOW).toISOString(), lang, sample: SAMPLE }) + "\n");
+if (AS_OF) fs.writeFileSync(path.join(dir, "sample.json"), JSON.stringify({ asOf: new Date(NOW).toISOString(), lang, sample: SAMPLE, ...(TREE_ID ? { treeId: TREE_ID } : {}) }) + "\n");
 console.log(JSON.stringify({ tree: cwd, research: { main: G1, husband: G2, question: G3, descendants: G4, review: G5 }, people: P }));

@@ -42,6 +42,41 @@ and drawn by these scripts (no real records, no photographs, no generated images
 A bridge on a sample (`strom live start` with the build's `env.json`) runs at the moment when `STROM_SAMPLE_CLOCK`
 names it too (`fixed-clock.cjs` is in its `NODE_OPTIONS`).
 
+A sample's research has the same id in every build: `sampleTreeId(lang)` in `sample.ts`, the UUIDv5 of
+`https://stromapp.info/demo/showcase-<lang>` (URL namespace). `strom init` gets it through `fixed-id.cjs`
+(`STROM_SAMPLE_TREE_ID`, loaded only into that command), so the file on the web and the research of `strom demo` are
+one research. build-demo.ts checks the tree got it.
+
+## The showcase files (`build-ukazka.ts`)
+
+`node tools/ukazka/build-ukazka.ts <outdir> [cs en de pl]` makes the files the app opens as the sample (format
+`strom-showcase` 1, `src/showcase-format.ts`) and the research packed for `strom demo`:
+
+1. the sample research of the language (`build-demo.ts` with `SHOWCASE_SAMPLE=1 SHOWCASE_LINES=1`) and `check-sample.ts`;
+2. its bridge at the sample's moment: `status`, `log`, `material`, the whole queue (pages of 100) and
+   `tree.ged?media=app` (the images in the file), then `live stop`; the research must stay as it was (HEAD, git status);
+3. the answers cleaned for a public file: no address or secret of the bridge, `spend`, `accepts`, `path`, `treesRoot`,
+   `phone`, `update`, `channel`, `seal`, `sends`, `inbox`, `batches` null, `live` left out, nobody at work, no
+   `costUsd` or `metrics`, the demo's HOME as `~`; the header first, with its own size;
+4. the checks: at most 20 MB, the header, the research's id (`_STROM_TREE`, the fixed id), no `127.0.0.1`,
+   `localhost`, secret or port of the bridge, no path of the computer, no time after the moment, hosts only of the
+   invented archives (`example.org`, `.example`) and the project's pages, images only JPEG/PNG/WebP; a failure ends
+   the build (the file is kept as `.failed` to look at);
+5. `strom pack` of the research.
+
+```text
+<outdir>/<lang>/strom-ukazka-<lang>.json            the file (the web serves it at /demo/<lang>/)
+<outdir>/<lang>/strom-ukazka-<lang>.json.sha256     its SHA-256
+<outdir>/<lang>/VERSION                             the sample's version (the app's version of this checkout)
+<outdir>/<lang>/strom-ukazka-<lang>-<version>.strom  the research packed (a ZIP of strom pack) + .sha256
+<outdir>/work/<lang>/                               the sample research it was made of
+<outdir>/sizes.json                                 the sizes
+```
+
+The research's package carries the agents' files of the tree (`.claude/settings.json`, `.codex/hooks.json`, …) with the
+build's folder in them, as strom pack writes them; the build says so. The file for the web never does (the bridge
+does not give them).
+
 `SHOWCASE_NOW` alone fixes the moment of a screenshot build (the inbox's images as in the sample) and changes nothing else. `build-family.ts` takes
 the day of `SHOWCASE_NOW` (or of the sample) when no date is given.
 
@@ -63,6 +98,7 @@ git clone https://github.com/ACiDekCZ/strom-research.git ../strom-research
 export STROM_CLI=$PWD/../strom-research/src/cli.ts SHOWCASE_SAMPLE=1 SHOWCASE_LINES=1
 for l in cs en de pl; do node tools/ukazka/build-demo.ts $l /tmp/ukazka/t-$l; done
 for l in cs en de pl; do node tools/ukazka/check-sample.ts /tmp/ukazka/t-$l; done
+node tools/ukazka/build-ukazka.ts /tmp/ukazka/out                 # the showcase files, all four languages
 ```
 
 Each research is built in about a minute. Nothing of the user's is touched: every demo has its own HOME,

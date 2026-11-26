@@ -4,6 +4,8 @@
 // gen-scans.mjs draws the register pages to match.
 
 export interface Demo {
+  /** The sample's default tree name (the showcase file's `name`, spec 143 UIX §1). */
+  sampleName: string;
   tree: string; place: string; place2: string; house: string; // house number; "" where the records give none
   repo: string; country: string; url: string; mediaFrom: string;
   surname: string; surname2: string; surnameKat: string; occ: string;
@@ -71,6 +73,7 @@ export interface Waits {
 export interface Letter { what: string; about: string[]; on: string; file: string; text: string }
 
 const cs: Demo = {
+  sampleName: "Ukázka – rod Horáků",
   tree: "Horákovi", place: "Dolní Lhota", place2: "Horní Lhota", house: "12",
   repo: "Státní oblastní archiv", country: "cz", url: "https://archiv.example.org/matriky", mediaFrom: "portál archivu",
   surname: "Horák", surname2: "Krejčí", surnameKat: "Vlk", occ: "rolník",
@@ -254,6 +257,7 @@ const cs: Demo = {
 };
 
 const en: Demo = {
+  sampleName: "Sample – the Hartley family",
   tree: "Hartley family", place: "Thornbury", place2: "Oakley", house: "",
   repo: "County Record Office", country: "gb", url: "https://records.example.org/registers", mediaFrom: "the record office's portal",
   surname: "Hartley", surname2: "Cooper", surnameKat: "Fletcher", occ: "farmer",
@@ -437,6 +441,7 @@ const en: Demo = {
 };
 
 const de: Demo = {
+  sampleName: "Beispiel – Familie Weber",
   tree: "Familie Weber", place: "Oberndorf", place2: "Unterdorf", house: "12",
   repo: "Diözesanarchiv", country: "de", url: "https://archiv.example.org/kirchenbuecher", mediaFrom: "Portal des Archivs",
   surname: "Weber", surname2: "Schneider", surnameKat: "Vogel", occ: "Landwirt",
@@ -620,6 +625,7 @@ const de: Demo = {
 };
 
 const pl: Demo = {
+  sampleName: "Przykład – rodzina Jaworskich",
   tree: "Rodzina Jaworskich", place: "Wierzbno Dolne", place2: "Wierzbno Górne", house: "12",
   repo: "Archiwum Diecezjalne", country: "pl", url: "https://archiwum.example.org/metryki", mediaFrom: "portal archiwum",
   surname: "Jaworski", surname2: "Krawczyk", surnameKat: "Wilk", occ: "rolnik",
