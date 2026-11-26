@@ -610,6 +610,8 @@ export interface TownPoint {
     /** Distinct people in the point (houses and no house). */
     personCount: number;
     houseCount: number;
+    /** The houses the point itself stands for (its "⌂ N" tag): those without a point of their own (spec 030 §9). */
+    housesHere: number;
 }
 
 export type MapPoint = PlacePoint | TownPoint;
@@ -680,9 +682,11 @@ export const TOWN_POINT_PREFIX = 'town:';
  *     own, also when its name holds a house and its facts a house field.
  * A person is listed under every house they have a fact at, and under "no
  * house" for facts at the town without a house. Points keep the input order
- * (a town point where its first place stood).
+ * (a town point where its first place stood). `withPoint`: the ids of
+ * houses drawn as points of their own ("<townKey>|<houseKey>", the Family
+ * houses layer): the town's tag (`housesHere`) counts only the others.
  */
-export function groupTownPoints(places: readonly MappedPlaceInput[], known?: KnownStreets): MapPoint[] {
+export function groupTownPoints(places: readonly MappedPlaceInput[], known?: KnownStreets, withPoint?: ReadonlySet<string>): MapPoint[] {
     interface Member { place: MappedPlaceInput; parsed: PlaceHouse }
     const members = new Map<string, Member[]>();
     const memberOf = new Map<string, string>();
@@ -790,6 +794,7 @@ export function groupTownPoints(places: readonly MappedPlaceInput[], known?: Kno
             noHouseShares,
             personCount: people.size,
             houseCount: houseList.length,
+            housesHere: withPoint ? houseList.filter(h => !withPoint.has(`${townKey}|${h.key}`)).length : houseList.length,
         };
     };
 

@@ -44,10 +44,18 @@ export interface HouseMapHooks {
 }
 
 let state: HouseMapState | null = null;
+/** A house whose page opens with its point being moved ("Move the point" of the Map tab's house bubble). */
+let pendingMove: string | null = null;
 
-/** Forget the map's state (the page closed). */
+/** Forget the map's state (the page closed; a move asked for a page not yet open stays). */
 export function resetHouseMapState(): void {
+    if (state) pendingMove = null;
     state = null;
+}
+
+/** The next page of this house opens with its point being moved (the Map tab's "Move the point"). */
+export function requestHouseMapMove(houseId: string): void {
+    pendingMove = houseId;
 }
 
 /** The state of the map now (tests, the page). */
@@ -80,6 +88,12 @@ export function mountHouseMap(root: ParentNode, hooks: HouseMapHooks): void {
     }
     if (!data.views.some(v => v.id === state!.view)) state.view = 'today';
     const s = state;
+    const startMove = pendingMove === hooks.houseId;
+    pendingMove = null;
+    if (startMove) {
+        s.moving = { ...data.point };
+        s.view = 'today';
+    }
     const frame = wrap.querySelector<HTMLElement>('.hmap')!;
     const tiles = frame.querySelector<HTMLElement>('.hmap-tiles')!;
     const pin = frame.querySelector<HTMLElement>('.hpt')!;
@@ -263,4 +277,8 @@ export function mountHouseMap(root: ParentNode, hooks: HouseMapHooks): void {
     });
 
     draw();
+    if (startMove) {
+        wrap.scrollIntoView?.({ block: 'center' });
+        pin.focus({ preventScroll: true });
+    }
 }

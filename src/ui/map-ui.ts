@@ -18,6 +18,7 @@ import { canvasBusy } from './canvas-busy.js';
 import { stampedGeo } from '../place-find.js';
 import { DataManager } from '../data.js';
 import { townHouseCount } from './houses-ui.js';
+import { MAP_HOUSE_BUBBLE } from './map-houses-ui.js';
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -127,8 +128,10 @@ interface MapMarkerInfo {
     key: string;
     geo: PlaceGeo;
     display: string;
-    /** Houses of a town point (the "⌂ N" tag), 0 for a place. */
+    /** Houses of a town point, 0 for a place. */
     houses: number;
+    /** The "⌂ N" tag: the houses without a point of their own (spec 030 §9); absent: `houses`. */
+    tag?: number;
 }
 
 
@@ -219,7 +222,7 @@ export const mapMethods = uiModule({
 
     /** The map's points: the places, the houses of a town found by the town grouped into one point. */
     mapPoints(places?: MappedPlace[]): MapPoint[] {
-        return groupTownPoints(places ?? this.mapPlaces(), knownStreets(DataManager.getData()));
+        return groupTownPoints(places ?? this.mapPlaces(), knownStreets(DataManager.getData()), this.mapHouseIdsWithPoint());
     },
 
     /** Draw the whole view. Called by the renderer whenever the map is on. */
@@ -345,6 +348,7 @@ export const mapMethods = uiModule({
             el.querySelectorAll<HTMLElement>('.map-kinds-hint').forEach(n => { n.textContent = m.kindHint[kind]; });
         });
         text('.map-kinds-last', m.kindsLastOn);
+        text('.map-kind-houses .map-kind-label, .map-kinds-houses .map-kinds-name', strings.houses.mapLayer);
         label('.map-time-range', m.timeYear, false);
         label('.map-path-btn', m.pathPick);
         text('.map-path-btn-text', m.pathPick);
@@ -449,8 +453,21 @@ export const mapMethods = uiModule({
                     <span class="map-kinds-hint">${this.escapeHtml(m.kindHint[k])}</span>
                 </span>
             </button>`).join('');
+        // The Family houses layer (spec 030 §9) after a divider; shown when a house has a point (renderMapKinds).
+        const H = strings.houses;
+        const housesChip = `
+            <span class="map-kinds-sep map-kind-houses-sep" aria-hidden="true" hidden></span>
+            <button type="button" class="map-kind map-kind-houses sel-opt" data-sel-form="chip" data-layer="houses" aria-pressed="false" hidden>
+                <span class="map-kind-check" aria-hidden="true">✓</span>
+                <span class="map-kind-label">${this.escapeHtml(H.mapLayer)}</span>
+            </button>`;
+        const housesRow = `
+            <button type="button" class="map-kinds-row map-kinds-houses" role="switch" data-layer="houses" aria-checked="false" hidden>
+                <span class="map-kinds-box" aria-hidden="true">✓</span>
+                <span class="map-kinds-text"><span class="map-kinds-name">${this.escapeHtml(H.mapLayer)}</span></span>
+            </button>`;
         return `
-            <div class="map-kinds" role="group" aria-label="${this.escapeHtml(m.kindsAria)}">${chips}</div>
+            <div class="map-kinds" role="group" aria-label="${this.escapeHtml(m.kindsAria)}">${chips}${housesChip}</div>
             <div class="map-kinds-wrap">
                 <button type="button" class="map-kinds-btn" aria-expanded="false" aria-haspopup="true">
                     <span class="map-kinds-btn-marks" aria-hidden="true"></span>
@@ -460,6 +477,7 @@ export const mapMethods = uiModule({
                 <div class="map-kinds-menu" role="group" aria-label="${this.escapeHtml(m.kindsAria)}" hidden>
                     ${rows}
                     <p class="map-kinds-last" hidden>${this.escapeHtml(m.kindsLastOn)}</p>
+                    ${housesRow}
                 </div>
             </div>`;
     },
@@ -497,6 +515,21 @@ export const mapMethods = uiModule({
             menu.hidden = !kindsMenuOpen;
             (menu.querySelector('.map-kinds-last') as HTMLElement).hidden = on.size !== 1;
         }
+        this.renderMapHousesSwitch(root);
+    },
+
+    /** The Family houses switch (spec 030 §9): shown with a house point, greyed in Migration over time. */
+    renderMapHousesSwitch(root: ParentNode): void {
+        const sw = this.mapHousesSwitch();
+        const off = this.mapTimeOn;
+        const why = strings.houses.mapMigOff;
+        root.querySelectorAll<HTMLElement>('.map-kind-houses, .map-kinds-houses, .map-kind-houses-sep').forEach(el => {
+            el.hidden = !sw.shown;
+            if (el.classList.contains('map-kind-houses-sep')) return;
+            el.setAttribute(el.classList.contains('map-kind-houses') ? 'aria-pressed' : 'aria-checked', String(sw.on && !off));
+            if (off) { el.setAttribute('aria-disabled', 'true'); el.title = why; }
+            else { el.removeAttribute('aria-disabled'); el.removeAttribute('title'); }
+        });
     },
 
     /** Clicks on the chips, the phone's button and its rows. */
@@ -505,6 +538,7 @@ export const mapMethods = uiModule({
         root?.addEventListener('click', (e: Event) => {
             const target = e.target as HTMLElement;
             if (target.closest('.map-kinds-btn')) { this.toggleMapKindsMenu(); return; }
+            if (target.closest('[data-layer="houses"]')) { this.toggleMapHouses(); return; }
             const kind = (target.closest('.map-kind, .map-kinds-row') as HTMLElement | null)?.dataset.kind;
             if (isMapKind(kind)) this.toggleMapKind(kind);
         });
@@ -621,6 +655,12 @@ export const mapMethods = uiModule({
         this.renderMapStatus(places);
         if (!openPoint) return;
         const key = openPoint;
+        if (key.startsWith(MAP_HOUSE_BUBBLE)) {
+            const id = key.slice(MAP_HOUSE_BUBBLE.length);
+            if (this.mapHousePointsShown().some(p => p.id === id)) this.showMapHouse(id, { pan: false });
+            else this.closeMapPopup();
+            return;
+        }
         const still = this.mapPoints(places).some(p => p.key === key);
         if (still) this.showMapPlace(key, { pan: false });
         else this.closeMapPopup();
@@ -874,7 +914,9 @@ export const mapMethods = uiModule({
             const check = id?.state === 'check' ? this.mapCheckReason(id, lang) : undefined;
             const dim = !!hl && !someIn(mapPointPersonIds(p), hl);
             return this.mapMarkerHtml(info, persons, false, width, height, check, dim);
-        }).join('');
+        }).join('')
+            // The Family houses layer (spec 030 §9): the houses with a point of their own, over the towns.
+            + this.mapHousePointsHtml(width, height, openPoint?.startsWith(MAP_HOUSE_BUBBLE) ? openPoint.slice(MAP_HOUSE_BUBBLE.length) : null);
         this.markMapWindowSelected(layer, points);
         declutterMapLabels(layer);
         this.positionMapFollow(container);
@@ -923,7 +965,7 @@ export const mapMethods = uiModule({
      */
     mapMarkerInfo(p: MapPoint): MapMarkerInfo {
         return p.type === 'town'
-            ? { key: p.ownKey ?? p.key, geo: p.geo, display: p.town, houses: p.houseCount }
+            ? { key: p.ownKey ?? p.key, geo: p.geo, display: p.town, houses: p.houseCount, tag: p.housesHere }
             : { key: p.key, geo: p.geo, display: p.usage.display, houses: 0 };
     },
 
@@ -947,7 +989,7 @@ export const mapMethods = uiModule({
                     style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;">
                 <span class="map-marker-dot">${persons}</span>
                 ${check !== undefined ? `<span class="map-marker-check" role="img" aria-label="${this.escapeHtml(strings.places.onMap.checkMark(check))}" title="${this.escapeHtml(strings.places.onMap.checkMark(check))}">!</span>` : ''}
-                ${info.houses >= 2 ? `<span class="map-marker-houses"><span aria-hidden="true">⌂</span> ${info.houses}</span>` : ''}
+                ${(info.tag ?? info.houses) >= 2 ? `<span class="map-marker-houses"><span aria-hidden="true">⌂</span> ${info.tag ?? info.houses}</span>` : ''}
                 <span class="map-marker-label">${this.escapeHtml(info.display)}</span>
             </button>`;
     },
@@ -1321,6 +1363,7 @@ export const mapMethods = uiModule({
         this.closeMapPopup();
         const container = document.getElementById('map-container');
         this.renderMapTimeControls();
+        this.renderMapKinds();
         if (container) this.drawMapMarkers(container, this.mapPlaces());
         this.renderMapStatus(this.mapPlaces());
     },
@@ -1634,6 +1677,31 @@ export const mapMethods = uiModule({
     },
 
     /**
+     * The bubble of a house of the Family houses layer (spec 030 §9): its
+     * title and name, its years, surnames and people, its research state and
+     * action, House page ›, Houses in this town ›, Move the point. In the
+     * middle of the map like a place's, a phone's sheet along the bottom.
+     */
+    showMapHouse(id: string, opts: { pan?: boolean } = {}): void {
+        const popup = document.querySelector('.map-popup') as HTMLElement | null;
+        const house = this.mapTreeHouse(id);
+        const point = this.mapHousePointsShown().find(p => p.id === house?.id);
+        if (!popup || !house || !point) return;
+        const key = MAP_HOUSE_BUBBLE + house.id;
+        if (key !== openPoint) {
+            townQuery = '';
+            townExpanded = new Set();
+            this.resetMapPopupPerson();
+        }
+        openPoint = key;
+        popup.classList.remove('map-work-bubble');
+        popup.innerHTML = this.mapHouseBubbleHtml(house, townExpanded.has(key));
+        // The open house's pill filled.
+        document.querySelectorAll<HTMLElement>('#map-container .map-house-pt').forEach(el => el.classList.toggle('is-open', el.dataset.house === house.id));
+        this.openMapPopupAt(popup, { lat: point.lat, lon: point.lon }, opts);
+    },
+
+    /**
      * The houses of the open town bubble, in natural order, narrowed by its
      * search; above TOWN_BIG houses each house shows its first 3 people and
      * "+ N more" (the "no house number" group its first 6).
@@ -1649,11 +1717,18 @@ export const mapMethods = uiModule({
         const hl = this.mapHighlightIds();
         const count = popup.querySelector('.map-popup-search-count') as HTMLElement | null;
         if (count) count.textContent = q ? m.houseHits(houses.length) : '';
-        const rows = houses.map(h => `
+        // A house of the tree: its research state and House page › (spec 030 §9); one with a point of its own is not "by the town".
+        const withPoint = this.mapHouseIdsWithPoint();
+        const rows = houses.map(h => {
+            const id = `${point.townKey}|${h.key}`;
+            const byTown = withPoint?.has(id) ? '' : `<span class="map-popup-house-bytown">${this.escapeHtml(strings.places.onMap.byTown)}</span>`;
+            return `
             <div class="map-popup-house">
-                <div class="map-popup-house-head"><span class="map-popup-house-no">${this.escapeHtml(h.house)}</span><span class="map-popup-house-bytown">${this.escapeHtml(strings.places.onMap.byTown)}</span></div>
-                <div class="map-popup-people">${this.mapPopupPeople([...h.solo], big ? 3 : Infinity, h.key, hl)}${this.mapPopupShares(h.shares)}</div>
-            </div>`).join('');
+                <div class="map-popup-house-head"><span class="map-popup-house-no">${this.escapeHtml(h.house)}</span>${byTown}</div>
+                <div class="map-popup-house-main">${this.mapTownHouseMeta(id)}
+                <div class="map-popup-people">${this.mapPopupPeople([...h.solo], big ? 3 : Infinity, h.key, hl)}${this.mapPopupShares(h.shares)}</div></div>
+            </div>`;
+        }).join('');
         const none = q && houses.length === 0 ? `<p class="map-popup-none">${this.escapeHtml(m.houseSearchNone)}</p>` : '';
         const noHouse = !q && point.noHouse.size > 0 ? `
             <div class="map-popup-nohouse">
@@ -1787,6 +1862,8 @@ export const mapMethods = uiModule({
     bindMapClicks(container: HTMLElement): void {
         const markers = container.querySelector('.map-markers') as HTMLElement | null;
         markers?.addEventListener('click', (e: Event) => {
+            const house = (e.target as HTMLElement).closest<HTMLElement>('.map-house-pt');
+            if (house?.dataset.house) { this.showMapHouse(house.dataset.house); return; }
             const btn = (e.target as HTMLElement).closest('.map-marker') as HTMLElement | null;
             if (btn?.dataset.key !== undefined) this.showMapPlace(btn.dataset.key);
         });
@@ -1794,6 +1871,13 @@ export const mapMethods = uiModule({
         popup?.addEventListener('click', (e: Event) => {
             const target = e.target as HTMLElement;
             if (target.closest('.map-popup-close')) { this.closeMapPopup(); return; }
+            // A house bubble (spec 030 §9): "+ N more" of its people; a house's own buttons there and in a town's rows.
+            if (openPoint?.startsWith(MAP_HOUSE_BUBBLE) && target.closest('.map-popup-hmore')) {
+                townExpanded.add(openPoint);
+                this.showMapHouse(openPoint.slice(MAP_HOUSE_BUBBLE.length), { pan: false });
+                return;
+            }
+            if (this.mapHouseBubbleClick(target)) return;
             // "Whole tree" under the selection's people (spec 098 §4): the same place, everybody.
             if (target.closest('.map-popup-whole') && openPoint) {
                 const key = openPoint;
@@ -1855,7 +1939,7 @@ export const mapMethods = uiModule({
             // A button the bubble re-rendered under the click ("+ N more") is
             // no longer in the page: that click was inside the bubble.
             if (!(e.target as Node).isConnected) return;
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-scope-pick, .map-empty, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-house-pt, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-scope-pick, .map-empty, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
             if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
             this.closeMapPopup();
         });
@@ -1863,6 +1947,7 @@ export const mapMethods = uiModule({
 
     closeMapPopup(): void {
         openPoint = null;
+        document.querySelectorAll('#map-container .map-house-pt.is-open').forEach(el => el.classList.remove('is-open'));
         document.getElementById('map-container')?.classList.remove('map-sheet-open');
         const popup = document.querySelector('.map-popup') as HTMLElement | null;
         if (popup) {
@@ -1959,7 +2044,7 @@ export const mapMethods = uiModule({
         };
 
         container.addEventListener('pointerdown', (e: PointerEvent) => {
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-scope-pick, .map-empty, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-house-pt, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-scope-pick, .map-empty, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
             if (pointers.size === 1) dragFrom = { x: e.clientX, y: e.clientY };
             try { container.setPointerCapture(e.pointerId); } catch { /* not capturable */ }

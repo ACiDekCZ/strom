@@ -15,7 +15,7 @@ import { DataManager } from '../data.js';
 import type { HouseId, HouseUserData } from '../types.js';
 import { houseTitle, type TreeHouse } from '../houses.js';
 import {
-    confirmHouse, fetchHouse, houseFeature, houseStatus, type HouseResearch, type HouseWriteResult,
+    confirmHouse, fetchHouse, houseCache, houseFeature, houseStatus, type HouseResearch, type HouseWriteResult,
 } from '../house-bridge.js';
 import { houseImportLink, researchDeviceAllows, researchLinkMark } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
@@ -182,7 +182,8 @@ export const housePageMethods = uiModule({
                 if (page?.id === house.id) this.refreshHousePage();
             });
         }
-        return got?.house ?? this.houseResearchRead(house);
+        // A result the bridge read for another view (the Map tab's houses) serves until this one comes.
+        return got?.house ?? houseCache(b.base).get(row.key) ?? this.houseResearchRead(house);
     },
 
     /** Draw the page of the open house, its scroll kept. */

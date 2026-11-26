@@ -164,6 +164,8 @@ export const CARD_SIGNALS_KEY = 'strom-card-signals';
 
 /** The kinds of places the map shows (spec 031 §1), per device, apart from the other settings. */
 export const MAP_KINDS_KEY = 'strom.map.kinds';
+/** The Map tab's Family houses layer switched on or off on this device (spec 030 §9); absent: on. */
+export const MAP_HOUSES_KEY = 'strom.map.houses';
 
 /** Fallback sender names that older builds stored as if typed (cs/en/de). */
 const FORMER_SENDER_PLACEHOLDERS = new Set(['Příbuzný', 'A relative', 'Ein Verwandter', 'Ein Familienmitglied']);
@@ -191,6 +193,9 @@ class SettingsManagerClass {
     /** The map's kinds changed in a read-only window: kept here, never stored. */
     private localMapKinds: MapKind[] | null = null;
 
+    /** The Family houses layer switched in a read-only window: kept here, never stored. */
+    private localMapHouses: boolean | null = null;
+
     /** The grouping of "What the research knows" chosen in a read-only window, per tree: kept here, never stored. */
     private localKnowsGroups: Map<string, KnowsGroup> | null = null;
 
@@ -206,7 +211,7 @@ class SettingsManagerClass {
     /** Settings only read in this window (spec 079 §0); set before init. */
     setReadOnly(on: boolean): void {
         this.readOnly = on;
-        if (!on) { this.localCardSignals = null; this.localMapKinds = null; this.localKnowsGroups = null; }
+        if (!on) { this.localCardSignals = null; this.localMapKinds = null; this.localMapHouses = null; this.localKnowsGroups = null; }
     }
 
     isReadOnly(): boolean {
@@ -220,12 +225,13 @@ class SettingsManagerClass {
      */
     watchOtherWindows(onChange: (change: SettingsChange) => void): () => void {
         const handler = (e: StorageEvent): void => {
-            if (e.key !== null && e.key !== SETTINGS_KEY && e.key !== CARD_SIGNALS_KEY && e.key !== MAP_KINDS_KEY) return;
+            if (e.key !== null && e.key !== SETTINGS_KEY && e.key !== CARD_SIGNALS_KEY && e.key !== MAP_KINDS_KEY && e.key !== MAP_HOUSES_KEY) return;
             const languageBefore = this.settings.language;
             this.settings = { ...DEFAULT_SETTINGS };
             // What the main window stores wins over a change made here, as for the other settings.
             this.localCardSignals = null;
             this.localMapKinds = null;
+            this.localMapHouses = null;
             this.localKnowsGroups = null;
             this.load();
             this.applyTheme();
@@ -1045,6 +1051,21 @@ class SettingsManagerClass {
         const on = MAP_KINDS.filter(k => kinds.includes(k));
         if (this.readOnly) { this.localMapKinds = on.length ? on : [...MAP_KINDS]; return; }
         try { localStorage.setItem(MAP_KINDS_KEY, JSON.stringify(on.length ? on : [...MAP_KINDS])); } catch { /* not kept */ }
+    }
+
+    /** The Family houses layer as last switched on this device; null: never switched (on). */
+    getMapHouses(): boolean | null {
+        if (this.localMapHouses !== null) return this.localMapHouses;
+        try {
+            const v = localStorage.getItem(MAP_HOUSES_KEY);
+            return v === '1' ? true : v === '0' ? false : null;
+        } catch { return null; }
+    }
+
+    /** Remember the Family houses layer on or off for this device. */
+    setMapHouses(on: boolean): void {
+        if (this.readOnly) { this.localMapHouses = on; return; }
+        try { localStorage.setItem(MAP_HOUSES_KEY, on ? '1' : '0'); } catch { /* not kept */ }
     }
 
     /** Toolbar "Add family" button default OFF (opt-in). */

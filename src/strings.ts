@@ -13331,6 +13331,9 @@ const stringsEN = {
         clearSearch: 'Clear the search',
         loadMore: (n: number) => `Show more (${n})`,
         townHouses: 'Houses in this town ›',
+        // The Map tab's Family houses layer (spec 030 §9).
+        mapLayer: 'Family houses',
+        mapMigOff: 'Houses are not shown in migration.',
         headerMenu: 'More options',
         st: {
             none: 'not researched', queued: 'queued', running: 'being researched', done: (d: string) => `done ${d}`,
@@ -26229,6 +26232,9 @@ const stringsCZ: StringsType = {
         clearSearch: 'Zrušit hledání',
         loadMore: (n: number) => `Zobrazit další (${n})`,
         townHouses: 'Domy obce ›',
+        // The Map tab's Family houses layer (spec 030 §9).
+        mapLayer: 'Domy rodu',
+        mapMigOff: 'V migraci se domy neukazují.',
         headerMenu: 'Další volby',
         st: {
             none: 'nezkoumáno', queued: 've frontě', running: 'zkoumá se', done: (d: string) => `hotovo ${d}`,
@@ -39030,6 +39036,9 @@ const stringsDE: StringsType = {
         clearSearch: 'Suche aufheben',
         loadMore: (n: number) => `Weitere anzeigen (${n})`,
         townHouses: 'Häuser im Ort ›',
+        // The Map tab's Family houses layer (spec 030 §9).
+        mapLayer: 'Häuser der Familie',
+        mapMigOff: 'In der Migration werden keine Häuser gezeigt.',
         headerMenu: 'Weitere Optionen',
         st: {
             none: 'nicht erforscht', queued: 'in der Warteschlange', running: 'wird erforscht', done: (d: string) => `fertig ${d}`,

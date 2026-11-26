@@ -72,6 +72,9 @@ export const plPart14: Pick<StringsType, 'houses'> = {
         clearSearch: 'Wyczyść wyszukiwanie',
         loadMore: (n: number) => `Pokaż więcej (${n})`,
         townHouses: 'Domy w miejscowości ›',
+        // The Map tab's Family houses layer (spec 030 §9).
+        mapLayer: 'Domy rodu',
+        mapMigOff: 'W migracji domy nie są pokazywane.',
         headerMenu: 'Więcej opcji',
         st: {
             none: 'niezbadany', queued: 'w kolejce', running: 'w badaniu', done: (d: string) => `gotowe ${d}`,

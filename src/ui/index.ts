@@ -183,6 +183,7 @@ import { houseStateMethods } from './house-state-ui.js';
 import { houseMaterialMethods } from './house-material-ui.js';
 import { houseRequestMethods } from './house-request-ui.js';
 import { housePageMethods } from './house-page-ui.js';
+import { mapHousesMethods } from './map-houses-ui.js';
 import { placesResearchMethods } from './places-research-ui.js';
 import { placesIdentifyMethods } from './places-identify-ui.js';
 import { placeMenuMethods } from './place-menu-ui.js';
@@ -1207,6 +1208,9 @@ Object.assign(UIClass.prototype, houseRequestMethods);
 type HousePageMethods = typeof housePageMethods;
 export interface UIClass extends HousePageMethods {}
 Object.assign(UIClass.prototype, housePageMethods);
+type MapHousesMethods = typeof mapHousesMethods;
+export interface UIClass extends MapHousesMethods {}
+Object.assign(UIClass.prototype, mapHousesMethods);
 
 type PlacesResearchMethods = typeof placesResearchMethods;
 export interface UIClass extends PlacesResearchMethods {}
