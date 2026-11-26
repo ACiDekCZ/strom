@@ -41,6 +41,7 @@ import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { canonicalDate } from './dates.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
+import { gedcomHouseRecords, gedcomHouseSpan } from './ged-houses.js';
 import { lineageOverridesOf } from './lineage.js';
 import { citeLines, ExtraHolder, FactHolder, factImportTags, gedcomHtmlText, importedValueOf, IMPORT_TAG, joinedEventKey, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
 import { CONFIRMED_TAG, EID_TAG, factResearchEid, factVerifyInfo } from './verify.js';
@@ -1167,9 +1168,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         (!!holder.importId && back.imports.has(holder.importId)) || (holder.originalIds ?? []).some(e => back.imports.has(e.from));
     /** Xrefs in use, without the @ signs (people, families, sources, repositories and the submitter share them). */
     const taken = new Set<string>(['SUBM1', ...back.reserved]);
-    const counters: Record<string, number> = { I: 1, F: 1, S: 1, R: 1, M: 1 };
+    const counters: Record<string, number> = { I: 1, F: 1, S: 1, R: 1, M: 1, H: 1 };
     /** The next free `@{prefix}n@`. */
-    const freshXref = (prefix: 'I' | 'F' | 'S' | 'R' | 'M'): string => {
+    const freshXref = (prefix: 'I' | 'F' | 'S' | 'R' | 'M' | 'H'): string => {
         let n = counters[prefix];
         while (taken.has(`${prefix}${n}`)) n++;
         counters[prefix] = n + 1;
@@ -2613,6 +2614,27 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
         lines.length = 0;
         for (const l of written) lines.push(l);
+    }
+
+    // ==================== HOUSES ====================
+    // What a person said about houses (spec 030 U4b, src/ged-houses.ts): the
+    // app's own file and the research's. "Back to {prog}" leaves it out (the
+    // other program does not read it).
+    if (!options.backTo) {
+        const records = gedcomHouseRecords(data);
+        const xrefOf = new Map(records.map(r => [r.key, freshXref('H')]));
+        for (const r of records) {
+            lines.push(`0 ${xrefOf.get(r.key)} _HOUSE`);
+            if (r.town) pushWrapped(lines, 1, 'PLAC', r.town);
+            for (const n of r.numbers) {
+                pushWrapped(lines, 1, '_NUM', n.house);
+                const span = gedcomHouseSpan(n);
+                if (span) lines.push(`2 DATE ${span}`);
+            }
+            if (r.name) pushWrapped(lines, 1, 'NAME', r.name);
+            for (const s of r.same) lines.push(`1 _SAME ${xrefOf.get(s)}`);
+            pushWrapped(lines, 1, '_STROM_KEY', r.key);
+        }
     }
 
     // ==================== TRAILER ====================

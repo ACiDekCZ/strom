@@ -601,13 +601,23 @@ export function sanitizeHouses(value: unknown): Record<HouseId, HouseUserData> |
 
 /**
  * What was said about houses is the tree's own, not the research's: a
- * version the research sends (a GEDCOM file without it) keeps the previous
- * state's. Returns `next` itself when nothing is carried.
+ * version the research sends keeps the previous state's. A GEDCOM file
+ * carries only a house's name and the houses joined to it (`_HOUSE`,
+ * src/ged-houses.ts): those of a house the file names come from the file,
+ * everything else (houses told apart, the location, events revealed, the
+ * houses the file does not name) stays as it was. Returns `next` itself when
+ * nothing is carried.
  */
 export function keepHouses(next: StromData, previous: StromData): StromData {
-    if (next.houses && Object.keys(next.houses).length) return next;
     if (!previous.houses || !Object.keys(previous.houses).length) return next;
-    return { ...next, houses: structuredClone(previous.houses) };
+    const out = structuredClone(previous.houses) as Record<HouseId, HouseUserData>;
+    for (const [id, theirs] of Object.entries(next.houses ?? {})) {
+        const entry: HouseUserData = out[id] ?? {};
+        if (theirs.name) entry.name = theirs.name;
+        if (theirs.merged?.length) entry.merged = [...new Set([...(entry.merged ?? []), ...theirs.merged])].filter(m => !entry.split?.includes(m));
+        if (Object.keys(entry).length) out[id] = entry;
+    }
+    return { ...next, houses: out };
 }
 
 /** What was said about the houses of a part of the tree (its facts' houses); none = undefined. */

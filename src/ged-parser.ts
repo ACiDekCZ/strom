@@ -77,6 +77,7 @@ import { localAge } from './recorded-age';
 import { isGedcomDateFormOf } from './gedcom-date-form';
 import { placeKey } from './places';
 import { isPlaceRecordId, sanitizePlaceRecord, PLACE_TEXT_LIMITS } from './place-records';
+import { openHouseRecord, readHouseRecordLine, housesFromRecords, type RawHouseRecord } from './ged-houses.js';
 import { convertLegacyCensusEvents, coupleEventTypeOfTag, eventValueIsOnTag } from './events';
 import {
     applyShareMark, convertGedShares, isHouseholdShareRole, type PendingCoupleShars, type PendingPersonShars, type RawRoleAt,
@@ -1887,6 +1888,8 @@ export interface ParsedGedcom {
     placeRecords?: Map<string, PlaceRecord>;
     /** Which record a place is (`2 PLAC` > `3 _STROM_PLACE @L0012@`), keyed by placeKey(). */
     placeRefs?: Map<string, string>;
+    /** What a person said about houses (`0 @Hn@ _HOUSE`, spec 030 U4b), as written: see src/ged-houses.ts. */
+    houseRecords?: RawHouseRecord[];
     /** Surname-variant groups read from the header NOTE (see exporter marker). */
     surnameGroups: string[][];
     /** Rejected spelling suggestions read from their header NOTE (SURNAME_REJECTIONS_MARKER). */
@@ -2713,7 +2716,7 @@ const MEDIA_CUTOUT_TAG = /^_(?:[A-Z0-9]+_)*CUTOUT(?:_[A-Z0-9]+)*$|^_(?:[A-Z0-9]+
 export const GEDCOM_READ_UNDERSCORE_TAGS: ReadonlySet<string> = new Set([
     '_ACCESS', '_AGAINST', '_AT', '_BASIS', '_BOOK', '_BRANCH', '_BY', '_CHOSEN', '_CONF', '_CONFLICT', '_COST', '_COUNT', '_COVERED', '_DATE',
     '_DIRECTION', '_DRAFT', '_DUP', '_END', '_EST', '_EXPORTED_FROM_SITE_ID', '_FAM', '_FOCUS', '_FREL', '_FSFTID', '_GEN',
-    '_GROUP', '_HELD', '_HYPO', '_INTREE', '_ISLAND', '_JOIN', '_KEY', '_LAST', '_LEFT', '_LEVEL', '_LINK', '_MARNM', '_MILI',
+    '_GROUP', '_HELD', '_HOUSE', '_HYPO', '_INTREE', '_ISLAND', '_JOIN', '_KEY', '_LAST', '_LEFT', '_LEVEL', '_LINK', '_MARNM', '_MILI',
     '_MILT', '_MODE', '_MREL', '_NEAREST', '_NEXT', '_NORECORDS', '_ON', '_PAR', '_PART', '_PARTIAL', '_PEOPLE', '_PERS',
     '_PERSONALPHOTO', '_PICK', '_POS', '_PREV', '_PRIM', '_PRIMARY', '_PRIO', '_PROJECT_GUID', '_PROP', '_QUESTION', '_READERS',
     '_RECORDS', '_REF', '_RELATIONSHIP_STATUS', '_REOPEN', '_RESEARCH', '_ROLE', '_SCOPE', '_SEARCHES', '_SENT', '_SESSIONS',
@@ -3404,6 +3407,9 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
     const placeRecords = new Map<string, PlaceRecord>();
     const placeRefs = new Map<string, string>();
     let openPlaceRecord: OpenPlaceRecord | null = null;
+    /** What a person said about houses (`0 @Hn@ _HOUSE`), and the record being read. */
+    const houseRecords: RawHouseRecord[] = [];
+    let houseRecord: RawHouseRecord | null = null;
     const closePlaceRecord = (): void => {
         if (!openPlaceRecord) return;
         const done = finishPlaceRecord(openPlaceRecord);
@@ -3757,6 +3763,16 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
         }
         if (level === 0 && /^@L\d{1,7}@$/.test(tag) && value.trim() === '_STROM_PLACE') {
             openPlaceRecord = { id: tag.slice(1, -1), names: [], jurisdictions: [], sub: null };
+        }
+        // A house's record (spec 030 U4b): its lines are read here alone.
+        if (level === 0) houseRecord = null;
+        if (houseRecord && level > 0) {
+            readHouseRecordLine(houseRecord, level, tag, value);
+            continue;
+        }
+        if (level === 0 && GED_POINTER.test(tag) && value.trim() === '_HOUSE' && houseRecords.length < 50000) {
+            houseRecord = openHouseRecord(tag);
+            houseRecords.push(houseRecord);
         }
 
         // Citation DATA > DATE (the entry recording date) may sit under a
@@ -4173,7 +4189,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
                 currentRecord = null;
                 currentType = null;
                 currentSource = null;
-                if (!KNOWN_RECORD_TYPES.has(recordType) && recordType && !openPlaceRecord) drop(recordType);
+                if (!KNOWN_RECORD_TYPES.has(recordType) && recordType && !openPlaceRecord && !houseRecord) drop(recordType);
             }
             currentSubTag = null;
             currentEvent = null;
@@ -5617,6 +5633,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
         individuals, families, sources, repositories, droppedTags, droppedTagExamples, places, surnameGroups,
         ...(placeRecords.size > 0 ? { placeRecords } : {}),
         ...(placeRefs.size > 0 ? { placeRefs } : {}),
+        ...(houseRecords.length > 0 ? { houseRecords } : {}),
         ...(surnameRejections.length > 0 ? { surnameRejections } : {}),
         ...(surnameMarkers.groups || surnameMarkers.rejections ? { surnameMarkers } : {}),
         ...(lineageMarker ? { lineageMarker } : {}),
@@ -7033,6 +7050,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
         ? { ...(lineFounders.length ? { founders: lineFounders } : {}), ...(lineNotCarriers.length ? { notCarriers: lineNotCarriers } : {}) }
         : null;
 
+    const gedcomHouses = gedcom.houseRecords ? housesFromRecords(gedcom.houseRecords) : undefined;
     const data: StromData = {
             persons,
             partnerships,
@@ -7042,6 +7060,8 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             // Strom Research's place records (spec 034): the research's, read as they come.
             ...(gedcom.placeRecords?.size ? { placeRecords: Object.fromEntries(gedcom.placeRecords) } : {}),
             ...(gedcom.placeRecords?.size && gedcom.placeRefs?.size ? { placeRefs: Object.fromEntries(gedcom.placeRefs) } : {}),
+            // What a person said about houses (spec 030 U4b): names and houses joined.
+            ...(gedcomHouses ? { houses: gedcomHouses } : {}),
             // A marker with nothing under it (the research's "none") is an
             // empty list, no marker no list: carryOverTreeDecisions tells the
             // two apart when a research version is loaded; migrateData drops
