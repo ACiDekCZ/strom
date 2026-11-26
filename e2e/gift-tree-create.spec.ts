@@ -193,3 +193,41 @@ test('cancelling while the package is made says Cancelled and downloads nothing'
     await expect(dialog.locator('.gift-review')).toBeVisible();
     await expect(dialog.locator('#gift-next')).toBeVisible();
 });
+
+test('step 4: the parts with their sizes, photos, the ZIP as a tree; Book settings… comes back to the step', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await sampleOnDaniel(page);
+    await cardAction(page, 'Daniel', 'gift-tree');
+    const dialog = page.locator('#gift-modal');
+    await dialog.locator('#gift-nav [data-step="4"]').click();
+    await expect(dialog.locator('#gift-sub')).toHaveText('step 4 of 6: What the package holds');
+
+    const rows = dialog.locator('.gift-pt-r');
+    await expect(rows).toHaveCount(6);
+    await expect(dialog.locator('[data-part="cover"]')).toBeDisabled();
+    await expect(rows.first()).toContainText('Cover letter – Start here');
+    await expect(dialog.locator('.gift-zip-r').first()).toHaveText(/Family tree – Daniel Berg – 2026\.zip/);
+    await expect(dialog.locator('.gift-zip-r.is-off')).toHaveCount(0);
+    const total = await dialog.locator('.gift-zip-tot b').textContent();
+
+    // GEDCOM off: its rows struck out in the ZIP, the total smaller.
+    await dialog.locator('[data-part="gedcom"]').uncheck();
+    await expect(dialog.locator('.gift-zip-r.is-off')).toHaveCount(2);
+    await expect(dialog.locator('.gift-pt-r.is-off')).toContainText('GEDCOM');
+    await expect(dialog.locator('.gift-zip-tot b')).not.toHaveText(total!);
+
+    // Photos: a segment of two.
+    await expect(dialog.locator('[data-gk="photos-on"]')).toHaveAttribute('aria-checked', 'true');
+    await dialog.locator('[data-gk="photos-off"]').click();
+    await expect(dialog.locator('[data-gk="photos-off"]')).toHaveAttribute('aria-checked', 'true');
+
+    // Book settings…: the book's dialog over the app; closed, the guide is back at step 4.
+    await dialog.locator('[data-gk="part-link-book"]').click();
+    await expect(page.locator('#book-modal')).toHaveClass(/active/);
+    await expect(dialog).not.toHaveClass(/active/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#book-modal')).not.toHaveClass(/active/);
+    await expect(dialog).toHaveClass(/active/);
+    await expect(dialog.locator('#gift-sub')).toHaveText('step 4 of 6: What the package holds');
+    await expect(dialog.locator('[data-part="gedcom"]')).not.toBeChecked();
+});

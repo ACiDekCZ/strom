@@ -25,7 +25,7 @@ import { type PrivacyMode } from '../privacy.js';
 import { giftPersonKey, loadGiftMemory } from '../gift-memory.js';
 import {
     buildGiftPackage, estimateGiftSize, GiftOutOfMemory, giftFileNames, giftNamesLabel, giftStepsFor, isAbortError,
-    type GiftPackageEnv, type GiftPackageResult, type GiftProgress, type GiftStep,
+    type GiftPackageEnv, type GiftPackageResult, type GiftPartKey, type GiftProgress, type GiftSizeEstimate, type GiftStep,
 } from '../gift-package.js';
 import { buildGiftCover, giftDefaultSalutation } from '../gift-cover.js';
 import { AppExporter } from '../export.js';
@@ -110,6 +110,9 @@ interface GiftUi {
     /** The cover page's preview for these settings. */
     coverKey: string;
     coverHtml: string;
+    /** Step 4's estimates for these settings. */
+    estKey: string;
+    est: { now: GiftSizeEstimate; all: GiftSizeEstimate } | null;
 }
 
 interface GiftCutInfo {
@@ -206,6 +209,54 @@ function giftPackageEnv(treeId: TreeId | null, settings: GiftSettings, onCover: 
 function defaultZipName(u: GiftUi): string {
     const people = giftRecipients(u.g).map(id => ({ id, name: shownName(u.data.persons[id]) || '?' }));
     return giftFileNames(u.g.settings.letter.lang, people, new Date().getFullYear()).zip;
+}
+
+/** Step 4's estimates: the package as chosen, and every part's size as if it were in (cached by the settings). */
+function estimatesOf(u: GiftUi): { now: GiftSizeEstimate; all: GiftSizeEstimate } {
+    const key = JSON.stringify([cutKey(u.g)]);
+    if (!u.est || u.estKey !== key) {
+        const now = new Date();
+        const s = u.g.settings;
+        u.est = {
+            now: estimateGiftSize(u.data, s, { now }),
+            all: estimateGiftSize(u.data, { ...s, photos: s.photos, parts: { app: true, pages: true, book: true, fan: true, gedcom: true } }, { now }),
+        };
+        u.estKey = key;
+    }
+    return u.est;
+}
+
+/** A segment of two to four choices (role radiogroup; arrows move the choice), each with a quiet line under it. */
+function giftSegment(
+    label: string, key: string, options: Array<{ key: string; label: string; sub?: string; on: boolean }>, pick: (key: string) => void,
+): HTMLElement {
+    const seg = el('div', `sel-seg gift-seg gift-seg-${key}`);
+    seg.setAttribute('role', 'radiogroup');
+    seg.setAttribute('aria-label', label);
+    options.forEach(o => {
+        const b = el('button', 'sel-opt gift-seg-o');
+        b.type = 'button';
+        b.dataset.selForm = 'seg';
+        b.dataset.gk = `${key}-${o.key}`;
+        b.dataset.opt = o.key;
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(o.on));
+        b.tabIndex = o.on ? 0 : -1;
+        b.appendChild(el('span', 'gift-seg-l', o.label));
+        if (o.sub) b.appendChild(el('span', 'gift-seg-n', o.sub));
+        b.addEventListener('click', () => { if (!o.on) pick(o.key); });
+        seg.appendChild(b);
+    });
+    seg.addEventListener('keydown', (e) => {
+        const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        const i = options.findIndex(o => o.on);
+        const next = options[(i + step + options.length) % options.length];
+        pick(next.key);
+        document.querySelector<HTMLElement>(`#${GIFT_MODAL_ID} [data-gk="${key}-${next.key}"]`)?.focus({ preventScroll: true });
+    });
+    return seg;
 }
 
 /**
@@ -438,7 +489,7 @@ export const giftTreeMethods = uiModule({
             g, data, focusId, listId: opts.listId, query: '', listWhy: false, closePicker: null,
             summaryKey: '', summary: null, livingKey: '', living: null, mq: null, onMq: null,
             branchesScreen: false, view: null, viewKey: '', expanded: new Set(), cutInfo: null,
-            relKey: '', rel: new Map(), dropPreview: null, run: null, carry: null, coverKey: '', coverHtml: '',
+            relKey: '', rel: new Map(), dropPreview: null, run: null, carry: null, coverKey: '', coverHtml: '', estKey: '', est: null,
         };
         if (opts.step && giftCanProceed(g, data)) giftGoTo(g, opts.step);
         // A window turned between phone and wider: the steps drawn again (the greyed list choice, the footer).
@@ -819,6 +870,7 @@ export const giftTreeMethods = uiModule({
             else if (g.step === 1) this.giftRenderForWhom(pane);
             else if (g.step === 2) this.giftRenderCut(pane);
             else if (g.step === 3) this.giftRenderLiving(pane);
+            else if (g.step === 4) this.giftRenderParts(pane);
             else if (g.step === 6) this.giftRenderReview(pane);
             else pane.appendChild(el('h3', 'gift-h3', names[g.step - 1]));
             pane.scrollTop = top;
@@ -849,6 +901,151 @@ export const giftTreeMethods = uiModule({
         overlay.dataset.run = u.run?.phase ?? '';
 
         if (focusKey) overlay.querySelector<HTMLElement>(`[data-gk="${focusKey}"]`)?.focus({ preventScroll: true });
+    },
+
+    // ---- Step 4: What the package holds (§5) ----
+
+    giftRenderParts(pane: HTMLElement): void {
+        const u = ui!;
+        const s = u.g.settings;
+        const t = strings.giftTree;
+        const K = t.pkg;
+        const language = lang();
+        const est = estimatesOf(u);
+        const size = (n: number): string => formatTreeSize(n, language);
+        const cols = el('div', 'gift-cols is-s4');
+        const left = el('div', 'gift-col gift-parts');
+        const right = el('div', 'gift-col gift-zip');
+
+        left.appendChild(el('h3', 'gift-h3', K.partsH));
+        const list = el('div', 'gift-pt');
+        const part = (key: 'cover' | GiftPartKey, on: boolean, link?: { text: string; run: () => void }): void => {
+            const row = el('label', `gift-pt-r${on ? '' : ' is-off'}${key === 'cover' ? ' is-locked' : ''}`);
+            const input = el('input');
+            input.type = 'checkbox';
+            input.checked = on;
+            input.dataset.gk = `part-${key}`;
+            input.dataset.part = key;
+            if (key === 'cover') input.disabled = true;
+            else input.addEventListener('change', () => {
+                s.parts = { ...s.parts, [key]: input.checked };
+                this.giftRender();
+            });
+            const text = el('span', 'gift-pt-x');
+            text.appendChild(el('span', 'gift-pt-t', K.part[key].t));
+            const d = el('span', 'gift-pt-d', K.part[key].d);
+            if (link) {
+                const a = button('link-button gift-pt-link', link.text, () => link.run());
+                a.dataset.gk = `part-link-${key}`;
+                a.addEventListener('click', (e) => e.preventDefault());
+                d.append(' ', a);
+            }
+            text.appendChild(d);
+            row.append(input, text, el('span', 'gift-pt-s', size(est.all.parts[key])));
+            list.appendChild(row);
+        };
+        part('cover', true);
+        part('app', s.parts.app);
+        part('pages', s.parts.pages);
+        part('book', s.parts.book, { text: K.bookSettings, run: () => this.giftBookSettings() });
+        part('fan', s.parts.fan, { text: K.fanLook, run: () => { void this.giftFanLook(); } });
+        part('gedcom', s.parts.gedcom);
+        left.appendChild(list);
+
+        // Photos: with them (how many, how much) or without.
+        left.appendChild(el('h3', 'gift-h3 gift-photos-h', K.photosH));
+        const photos = est.now.photos;
+        left.appendChild(giftSegment(K.photosH, 'photos', [
+            { key: 'on', label: K.withPhotos, sub: photos.count ? K.photosCount(photos.count, size(photos.bytes)) : K.noPhotos, on: s.photos },
+            { key: 'off', label: K.withoutPhotos, sub: K.smaller, on: !s.photos },
+        ], (key) => {
+            s.photos = key === 'on';
+            this.giftRender();
+        }));
+        left.appendChild(el('p', 'gift-note', K.photosNote));
+
+        // The ZIP's contents as the package names them (the letter's language).
+        right.appendChild(el('h3', 'gift-h3', K.zipH));
+        const tree = el('div', 'gift-zip-tree');
+        const people = giftRecipients(u.g).map(id => ({ id, name: shownName(u.data.persons[id]) || '?' }));
+        const names = giftFileNames(s.letter.lang, people, new Date().getFullYear(), s.fileName);
+        const row = (level: number, name: string, opts: { folder?: boolean; bytes?: number; off?: boolean } = {}): void => {
+            const r = el('div', `gift-zip-r is-l${level}${opts.off ? ' is-off' : ''}`);
+            const ic = el('span', 'gift-zip-ic');
+            ic.setAttribute('aria-hidden', 'true');
+            ic.innerHTML = iconSvg(opts.folder ? 'folder' : 'file', { size: 14 });
+            r.append(ic, el('span', 'gift-zip-n', name), el('span', 'gift-zip-s', opts.bytes !== undefined && !opts.off ? size(opts.bytes) : ''));
+            tree.appendChild(r);
+        };
+        const p = s.parts;
+        const parts = est.now.parts;
+        row(0, names.zip);
+        row(1, names.folder, { folder: true });
+        row(2, names.start, { bytes: parts.cover });
+        row(2, names.app, { bytes: parts.app, off: !p.app });
+        row(2, names.pages, { folder: true, bytes: parts.pages, off: !p.pages });
+        row(2, names.book, { bytes: parts.book, off: !p.book });
+        names.fans.forEach((f, i) => {
+            const last = i === names.fans.length - 1;
+            row(2, `${f.stem}.svg`, { off: !p.fan });
+            row(2, `${f.stem}.png`, { off: !p.fan, ...(last ? { bytes: parts.fan } : {}) });
+        });
+        const slash = names.gedcom.indexOf('/');
+        row(2, names.gedcom.slice(0, slash), { folder: true, off: !p.gedcom });
+        row(3, names.gedcom.slice(slash + 1), { bytes: parts.gedcom, off: !p.gedcom });
+        right.appendChild(tree);
+        const tot = el('div', 'gift-zip-tot');
+        tot.append(el('b', undefined, K.total(size(est.now.total))),
+            el('span', undefined, [K.lessPhotos(size(est.now.withoutPhotos)), ...(p.app ? [K.lessApp(size(est.now.withoutApp))] : [])].join(' · ')));
+        right.appendChild(tot);
+        right.appendChild(el('p', 'gift-note', K.zipNote));
+
+        cols.append(left, right);
+        pane.appendChild(cols);
+    },
+
+    /**
+     * "Book settings…" / "Fan look…": the guide steps aside for the app's own
+     * dialog and comes back at this step when it closes (the package takes
+     * the choices made there).
+     */
+    giftAside(target: HTMLElement, closed: () => boolean, back?: () => void): void {
+        const u = ui;
+        const overlay = document.getElementById(GIFT_MODAL_ID);
+        if (!u || !overlay) return;
+        overlay.classList.remove('active');
+        this.dialogStack = this.dialogStack.filter(id => id !== GIFT_MODAL_ID);
+        const obs = new MutationObserver(() => {
+            if (!closed()) return;
+            obs.disconnect();
+            back?.();
+            if (ui !== u) return;
+            overlay.classList.add('active');
+            this.pushDialog(GIFT_MODAL_ID);
+            this.giftRender();
+            overlay.querySelector<HTMLElement>('.gift-pane input, .gift-pane button')?.focus({ preventScroll: true });
+        });
+        obs.observe(target, { attributes: true, attributeFilter: ['class', 'hidden'] });
+    },
+
+    giftBookSettings(): void {
+        const modal = document.getElementById('book-modal');
+        if (!ui || !modal) return;
+        this.giftAside(modal, () => !modal.classList.contains('active'));
+        this.showBookDialog('book');
+    },
+
+    async giftFanLook(): Promise<void> {
+        if (!ui) return;
+        const before = TreeRenderer.getViewMode();
+        if (before !== 'fan') await TreeRenderer.setViewMode('fan');
+        const panel = document.getElementById('fan-look-panel');
+        const btn = document.getElementById('fan-look-btn');
+        if (!panel || !btn) return;
+        this.giftAside(panel, () => panel.hidden, () => {
+            if (before !== 'fan') void TreeRenderer.setViewMode(before);
+        });
+        btn.click();
     },
 
     // ---- Step 6: Preview and create (§8) ----
