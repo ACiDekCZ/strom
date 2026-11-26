@@ -290,7 +290,7 @@ export const mapFollowMethods = uiModule({
         const readOnly = DataManager.isViewMode();
         // With a research, a place it could look up (no location or not identified, not queued
         // twice) also offers Look up in the research (spec 058).
-        const access = readOnly ? 'none' : this.placesResearchContext().access;
+        const access = readOnly ? 'none' : this.placesResearchContext().stepAccess;
         const keys = missing.flatMap(({ place }) => place.kind === 'noCoords' && place.key ? [place.key] : []);
         const ids = access !== 'none' && keys.length ? this.placeIdentitiesNow(keys) : null;
         const lookable = (key: string): boolean => { const st = ids?.get(key)?.state; return st === 'none' || st === 'undet'; };
@@ -320,7 +320,7 @@ export const mapFollowMethods = uiModule({
      * (nothing runs yet, Undo in the toast); where the research's steps do not go here, where they go.
      */
     lookUpFollowPlace(key: string, el: HTMLElement | null = null): void {
-        const note = this.placesResearchNote(this.placesResearchContext().access);
+        const note = this.placesResearchNote(this.placesResearchContext().stepAccess);
         if (note) { this.showToast(note, 8000); return; }
         // Working from the click until the bridge answers (B169); queued: the notice draws again without the step
         // (not offered twice).

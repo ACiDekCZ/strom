@@ -75,7 +75,8 @@ export const agentWindowMethods = uiModule({
             live: l ? overviewSessionData(l, secrets) as unknown as Record<string, unknown> : null,
             work: { live: t.live, followed: t.followed, waiting: [...t.waiting], working: [...t.working], queue: [...t.queue], done: [...t.done] },
             cards: [...researchCardInfoNow()] as [string, Record<string, unknown>][],
-            status: researchId && status ? { researchId, status } : null,
+            // With whether its bridge answers now: the status stays after the bridge stops answering.
+            status: researchId && status ? { researchId, status, up: this.researchBridgeUp(researchId) } : null,
             places: null,
             follow,
         };
@@ -97,7 +98,7 @@ export const agentWindowMethods = uiModule({
             const st = mirror.status();
             if (mirroredStatusId && mirroredStatusId !== st?.researchId) setMirroredResearchStatus(mirroredStatusId, null);
             mirroredStatusId = st?.researchId ?? null;
-            if (st) setMirroredResearchStatus(st.researchId, st.status as LiveStatus);
+            if (st) setMirroredResearchStatus(st.researchId, st.status as LiveStatus, st.up !== false);
         }
         if (changed.includes('cards') || changed.includes('link')) researchMirrorChanged();
         // The Table reads the link, the status, the agent's work and the places (not the session's other news, nor following).

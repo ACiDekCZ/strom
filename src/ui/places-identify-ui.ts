@@ -269,7 +269,7 @@ export const placesIdentifyMethods = uiModule({
     async maybeOfferPlaces(): Promise<void> {
         const treeId = DataManager.getCurrentTreeId();
         if (offerBusy || !treeId || researchAutoState(treeId).placesOffer !== 'armed') return;
-        const step = placesOfferStep(true, this.placesResearchContext().access);
+        const step = placesOfferStep(true, this.placesResearchContext().stepAccess);
         if (step === 'drop') patchResearchAutoState(treeId, { placesOffer: 'done' });
         // Over a dialog it waits for the research's next status.
         if (step !== 'ask' || dialogOpen()) return;
@@ -320,7 +320,7 @@ export const placesIdentifyMethods = uiModule({
         const r = strings.places.research;
         const ctx = this.placesResearchContext();
         const queued = this.placesCountedIds().filter(id => id.state === 'queued').length;
-        const kind = placeContextLine({ access: ctx.access, filter: this.placesFilter.state, summary, queued });
+        const kind = placeContextLine({ access: ctx.stepAccess, filter: this.placesFilter.state, summary, queued });
         if (!kind) return '';
         const counts = bulkCounts(this.placesCountedIds(), this.placesLivePayload());
         // An action of the research carries its group's mark (Run now: the terminal and the agent); the bridge's steps none.

@@ -55,6 +55,7 @@ import { shownName } from '../person-name.js';
 import { barHtml } from './prog-bar.js';
 import { scopePersonIds as mapScopePersonIds, type ViewScope as MapScope } from '../view-scope.js';
 import { getSelection, selectionIds, selectionText } from './view-selection-ui.js';
+import { PLACES_OPEN_ACTION, satResearchForward, type PlacesOpenArgs } from '../windows/window-sat-research.js';
 /** A place that has coordinates and therefore something to draw. */
 export interface MappedPlace {
     key: string;
@@ -363,8 +364,17 @@ export const mapMethods = uiModule({
         if (action === 'geocode') { void this.startGeocoding(); return; }
         if (action === 'confirm') { this.openWaitingPlaces(); return; }
         if (action === 'research') {
+            const ctx = this.placesResearchContext();
+            // A satellite: the main window, whose bridge answers, opens Places with the preview and comes forward
+            // (its selection or view is not the main window's: the whole tree).
+            const main = ctx.viaMain && ctx.access === 'ok' ? satResearchForward() : null;
+            if (main?.mainOpen()) {
+                const args: PlacesOpenArgs = { scope: 'tree', unplaced: true, bulk: 'look' };
+                main.run(PLACES_OPEN_ACTION, args, true);
+                return;
+            }
             // Where its steps do not go here (another computer, a phone, an older research): say where they go.
-            const note = this.placesResearchNote(this.placesResearchContext().access);
+            const note = this.placesResearchNote(ctx.stepAccess);
             if (note) { this.showToast(note, 8000); return; }
         }
         this.showPlacesManager(undefined, undefined, undefined, { unplaced: action === 'research' });
@@ -1563,7 +1573,7 @@ export const mapMethods = uiModule({
         const om = strings.places.onMap;
         const d = strings.places.dialog;
         const r = strings.places.research;
-        const access = this.placesResearchContext().access;
+        const access = this.placesResearchContext().stepAccess;
         const esc = (t: string): string => this.escapeHtml(t);
         const key = esc(id ? (point.type === 'town' ? point.ownKey ?? point.key : point.key) : point.key);
         const note = (text: string): string => `<p class="map-popup-note">${esc(text)}</p>`;

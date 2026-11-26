@@ -41,6 +41,8 @@ import { hideWindowNotice, showWindowNotice } from '../ui/window-notice.js';
 import { windowAgentFollow } from './agent-follow-state.js';
 import { setTableResearchForward, TABLE_BUBBLE_ACTION } from './window-table-research.js';
 import { setShowOnMapForward } from './window-show-on-map.js';
+import { runMainResearchAction, setSatResearchForward } from './window-sat-research.js';
+import { registerSatelliteResearchActions } from '../ui/sat-research-main.js';
 import { adoptWindowSelection, getSelection } from '../ui/view-selection-ui.js';
 import { SettingsManager } from '../settings.js';
 import type { MapKind } from '../places.js';
@@ -138,7 +140,11 @@ export function startMainWindow(): WindowRegistry {
         const sel = decodeSelectionRef(ref);
         if (sel) UI.showSelectionOnMap(sel);
     });
+    // The research actions a satellite asks for (its map's "Look up in the research", …): run here.
+    registerSatelliteResearchActions(UI);
     registry.setResearchActionHandler((action, args) => {
+        const own = runMainResearchAction(action, args);
+        if (own.handled) return own.result;
         if (action === PERSON_MENU_ACTION) {
             runSatelliteResearchRow(args, { items: researchItems, run: (personId, a) => UI.runPersonMenuAction(personId as PersonId, a) });
             return;
@@ -267,6 +273,15 @@ export function startSatelliteSelection(client: SatelliteClient): void {
     setShowOnMapForward({
         mainOpen: () => client.connection === 'connected',
         send: (ref) => { client.showOnMap(ref); void client.requestMainFocus(); },
+    });
+    // The other research actions this window holds no bridge for (its map's "Look up in the research", …).
+    setSatResearchForward({
+        mainOpen: () => client.connection === 'connected',
+        run: (id, args, focusMain) => {
+            client.researchAction(id, args);
+            if (focusMain) void client.requestMainFocus();
+        },
+        ask: (id, args, waitMs) => client.researchActionResult(id, args, waitMs),
     });
 }
 

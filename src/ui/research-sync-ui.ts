@@ -500,16 +500,20 @@ setSourceRetractLookup(id => {
 /**
  * A satellite window (spec 097 K1.3): the research's status as the main
  * window has it (the agent's mirror), so what reads the status here (the
- * features, the mode) reads the main window's; null forgets it. Nothing
- * listening to a bridge's status hears it: this window asks no bridge.
+ * features, the mode) reads the main window's; null forgets it. `up`: the
+ * main window's bridge answers now (false: down here too, its last status
+ * kept as the main window keeps it). Nothing listening to a bridge's status
+ * hears it: this window asks no bridge.
  */
-export function setMirroredResearchStatus(researchId: string, status: LiveStatus | null): void {
+export function setMirroredResearchStatus(researchId: string, status: LiveStatus | null, up = true): void {
     if (!status) {
         runtime.delete(researchId);
         lastSaidStatus.delete(researchId.toLowerCase());
         return;
     }
-    runtime.set(researchId, { up: true, checkedAt: Date.now(), status, blocked: false, downSince: 0 });
+    const prev = runtime.get(researchId);
+    const downSince = up ? 0 : (prev && !prev.up && prev.downSince ? prev.downSince : Date.now());
+    runtime.set(researchId, { up, checkedAt: Date.now(), status, blocked: false, downSince });
     lastSaidStatus.set(researchId.toLowerCase(), status);
 }
 

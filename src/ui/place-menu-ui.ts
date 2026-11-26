@@ -92,7 +92,7 @@ export const placeMenuMethods = uiModule({
             return;
         }
         const lang = getCurrentLanguage();
-        const menu = placeMenu(id, this.placesResearchContext().access);
+        const menu = placeMenu(id, this.placesResearchContext().stepAccess);
         const s = strings.places;
         const labels: Record<PlaceMenuAction, string> = {
             answer: s.dialog.answer, find: strings.map.findOnMap, look: s.research.look,

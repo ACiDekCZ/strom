@@ -11,7 +11,7 @@ import { strings } from '../strings.js';
 import { TreeManager } from '../tree-manager.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { parseLiveBridge } from '../research-link.js';
-import { announcedResearchScheme, storedResearchBridge } from '../research-device.js';
+import { announcedResearchScheme, isBridgelessWindow, storedResearchBridge } from '../research-device.js';
 import { placesResearchAccess, type PlacesLinkCheck, type PlacesResearchAccess } from '../places-bridge.js';
 import { uiModule } from './module.js';
 
@@ -23,7 +23,18 @@ export interface PlacesResearchContext {
     /** What the bridge announced (empty when it does not answer). */
     features: readonly string[];
     access: PlacesResearchAccess;
-    /** The research's actions go (access 'ok'). */
+    /**
+     * A satellite window (no bridge of its own): the access is the main window's (its bridge as the
+     * mirror says), and what writes to the bridge goes through the main window.
+     */
+    viaMain: boolean;
+    /**
+     * The access of the place steps that write to the bridge from this window (Look up, Check, Select,
+     * Run now, Remove from the queue): the access, except in a satellite, where they do not go from
+     * here yet (as before: where they go instead).
+     */
+    stepAccess: PlacesResearchAccess;
+    /** The research's place steps go from here (stepAccess 'ok'). */
     canResearch: boolean;
     /** What a refusal's `places` link is checked against. */
     linkCheck: PlacesLinkCheck | null;
@@ -40,14 +51,17 @@ export const placesResearchMethods = uiModule({
     /** Where the research's place actions stand for the open tree, now. */
     placesResearchContext(): PlacesResearchContext {
         const researchId = openTreeResearchId();
+        // A satellite holds no bridge address: whether the bridge answers is the main window's (mirrored).
+        const viaMain = isBridgelessWindow();
         const up = !!researchId && this.researchBridgeUp(researchId);
         const base = researchId ? parseLiveBridge(storedResearchBridge(researchId)?.base)?.base ?? null : null;
         const features = up && researchId ? this.researchStatusOf(researchId)?.features ?? [] : [];
         const access = placesResearchAccess({
-            hasResearch: !!researchId, bridgeLocal: up && !!base, features, phoneLayout: isPhoneBar(),
+            hasResearch: !!researchId, bridgeLocal: up && (viaMain || !!base), features, phoneLayout: isPhoneBar(),
         });
+        const stepAccess: PlacesResearchAccess = viaMain && access === 'ok' ? 'elsewhere' : access;
         return {
-            researchId, base, features, access, canResearch: access === 'ok',
+            researchId, base, features, access, viaMain, stepAccess, canResearch: stepAccess === 'ok',
             linkCheck: researchId ? { tree: researchId, scheme: announcedResearchScheme() } : null,
         };
     },

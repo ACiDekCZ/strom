@@ -48,6 +48,8 @@ export interface AgentWorkData {
 export interface AgentStatusData {
     researchId: string;
     status: unknown;
+    /** Its bridge answers in the main window now (absent: a main window from before, taken as answering). */
+    up?: boolean;
 }
 
 /** The followed research's lines' places (research-directions-write DirectionPlaces, its map as entries). */

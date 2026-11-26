@@ -41,6 +41,7 @@ import { drawTiles, dotsHtml, mapSize, type SmallMapView } from './places-find-u
 import { fetchStatus, liveSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { uiModule } from './module.js';
+import { satResearchForward } from '../windows/window-sat-research.js';
 import { runBusy } from './busy.js';
 import { helpMark } from './help-mark.js';
 import type { ToastWorkEnd } from './toast.js';
@@ -140,9 +141,15 @@ export const waitingPlacesMethods = uiModule({
     /**
      * "Answer in Waiting" from the Places dialog, the map or the person card:
      * the window at that place's card; without the bridge's answers,
-     * "Awaiting action" as before.
+     * "Awaiting action" as before. A satellite (no bridge of its own) has the
+     * main window open it there and come forward.
      */
     openWaitingPlaces(place?: string): void {
+        const main = this.placesResearchContext().viaMain ? satResearchForward() : null;
+        if (main?.mainOpen()) {
+            main.run('waiting-places', place ? { focus: place } : {}, true);
+            return;
+        }
         if (this.waitingPlacesShown()) this.showWaitingPlaces(place);
         else this.showResearchWaiting();
     },

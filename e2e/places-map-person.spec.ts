@@ -239,6 +239,35 @@ test.describe('places on the map with the research here', () => {
         await expect(page.locator('#places-modal')).toBeHidden();
     });
 
+    test('a map in a window of its own: "In the research" opens Places with the preview in the main window, nothing said of another computer there', async ({ page, context }) => {
+        await stubMap(page);
+        const b = await research(page);
+        const treeId = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId()!);
+        // The map in a window of its own: it holds no bridge, the main window's bridge answers.
+        const sat = await context.newPage();
+        await stubMap(sat);
+        await sat.setViewportSize({ width: 1440, height: 900 });
+        await sat.goto(`/strom.html?okno=map&tree=${encodeURIComponent(treeId)}&w=pm1`);
+        await expect(sat.locator('html')).not.toHaveClass(/app-loading/);
+        await expect(sat.locator('#map-container')).toBeVisible();
+        await sat.evaluate(() => window.Strom.UI.setMapScope('tree'));
+        const look = sat.locator('#map-status .map-status-research');
+        await expect(look).toHaveAccessibleName('In the research, AI');
+        await clearToasts(sat);
+        await clearToasts(page);
+        await look.click();
+        const modal = page.locator('#places-modal');
+        await expect(modal).toBeVisible();
+        await expect(modal.locator('.places-chip[data-filter="none"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(modal.locator('.places-bulk .places-bulk-go')).toBeVisible();
+        await expect(modal.locator('.places-context[data-context="elsewhere"]')).toHaveCount(0);
+        expect(b.places!.identify).toEqual([]);
+        // The window itself: no dialog, no word of the research on another computer.
+        await expect(sat.locator('#places-modal')).toHaveCount(0);
+        await expect(sat.locator('.toast')).toHaveCount(0);
+        await sat.close();
+    });
+
     test('a point to check: "!" with its reason; Keep in its bubble takes the mark away, the location stays', async ({ page }) => {
         await stubMap(page);
         await research(page);
