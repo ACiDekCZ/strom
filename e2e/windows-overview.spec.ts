@@ -324,7 +324,7 @@ test.describe('the overview window\'s states', () => {
             const ui = window.Strom.UI as unknown as Record<string, unknown>;
             const calls: unknown[] = [];
             (window as unknown as { __turnOn: unknown[] }).__turnOn = calls;
-            ui.toggleResearchLive = async (id: unknown) => { calls.push(id); };
+            ui.startResearchLive = async (id: unknown) => { calls.push(id); };
         });
 
         // It stops answering.

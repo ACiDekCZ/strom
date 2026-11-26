@@ -382,14 +382,16 @@ describe('the window\'s actions run today\'s functions', () => {
         expect(urls).toHaveLength(1);
     });
 
-    it('Turn on only turns on: a research that runs is not stopped', () => {
+    it('Turn on only turns on: a research that runs is not stopped, its answer waited for ~10 s (1126)', () => {
+        const start = vi.fn();
         const toggle = vi.fn();
-        const off = fakeUi({ researchLiveState: () => ({ on: false, pending: null, canStart: true, canStop: false, ended: 'stopped', note: null }), toggleResearchLive: toggle });
+        const off = fakeUi({ researchLiveState: () => ({ on: false, pending: null, canStart: true, canStop: false, ended: 'stopped', note: null }), startResearchLive: start, toggleResearchLive: toggle });
         expect(run(off, { action: 'turn-on' })).toBe(true);
-        expect(toggle).toHaveBeenCalledWith(TREE);
-        toggle.mockClear();
-        const on = fakeUi({ researchLiveState: () => ({ on: true, pending: null, canStart: false, canStop: true, ended: null, note: null }), toggleResearchLive: toggle });
+        expect(start).toHaveBeenCalledWith(TREE, { limitMs: 10_000 });
+        start.mockClear();
+        const on = fakeUi({ researchLiveState: () => ({ on: true, pending: null, canStart: false, canStop: true, ended: null, note: null }), startResearchLive: start, toggleResearchLive: toggle });
         expect(run(on, { action: 'turn-on' })).toBe(false);
+        expect(start).not.toHaveBeenCalled();
         expect(toggle).not.toHaveBeenCalled();
     });
 

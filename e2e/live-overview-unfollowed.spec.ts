@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { BRIDGE, FakeBridge, HEAD, UUID, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
+import { BRIDGE, FakeBridge, HEAD, UUID, fakeBridge, links, openResearch, pauseClock, poll, researchGed } from './research-bridge.js';
 import { seedSetting } from './helpers.js';
 
 /**
@@ -33,8 +33,10 @@ const GED = researchGed()
     .replace('1 REFN P0003\n2 TYPE strom-research\n', '1 REFN P0003\n2 TYPE strom-research\n1 _STROM_DIRECTION G0001\n2 TYPE line\n');
 
 /** The research tree, its bridge known here and answering (nobody at work); not followed. */
-async function researchTree(page: Page, opts: { size?: { width: number; height: number }; working?: unknown[] } = {}): Promise<FakeBridge> {
-    await page.clock.setFixedTime(NOW);
+async function researchTree(page: Page, opts: { size?: { width: number; height: number }; working?: unknown[]; clock?: 'install' } = {}): Promise<FakeBridge> {
+    // `install`: the page's time stepped by the test (a limit passed without waiting for it).
+    if (opts.clock === 'install') await page.clock.install({ time: NOW });
+    else await page.clock.setFixedTime(NOW);
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
     await openResearch(page, { ged: GED });
     const bridge = await fakeBridge(page, {
@@ -357,6 +359,53 @@ test.describe('the Research overview without following', () => {
         await poll(page);
         await expect(strip(page)).toBeVisible();
         await expect(ov(page).locator('.research-overview__after-on')).toHaveCount(0);
+    });
+
+    // After a restart of the computer (1126): Turn on started the bridge, but the overview still said Turn on, and its
+    // second click stopped the research that had just come up (the overview's button was the switch).
+    test('Turn on: "Switching on…" at once, the research on by the quiet link and taken in by itself; Turn on never stops it', async ({ page }) => {
+        const bridge = await researchTree(page);
+        bridge.down = true;
+        await poll(page);
+        await openFromMenu(page);
+        const cell = ov(page).locator('.research-overview__summary .research-overview__cell.is-off');
+        const turnOn = cell.locator('.research-overview__turn-on');
+        await expect(turnOn).toHaveText('Turn on');
+        await turnOn.click();
+        expect(await links(page)).toEqual([`strom-research://live?tree=${UUID}&do=start`]);
+        await expect(turnOn).toHaveText('Switching on…');
+        await expect(turnOn).toBeDisabled();
+        // The research comes up: the overview takes it in without the regular ask (its strip, no Turn on).
+        bridge.down = false;
+        await expect(strip(page)).toBeVisible({ timeout: 10_000 });
+        await expect(ov(page).locator('.research-overview__turn-on')).toHaveCount(0);
+        // Turn on asked once more (a button drawn before): nothing stops the research.
+        await page.evaluate((id) => window.Strom.UI.startResearchLive(id), await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId()));
+        expect((bridge.seen ?? []).filter(s => s === 'POST /live')).toEqual([]);
+        expect(await links(page)).toHaveLength(1);
+    });
+
+    test('Turn on with no answer: within 10 s "The research did not switch on", Open research, the command and Try again', async ({ page }) => {
+        const bridge = await researchTree(page, { clock: 'install' });
+        bridge.down = true;
+        await poll(page);
+        await openFromMenu(page);
+        const cell = ov(page).locator('.research-overview__summary .research-overview__cell.is-off');
+        await pauseClock(page);
+        await cell.locator('.research-overview__turn-on').click();
+        await expect(cell.locator('.research-overview__turn-on')).toHaveText('Switching on…');
+        await page.clock.runFor(10_100);
+        const said = cell.locator('.research-overview__not-started');
+        await expect(said).toHaveAttribute('role', 'alert');
+        await expect(said).toContainText('The research did not switch on.');
+        await expect(cell.locator('.research-overview__open-instead')).toHaveText(/Open research/);
+        await expect(cell.locator('code')).toHaveText('strom live start');
+        await expect(cell.getByRole('button', { name: 'Copy' })).toBeVisible();
+        // Try again hands the link over once more: switching on again, the sentence gone.
+        await cell.getByRole('button', { name: 'Try again' }).click();
+        expect(await links(page)).toHaveLength(2);
+        await expect(cell.locator('.research-overview__turn-on')).toHaveText('Switching on…');
+        await expect(said).toHaveCount(0);
     });
 });
 

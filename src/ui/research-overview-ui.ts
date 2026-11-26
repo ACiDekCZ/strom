@@ -22,6 +22,7 @@ import { busySpinHtml, busyStatusEl } from './busy.js';
 import { canvasBusy } from './canvas-busy.js';
 import type { RowRefusal } from './waiting-row-notes.js';
 import { researchBridgeActionLabel, researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
+import { OVERVIEW_START_MS, commandLine } from './research-live-ui.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -104,6 +105,8 @@ function keepQueueLoadFocus(): () => void {
 }
 
 /** The overview stays open over a reload / the next following (per device). */
+/** The "did not switch on" sentences already said as an alert (tree + when it was said). */
+const notStartedSaid = new Set<string>();
 const OPEN_KEY = 'strom-live-overview-open';
 /** The chip chosen in "Awaiting action" (per device). */
 const WAITING_FILTER_KEY = 'strom-live-overview-waiting-filter';
@@ -1190,19 +1193,55 @@ export const researchOverviewMethods = uiModule({
         c.appendChild(el('div', 'research-overview__cell-value', L.notRunning));
         // The own window says Turn on in its frame under the tiles (appendOverviewOffFrame).
         if (ownWindow) return;
-        const state = this.researchLiveState(v.treeId);
+        this.appendOverviewTurnOn(c, v.treeId, 'link-button research-overview__turn-on');
+    },
+
+    /**
+     * Turn on (the research switched on by the quiet link, never off), "Switching on…" while it is on its way;
+     * no answer within ~10 s: "The research did not switch on", Open research, Try again and the command
+     * (1126); where the research cannot take the link, the command only.
+     */
+    appendOverviewTurnOn(into: HTMLElement, treeId: string, cls: string): void {
+        const state = this.researchLiveState(treeId);
+        const turnOn = (): void => { void this.startResearchLive(treeId, { limitMs: OVERVIEW_START_MS }); };
+        const failed = state && !state.pending && !state.on && state.note?.notStarted ? state.note : null;
+        if (failed) {
+            const box = into.appendChild(el('div', 'research-overview__not-started'));
+            // Said once (a redraw draws it again without the alert).
+            const said = `${treeId} ${failed.at ?? ''}`;
+            if (!notStartedSaid.has(said)) {
+                notStartedSaid.add(said);
+                box.setAttribute('role', 'alert');
+            }
+            box.appendChild(el('span', 'research-overview__not-started-text', strings.researchLive.notStarted));
+            const row = box.appendChild(el('span', 'research-overview__not-started-acts'));
+            const open = this.activeResearchLink('open');
+            if (open) {
+                const btn = setResearchActionLabel(el('button', 'link-button research-overview__open-instead'), strings.research.openResearch, researchLinkMark('open'));
+                btn.type = 'button';
+                btn.onclick = () => { void this.launchResearchLink(open, 'terminal', btn); };
+                row.appendChild(btn);
+            }
+            const retry = el('button', 'link-button research-overview__retry', strings.busy.retry);
+            retry.type = 'button';
+            retry.onclick = turnOn;
+            row.appendChild(retry);
+            const how = box.appendChild(el('p', 'research-live-note research-overview__not-started-how'));
+            how.append(el('span', undefined, strings.researchLive.startHow), ' ', commandLine(failed.command ?? 'strom live start', cmd => this.copyResearchLiveCommand(cmd)));
+            return;
+        }
         if (state?.canStart || state?.pending === 'starting') {
             const starting = state.pending === 'starting';
-            const btn = el('button', 'link-button research-overview__turn-on', starting ? strings.researchLive.starting : L.turnOn);
+            const btn = el('button', cls, starting ? strings.researchLive.starting : strings.live.turnOn);
             btn.type = 'button';
             if (starting) {
                 btn.disabled = true;
                 btn.setAttribute('aria-busy', 'true');
             }
-            btn.onclick = () => void this.toggleResearchLive(v.treeId);
-            c.appendChild(btn);
+            btn.onclick = turnOn;
+            into.appendChild(btn);
         } else {
-            c.appendChild(this.researchLiveStartHow());
+            into.appendChild(this.researchLiveStartHow());
         }
     },
 
@@ -1217,20 +1256,7 @@ export const researchOverviewMethods = uiModule({
         const frame = body.appendChild(el('div', 'research-overview__off-frame'));
         frame.setAttribute('role', 'status');
         frame.appendChild(el('span', 'research-overview__off-text', `${L.notRunning} · ${strings.win.overviewOffNote}`));
-        const state = this.researchLiveState(v.treeId);
-        if (state?.canStart || state?.pending === 'starting') {
-            const starting = state.pending === 'starting';
-            const btn = el('button', 'research-overview__turn-on research-overview__turn-on--frame', starting ? strings.researchLive.starting : L.turnOn);
-            btn.type = 'button';
-            if (starting) {
-                btn.disabled = true;
-                btn.setAttribute('aria-busy', 'true');
-            }
-            btn.onclick = () => void this.toggleResearchLive(v.treeId);
-            frame.appendChild(btn);
-        } else {
-            frame.appendChild(this.researchLiveStartHow());
-        }
+        this.appendOverviewTurnOn(frame, v.treeId, 'research-overview__turn-on research-overview__turn-on--frame');
     },
 
     /**

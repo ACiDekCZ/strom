@@ -26431,6 +26431,14 @@
         .research-overview__cell.is-off .link-button,
         .research-overview__cell.is-off .research-live-note { flex-basis: 100%; margin: 4px 0 0; font-size: 12.5px; }
         .research-overview__cell.is-off .link-button { text-align: left; justify-content: flex-start; }
+        /* Turn on without an answer (1126): the sentence, Open research and Try again, the command — in the cell and in the frame. */
+        .research-overview__not-started { flex-basis: 100%; min-width: 0; margin: 4px 0 0; font-size: 12.5px; line-height: 1.45; }
+        .research-overview__not-started-text { display: block; color: var(--warning-text); font-weight: 600; overflow-wrap: anywhere; }
+        .research-overview__not-started-acts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-top: 2px; }
+        .research-overview__cell.is-off .research-overview__not-started-acts .link-button,
+        .research-overview__cell.is-off .research-live-command .link-button { flex-basis: auto; margin: 0; }
+        .research-overview__not-started .research-overview__not-started-how { margin: 4px 0 0; }
+        .research-overview__off-frame > .research-overview__not-started { margin: 0; }
         .research-overview__why-off { white-space: normal; }
         .research-overview__after-on { margin: 16px 0 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
         .research-overview__as-of { font-size: 12px; font-weight: 400; color: var(--text-light); }

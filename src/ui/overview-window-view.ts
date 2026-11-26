@@ -269,6 +269,7 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         setLiveFollowView(view: FollowView): void { run('follow-view', { view }); },
         setFollowedRun(id: string | null): void { if (id) run('follow-run', { run: id }); },
         async toggleResearchLive(): Promise<void> { run('turn-on'); },
+        async startResearchLive(): Promise<void> { run('turn-on'); },
         overviewShowPerson(id: PersonId): void { run('show-person', { personId: id }); },
         startPersonHighlight(_kind: string, label: string, ids: PersonId[], _recount?: unknown, opts?: { quiet?: boolean }): void {
             const args = { title: label, personIds: [...ids] };

@@ -36,7 +36,7 @@ import {
     LIVE_IDLE_FOREVER, LIVE_IDLE_TWO_HOURS, liveEndKind, liveFeaturesWord, noteLiveEnded, noteLiveStatus, postLiveIdle, postLiveStop,
     storedLiveState, type LiveWriteRefusal,
 } from '../research-live.js';
-import { el, researchHere } from './research-ui.js';
+import { el, overviewViewing, researchHere } from './research-ui.js';
 import { startPend, endPend, dropPend, pendOf, applyPend, pendStatusEl } from './switch-pend.js';
 import { busySpinHtml } from './busy.js';
 import { onBridgeStatus } from './research-sync-ui.js';
@@ -52,12 +52,16 @@ import type { TreeId } from '../types.js';
 const CONFIRM_EVERY_MS = 1500;
 const STOP_CONFIRM_MS = 20_000;
 const START_CONFIRM_MS = 30_000;
+/** The Research overview's Turn on: its sentence within ~10 s (1126: after a restart nothing seemed to happen). */
+export const OVERVIEW_START_MS = 10_000;
 const ASK_TIMEOUT_MS = 3000;
 
 /** A switch on its way (switching off or on) — until the bridge's answer says it went. */
 interface Pending {
     kind: 'stopping' | 'starting';
     until: number;
+    /** Its limit (ms): the timed-out sentence names it. */
+    limitMs: number;
 }
 
 /** A word under a switch after a click (a failure, or the command where the switch cannot do it). */
@@ -68,6 +72,10 @@ interface SwitchNote {
     on: boolean;
     /** A refusal or a limit passed (6.1): said as an alert when first drawn, with "Try again". */
     retry?: boolean;
+    /** Switched on, and the research did not answer within the limit (the overview says "did not switch on"). */
+    notStarted?: boolean;
+    /** When it was said (the overview's alert once per sentence). */
+    at?: number;
 }
 
 const pending = new Map<string, Pending>();
@@ -82,7 +90,7 @@ function pendKey(researchId: string): string {
 
 /** A switch on its way: on (or off) at once, dashed and locked, its words after 120 ms, "Waiting for the research" after 5 s. */
 function setPending(researchId: string, kind: Pending['kind'], ms: number, redraw: () => void, onLimit: () => void): void {
-    pending.set(key(researchId), { kind, until: Date.now() + ms });
+    pending.set(key(researchId), { kind, until: Date.now() + ms, limitMs: ms });
     const L = strings.researchLive;
     startPend(pendKey(researchId), { label: kind === 'stopping' ? L.stopping : L.starting, limitMs: ms, onLimit, redraw });
 }
@@ -92,6 +100,8 @@ function clearPending(researchId: string): void {
     pending.delete(key(researchId));
     dropPend(pendKey(researchId));
 }
+/** What the overview showed of the open tree's switch last (redrawn when it changes). */
+let overviewSwitchKey = '';
 /** Settings' choice being written (6.1: the chosen one dashed, the radios locked until the bridge answers). */
 let idleWriting = false;
 /** The choice on its way (shown chosen meanwhile). */
@@ -396,6 +406,27 @@ export const researchLiveMethods = uiModule({
     refreshResearchLiveSwitches(): void {
         document.querySelectorAll<HTMLElement>('[data-research-live]').forEach(slot => this.fillResearchLiveSlot(slot));
         if (document.getElementById('settings-modal')?.classList.contains('active')) this.renderResearchLiveSettings(false);
+        this.overviewLiveSwitchChanged();
+    },
+
+    /**
+     * The Research overview's Turn on follows the switch (1126): "Switching on…" at once, the research taken in as soon
+     * as it answers, the sentence when it did not — docked (drawn again) or in its own window (a new snapshot).
+     */
+    overviewLiveSwitchChanged(): void {
+        const docked = !!overviewViewing() && this.isResearchOverviewOpen();
+        const inWindow = overviewInWindow();
+        if (!docked && !inWindow) {
+            overviewSwitchKey = '';
+            return;
+        }
+        const treeId = DataManager.getCurrentTreeId() ?? '';
+        const state = treeId ? this.researchLiveState(treeId) : null;
+        const now = `${treeId} ${state ? JSON.stringify(state) : ''}`;
+        if (now === overviewSwitchKey) return;
+        overviewSwitchKey = now;
+        if (docked) this.syncOverviewViewing();
+        if (inWindow) overviewChanged();
     },
 
     /** A click on a tree's switch: off through the bridge, on by the link; else the command, nothing sent. */
@@ -425,15 +456,32 @@ export const researchLiveMethods = uiModule({
             void this.confirmResearchLive(rid, 'stopping');
             return;
         }
+        await this.startResearchLive(treeId);
+    },
+
+    /**
+     * Switch a tree's research on (never off: the overview's Turn on, a button drawn before the research came up,
+     * stopped it on a second click — 1126) by the quiet link; `limitMs`: how long its answer is waited for.
+     */
+    async startResearchLive(treeId: string, opts: { limitMs?: number } = {}): Promise<void> {
+        const state = this.researchLiveState(treeId);
+        const rid = TreeManager.getTreeMetadata(treeId as TreeId)?.research?.id;
+        if (!state || !rid || state.pending) return;
+        if (state.on) {
+            // On already: only what shows it drawn again.
+            this.refreshResearchLiveSwitches();
+            return;
+        }
+        notes.delete(key(rid));
         if (!state.canStart) {
-            notes.set(key(rid), { text: L.startHow, command: COMMAND_START, on: false });
+            notes.set(key(rid), { text: strings.researchLive.startHow, command: COMMAND_START, on: false });
             this.refreshResearchLiveSwitches();
             return;
         }
         const scheme = storedLiveState(rid)?.scheme ?? announcedResearchScheme();
         const url = researchSchemeUrl('live', { tree: rid, liveDo: 'start' }, scheme);
         if (!url) return;
-        setPending(rid, 'starting', START_CONFIRM_MS, () => this.refreshResearchLiveSwitches(), () => this.researchLiveTimedOut(rid, 'starting'));
+        setPending(rid, 'starting', opts.limitMs ?? START_CONFIRM_MS, () => this.refreshResearchLiveSwitches(), () => this.researchLiveTimedOut(rid, 'starting'));
         this.refreshResearchLiveSwitches();
         this.handOverResearchLink(url);
         void this.confirmResearchLive(rid, 'starting');
@@ -466,10 +514,11 @@ export const researchLiveMethods = uiModule({
      * as it was, the sentence at it with "Try again" and the command for the terminal.
      */
     researchLiveTimedOut(researchId: string, kind: Pending['kind'], redraw = true): void {
-        if (pending.get(key(researchId))?.kind !== kind) return;
+        const p = pending.get(key(researchId));
+        if (p?.kind !== kind) return;
         clearPending(researchId);
         notes.set(key(researchId), kind === 'starting'
-            ? { text: strings.busy.liveSilent(Math.round(START_CONFIRM_MS / 1000)), command: COMMAND_START, on: false, retry: true }
+            ? { text: strings.busy.liveSilent(Math.round(p.limitMs / 1000)), command: COMMAND_START, on: false, retry: true, notStarted: true, at: Date.now() }
             : { text: strings.researchLive.stopFailed(''), command: COMMAND_STOP, on: true, retry: true });
         if (redraw) this.refreshResearchLiveSwitches();
     },

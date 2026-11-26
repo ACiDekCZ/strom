@@ -21,6 +21,7 @@ import { followStartOf, liveSession, overviewViewing, queuePaged, researchSessio
 import { directionsWindowState, retryDirectionProblem } from './research-directions-ui.js';
 import { queueNextOffered, taskOrderWindowState } from './research-offline-ui.js';
 import { hoverCard } from './research-overview-ui.js';
+import { OVERVIEW_START_MS } from './research-live-ui.js';
 import {
     OVERVIEW_STATE_VERSION, bridgeSecrets, cloneSafe, emptyOverviewExtras, overviewChanged, overviewSessionData, overviewStatusData,
     type OverviewAction, type OverviewExtras, type OverviewResearchState, type OverviewSource, type OverviewViewingData,
@@ -265,7 +266,7 @@ export const overviewWindowMethods = uiModule({
                 // "Turn on" only: the same switch would stop a research that runs.
                 const sw = treeId ? this.researchLiveState(treeId) : null;
                 if (!treeId || !sw || sw.on || sw.pending || !sw.canStart) return false;
-                void this.toggleResearchLive(treeId);
+                void this.startResearchLive(treeId, { limitMs: OVERVIEW_START_MS });
                 return true;
             }
             case 'line-select':
