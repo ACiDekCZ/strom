@@ -13,7 +13,7 @@ import { setLanguage } from '../strings.js';
 import { setInShowcaseLookup, setShowcaseAsOfLookup, researchNow, showcaseWhy, showcaseOff, showcaseActionMark } from '../research-link.js';
 import {
     markShowcaseOff, showcaseOffEvent, sampleNoteEl, showcaseItemActions, showcaseWhatText, researchLastWork,
-    hideShowcaseWhy, showcaseQueueActions, SAMPLE_WHY_ID, SHOWCASE_DEMO_COMMAND, SHOWCASE_HOW_TO_URL,
+    hideShowcaseWhy, showcaseWhyEscape, showcaseQueueActions, SAMPLE_WHY_ID, SHOWCASE_DEMO_COMMAND, SHOWCASE_HOW_TO_URL,
 } from '../ui/sample-why.js';
 import { queueWorkMethods } from '../ui/queue-work-dialog.js';
 
@@ -139,6 +139,23 @@ describe('a click or Enter on a greyed action', () => {
     it('an action through the bridge says no mark', () => {
         expect(showcaseWhatText('Answer', 'none')).toBe('In full research: Answer');
         expect(showcaseWhatText('Work on the queue…', 'agent')).toBe('In full research: Work on the queue · AI + terminal');
+    });
+});
+
+describe('Escape', () => {
+    it("closes the bubble alone: the key goes no further, the window under it stays", () => {
+        const btn = markShowcaseOff(continueButton(), 'agent');
+        showcaseOffEvent(fakeEvent('click', btn));
+        expect(bubble()).not.toBeNull();
+        const esc = fakeEvent('keydown', btn, 'Escape');
+        expect(showcaseWhyEscape(esc)).toBe(true);
+        expect(esc.prevented && esc.stopped).toBe(true);
+        expect(bubble()).toBeNull();
+        // No bubble: Escape is the window's, as always.
+        const next = fakeEvent('keydown', btn, 'Escape');
+        expect(showcaseWhyEscape(next)).toBe(false);
+        expect(next.prevented || next.stopped).toBe(false);
+        expect(showcaseWhyEscape(fakeEvent('keydown', btn, 'Enter'))).toBe(false);
     });
 });
 

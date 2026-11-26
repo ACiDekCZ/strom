@@ -199,6 +199,19 @@ function offOf(target: EventTarget | null): HTMLElement | null {
 }
 
 /**
+ * Escape while the bubble of an action is shown closes the bubble alone: the
+ * key goes no further, so the window, menu or panel under it stays open (a
+ * second Escape closes that). True when it was one.
+ */
+export function showcaseWhyEscape(e: Event): boolean {
+    if ((e as KeyboardEvent).key !== 'Escape' || !shownFor) return false;
+    hideShowcaseWhy();
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    return true;
+}
+
+/**
  * A click, Enter or Space on a greyed control (or inside it): nothing of its own runs, the bubble
  * says why. True when it was one.
  */
@@ -290,13 +303,9 @@ export function installShowcaseWhy(): void {
         }, { capture: true });
     }
     document.addEventListener('click', (e) => { showcaseOffEvent(e); }, true);
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && shownFor) {
-            hideShowcaseWhy();
-            return;
-        }
-        showcaseOffEvent(e);
-    }, true);
+    // Escape first of all (the window's capture): the dialog, menu or panel under the bubble stays.
+    window.addEventListener('keydown', (e) => { showcaseWhyEscape(e); }, true);
+    document.addEventListener('keydown', (e) => { showcaseOffEvent(e); }, true);
     document.addEventListener('focusin', (e) => {
         const off = offOf(e.target);
         if (!off) return;
