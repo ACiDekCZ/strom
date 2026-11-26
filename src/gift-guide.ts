@@ -16,6 +16,7 @@ import {
 import { defaultGiftSettings, giftPersonKey, loadGiftMemory, saveGiftMemory } from './gift-memory.js';
 import { buildGiftCover, giftDefaultSalutation, giftLetterTemplate } from './gift-cover.js';
 import { estimateGiftSize, giftFileNames, type GiftCoverFile, type GiftPartKey } from './gift-package.js';
+import type { FanShape } from './fan-chart.js';
 import { shownName } from './person-name.js';
 import { computeFamilyStats } from './stats.js';
 import { findRelationship } from './kinship.js';
@@ -191,6 +192,11 @@ export interface GiftSummary {
     bytes: number;
 }
 
+/** The estimate's options of the summary and the cover's preview (only those given). */
+function giftEstimateOptions(o: { appProgramBytes?: number; treeFanShape?: FanShape }): { appProgramBytes?: number; treeFanShape?: FanShape } {
+    return { ...(o.appProgramBytes ? { appProgramBytes: o.appProgramBytes } : {}), ...(o.treeFanShape ? { treeFanShape: o.treeFanShape } : {}) };
+}
+
 /** The living of a tree (placeholders out), decided as the protection decides it. */
 export function giftLivingIds(data: StromData, currentYear: number): Set<PersonId> {
     const bounds = inferBirthUpperBounds(data);
@@ -199,11 +205,18 @@ export function giftLivingIds(data: StromData, currentYear: number): Set<PersonI
     return out;
 }
 
-/** The side's summary (§2): people and generations of the cut, its living, the package's size. */
-export function giftSummary(source: StromData | LineageIndex, settings: GiftSettings, now: Date, appProgramBytes?: number): GiftSummary {
+/**
+ * The side's summary (§2): people and generations of the cut, its living, the
+ * package's size. `treeFanShape` the fan's shape in the app now: the fan "As
+ * in the tree" is counted in it (without it, in the shape by default).
+ */
+export function giftSummary(
+    source: StromData | LineageIndex, settings: GiftSettings, now: Date,
+    o: { appProgramBytes?: number; treeFanShape?: FanShape } = {},
+): GiftSummary {
     const cut = giftCutData(source, settings.cut);
     const ids = giftCutIds(source, settings.cut);
-    const size = estimateGiftSize(source, settings, { now, ...(appProgramBytes ? { appProgramBytes } : {}) });
+    const size = estimateGiftSize(source, settings, { now, ...giftEstimateOptions(o) });
     return {
         persons: ids.size,
         generations: computeFamilyStats(cut).generations,
@@ -330,7 +343,7 @@ export function giftResolvedSettings(source: StromData | LineageIndex, settings:
  * them with their estimated sizes.
  */
 export function giftCoverPreviewHtml(
-    source: StromData | LineageIndex, settings: GiftSettings, o: { treeName: string; now: Date; appProgramBytes?: number },
+    source: StromData | LineageIndex, settings: GiftSettings, o: { treeName: string; now: Date; appProgramBytes?: number; treeFanShape?: FanShape },
 ): string {
     const year = o.now.getFullYear();
     const data = giftProtectedData(source, settings.cut, settings.privacy, { photos: settings.photos, currentYear: year });
@@ -338,7 +351,7 @@ export function giftCoverPreviewHtml(
     const recipients = settings.cut.recipients.filter(id => !!data.persons[id]);
     const people = recipients.map(id => ({ id, name: shownName(data.persons[id]) || '?' }));
     const names = giftFileNames(lang, people, year, settings.fileName, settings.fan);
-    const est = estimateGiftSize(source, settings, { now: o.now, ...(o.appProgramBytes ? { appProgramBytes: o.appProgramBytes } : {}) });
+    const est = estimateGiftSize(source, settings, { now: o.now, ...giftEstimateOptions(o) });
     const p = settings.parts;
     const files: GiftCoverFile[] = [];
     const add = (part: GiftPartKey, path: string, bytes: number): void => { files.push({ part, path, bytes }); };

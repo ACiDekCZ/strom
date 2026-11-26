@@ -3,6 +3,7 @@ import { getDemoTree } from '../demo-tree.js';
 import type { PersonId, StromData } from '../types.js';
 import { defaultGiftPrivacy } from '../gift-tree.js';
 import { giftPersonKey, loadGiftMemory } from '../gift-memory.js';
+import { estimateGiftSize, giftFanShape } from '../gift-package.js';
 import {
     GIFT_GUIDE_STEPS, giftCanProceed, giftFullSet, giftGoTo, giftGuideStart, giftHasFamily, giftLivingModel,
     giftRemember, giftSuggestedPartner, giftSummary, giftToggleFull, type GiftMode, type GiftState,
@@ -83,6 +84,17 @@ describe('the gift guide (spec 093 §2, §4, §9)', () => {
         expect(memory?.settings.privacy.others).toBe('anonymous');
         // Someone else starts from the defaults.
         expect(start('single', [P('martin')]).memory).toBeNull();
+    });
+
+    it('the summary counts the fan "As in the tree" in the tree\'s shape, not the shape by default', () => {
+        const g = start('single', [P('daniel')]);
+        g.settings.fan = { ...g.settings.fan, asTree: true };
+        const auto = giftFanShape(data, P('daniel')).shape;
+        const other = auto === 'two' ? 'half' : 'two';
+        const inTree = giftSummary(data, g.settings, NOW, { treeFanShape: other }).bytes;
+        expect(inTree).toBe(estimateGiftSize(data, g.settings, { now: NOW, treeFanShape: other }).total);
+        expect(inTree).not.toBe(giftSummary(data, g.settings, NOW).bytes);
+        expect(giftSummary(data, g.settings, NOW, { treeFanShape: auto }).bytes).toBe(giftSummary(data, g.settings, NOW).bytes);
     });
 
     it('a second opening starts from last time: every step done, the letter dated today', () => {

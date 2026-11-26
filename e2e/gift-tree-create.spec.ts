@@ -199,6 +199,8 @@ test('cancelling while the package is made says Cancelled and downloads nothing'
 test('step 4: the parts with their sizes, photos, the ZIP as a tree; Book settings… comes back to the step', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await sampleOnDaniel(page);
+    // The fan in the tree a full circle: "As in the tree" below draws it so (the default would be two-way).
+    await page.evaluate(() => window.Strom.TreeRenderer.setFanShape('full'));
     await cardAction(page, 'Daniel', 'gift-tree');
     const dialog = page.locator('#gift-modal');
     await dialog.locator('#gift-nav [data-step="4"]').click();
@@ -248,6 +250,11 @@ test('step 4: the parts with their sizes, photos, the ZIP as a tree; Book settin
     // As in the tree: one fan, the look's link back.
     await dialog.locator('[data-gk="fan-mode-tree"]').click();
     await expect(zipRows).toHaveCount(count);
+    // The side's summary counts it in the tree's shape (a full circle here), like the ZIP's total.
+    const sizeOf = (text: string | null) => /[\d.,]+\s*[kMG]?B/.exec(text ?? '')?.[0];
+    const zipTotal = sizeOf(await dialog.locator('.gift-zip-tot b').textContent());
+    expect(zipTotal).toBeTruthy();
+    expect(sizeOf(await dialog.locator('.gift-sum').textContent())).toBe(zipTotal);
     await expect(dialog.locator('[data-gk="fan-style-color"]')).toHaveCount(0);
     await dialog.locator('[data-gk="fan-mode-styles"]').click();
     await expect(dialog.locator('[data-gk="fan-style-color"]')).toBeChecked();

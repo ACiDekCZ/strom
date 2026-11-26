@@ -55,6 +55,7 @@ import { barEl } from './prog-bar.js';
 import { spinEl } from './busy.js';
 import { svgToPngBlob } from './svg-png.js';
 import { FAN_STYLES, type FanStyle } from '../fan-colors.js';
+import type { FanShape } from '../fan-chart.js';
 import { fanPhotoPortrait } from './fan-view.js';
 import { selectionPersonIds, type SelectionRef } from '../view-selection.js';
 import { selectionIndex, selectionText } from './view-selection-ui.js';
@@ -308,7 +309,7 @@ interface GiftEstimates {
 /** Step 4's estimates: the package as chosen, and every part's size as if it were in (cached by the settings and the fan's variants). */
 function estimatesOf(u: GiftUi): GiftEstimates {
     const s = u.g.settings;
-    const treeFanShape = s.fan.asTree ? TreeRenderer.getFanShape() : undefined;
+    const treeFanShape = treeFanShapeOf(u);
     const key = JSON.stringify([cutKey(u.g), s.fan, treeFanShape ?? null]);
     if (!u.est || u.estKey !== key) {
         const now = new Date();
@@ -444,10 +445,16 @@ function cutKey(g: GiftState): string {
     return JSON.stringify([s.cut, s.privacy, s.parts, s.photos, s.fan]);
 }
 
+/** The fan's shape in the app now when the package draws the fan as in the tree (the size counts it). */
+function treeFanShapeOf(u: GiftUi): FanShape | undefined {
+    return u.g.settings.fan.asTree ? TreeRenderer.getFanShape() : undefined;
+}
+
 function summaryOf(u: GiftUi): GiftSummary {
-    const key = cutKey(u.g);
+    const treeFanShape = treeFanShapeOf(u);
+    const key = JSON.stringify([cutKey(u.g), treeFanShape ?? null]);
     if (!u.summary || u.summaryKey !== key) {
-        u.summary = giftSummary(u.data, u.g.settings, new Date());
+        u.summary = giftSummary(u.data, u.g.settings, new Date(), treeFanShape ? { treeFanShape } : {});
         u.summaryKey = key;
     }
     return u.summary;
@@ -1065,11 +1072,12 @@ export const giftTreeMethods = uiModule({
     /** The cover page as the package would write it now (cached while the settings stay). */
     giftCoverHtml(): string {
         const u = ui!;
-        const key = JSON.stringify([u.g.settings, lang()]);
+        const treeFanShape = treeFanShapeOf(u);
+        const key = JSON.stringify([u.g.settings, lang(), treeFanShape ?? null]);
         if (u.coverKey !== key) {
             const treeId = TreeManager.getActiveTreeId();
             const treeName = (treeId ? TreeManager.getTreeMetadata(treeId)?.name : '') || strings.giftTree.title;
-            u.coverHtml = giftCoverPreviewHtml(u.data, u.g.settings, { treeName, now: new Date() });
+            u.coverHtml = giftCoverPreviewHtml(u.data, u.g.settings, { treeName, now: new Date(), ...(treeFanShape ? { treeFanShape } : {}) });
             u.coverKey = key;
         }
         return u.coverHtml;
