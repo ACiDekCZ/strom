@@ -6,6 +6,7 @@ import { giftPersonKey, loadGiftMemory } from '../gift-memory.js';
 import {
     GIFT_GUIDE_STEPS, giftCanProceed, giftFullSet, giftGoTo, giftGuideStart, giftHasFamily, giftLivingModel,
     giftRemember, giftSuggestedPartner, giftSummary, giftToggleFull, type GiftMode, type GiftState,
+    giftCoverPreviewHtml, giftResolvedLetter, giftResolvedSettings,
 } from '../gift-guide.js';
 
 const P = (key: string) => `demo_${key}` as PersonId;
@@ -142,5 +143,22 @@ describe('the gift guide (spec 093 §2, §4, §9)', () => {
         expect(giftFullSet(model, s).has(P('julia'))).toBe(true);
         s.privacy = { ...s.privacy, others: 'full' };
         expect(giftFullSet(model, s).size).toBe(model.rows.length);
+    });
+
+    it('resolves an empty message to the template and previews the cover page without making the package', () => {
+        const g = start('single', [P('daniel')]);
+        expect(g.settings.letter.message).toBe('');
+        const letter = giftResolvedLetter(data, g.settings);
+        expect(letter.message.length).toBeGreaterThan(20);
+        // A message of its own stays as written.
+        g.settings.letter = { ...g.settings.letter, message: 'Hello [name]' };
+        expect(giftResolvedSettings(data, g.settings).letter.message).toBe('Hello [name]');
+        g.settings.letter = { ...g.settings.letter, message: '' };
+        const html = giftCoverPreviewHtml(data, g.settings, { treeName: 'Berg', now: NOW });
+        expect(html).toContain('Daniel');
+        expect(html).not.toContain('<script');
+        // The template's first words are on the page (the letter resolved).
+        const lastLine = letter.message.trim().split('\n').pop() ?? '';
+        expect(html).toContain(lastLine.split(/\s+/).slice(0, 3).join(' '));
     });
 });

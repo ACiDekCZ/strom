@@ -929,6 +929,8 @@ export const miscMethods = uiModule({
                     this.structureEscape();
                     return;
                 }
+                // Give a family tree: the cover page's window over it closes first.
+                if (this.topActiveOverlay()?.id === 'gift-cover-modal' && this.giftCloseCover()) return;
                 // Give a family tree: its person choice first, then the guide (nothing made, the settings remembered).
                 if (this.topActiveOverlay()?.id === 'gift-modal' && this.isGiftTreeOpen() && !this.bottomSheet) {
                     this.giftEscape();

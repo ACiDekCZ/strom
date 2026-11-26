@@ -10,12 +10,13 @@ import type { Person, PersonId, StromData } from './types.js';
 import type { LineageIndex } from './lineage.js';
 import { applyLivingPrivacy, inferBirthUpperBounds, isLivingPerson, type PrivacyMode } from './privacy.js';
 import {
-    GIFT_DEPTHS, giftCutData, giftCutIds, giftHouseholdIds,
+    GIFT_DEPTHS, giftCutData, giftCutIds, giftHouseholdIds, giftProtectedData, giftShortensLiving,
     type GiftLang, type GiftLetter, type GiftMemory, type GiftSettings,
 } from './gift-tree.js';
 import { defaultGiftSettings, giftPersonKey, loadGiftMemory, saveGiftMemory } from './gift-memory.js';
-import { giftDefaultSalutation } from './gift-cover.js';
-import { estimateGiftSize } from './gift-package.js';
+import { buildGiftCover, giftDefaultSalutation, giftLetterTemplate } from './gift-cover.js';
+import { estimateGiftSize, giftFileNames, type GiftCoverFile, type GiftPartKey } from './gift-package.js';
+import { shownName } from './person-name.js';
 import { computeFamilyStats } from './stats.js';
 import { findRelationship } from './kinship.js';
 import { yearOf } from './dates.js';
@@ -302,4 +303,51 @@ export function giftToggleFull(settings: GiftSettings, id: PersonId, on: boolean
     const ids = settings.privacy.fullIds.filter(x => x !== id);
     if (on) ids.push(id);
     settings.privacy = { ...settings.privacy, fullIds: ids };
+}
+
+// ==================== The letter and the cover's preview ====================
+
+/** The letter as the package gets it: an empty message is the template for the cut (§6). */
+export function giftResolvedLetter(source: StromData | LineageIndex, settings: GiftSettings): GiftLetter {
+    const letter = settings.letter;
+    if ((letter.message ?? '').trim()) return letter;
+    return { ...letter, message: giftLetterTemplate(source, settings.cut, letter) };
+}
+
+/** The settings the package is made from: the letter resolved, the rest as chosen. */
+export function giftResolvedSettings(source: StromData | LineageIndex, settings: GiftSettings): GiftSettings {
+    return { ...settings, letter: giftResolvedLetter(source, settings) };
+}
+
+/**
+ * The cover page as the package would write it (steps 5 and 6), without
+ * making the package: the protected cut without expanding pooled images (the
+ * cover shows only embedded portraits), the files named as the package names
+ * them with their estimated sizes.
+ */
+export function giftCoverPreviewHtml(
+    source: StromData | LineageIndex, settings: GiftSettings, o: { treeName: string; now: Date; appProgramBytes?: number },
+): string {
+    const year = o.now.getFullYear();
+    const data = giftProtectedData(source, settings.cut, settings.privacy, { photos: settings.photos, currentYear: year });
+    const lang = settings.letter.lang;
+    const recipients = settings.cut.recipients.filter(id => !!data.persons[id]);
+    const people = recipients.map(id => ({ id, name: shownName(data.persons[id]) || '?' }));
+    const names = giftFileNames(lang, people, year, settings.fileName);
+    const est = estimateGiftSize(source, settings, { now: o.now, ...(o.appProgramBytes ? { appProgramBytes: o.appProgramBytes } : {}) });
+    const p = settings.parts;
+    const files: GiftCoverFile[] = [];
+    const add = (part: GiftPartKey, path: string, bytes: number): void => { files.push({ part, path, bytes }); };
+    if (p.app) add('app', names.app, est.parts.app);
+    if (p.pages) add('pages', `${names.pages}/index.html`, est.parts.pages);
+    if (p.book) add('book', names.book, est.parts.book);
+    if (p.fan) for (const f of names.fans) add('fan', `${f.stem}.svg`, Math.round(est.parts.fan / Math.max(1, names.fans.length)));
+    if (p.gedcom) add('gedcom', names.gedcom, est.parts.gedcom);
+    const persons = Object.values(data.persons).filter(x => !x.isPlaceholder).length;
+    return buildGiftCover(data, {
+        lang, recipients, names: people.map(x => x.name), parts: { ...p }, files,
+        letter: giftResolvedLetter(source, settings), treeName: o.treeName, persons, photos: settings.photos,
+        folder: names.folder, now: o.now,
+        shortened: giftShortensLiving(source, settings.cut, settings.privacy, year),
+    });
 }

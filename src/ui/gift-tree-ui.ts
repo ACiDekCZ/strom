@@ -8,7 +8,7 @@
  * it and changes it. × and Escape make nothing and remember the settings.
  */
 
-import type { Person, PersonId, StromData } from '../types.js';
+import type { Person, PersonId, StromData, TreeId } from '../types.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -23,10 +23,18 @@ import { formatTreeSize } from '../format.js';
 import { iconSvg } from '../icons.js';
 import { type PrivacyMode } from '../privacy.js';
 import { giftPersonKey, loadGiftMemory } from '../gift-memory.js';
-import { estimateGiftSize, giftNamesLabel } from '../gift-package.js';
 import {
-    GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftBranchCandidates, giftCutIds, giftDepthCounts,
-    type GiftBranch, type GiftCut, type GiftDepth, type GiftLang,
+    buildGiftPackage, estimateGiftSize, GiftOutOfMemory, giftFileNames, giftNamesLabel, giftStepsFor, isAbortError,
+    type GiftPackageEnv, type GiftPackageResult, type GiftProgress, type GiftStep,
+} from '../gift-package.js';
+import { buildGiftCover, giftDefaultSalutation } from '../gift-cover.js';
+import { AppExporter } from '../export.js';
+import { appFontFaceCss, POSTER_LINE_FACES, POSTER_SERIF_FACES } from '../poster-fonts.js';
+import { bookItalicFontCss } from '../book-font.js';
+import { bookOptionsFromMemory, loadBookMemory, pagesChoicesFromMemory } from '../book-memory.js';
+import {
+    GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftBranchCandidates, giftCutData, giftCutIds, giftDepthCounts,
+    type GiftBranch, type GiftCut, type GiftDepth, type GiftLang, type GiftSettings,
 } from '../gift-tree.js';
 import { ancestorGenerations, descentParentIds } from '../lineage.js';
 import { findRelationship } from '../kinship.js';
@@ -34,12 +42,18 @@ import { giftBranchAdds, giftPreviewModel, type GiftPreviewModel, type GiftPrevi
 import { giftPreviewCentreOn, renderGiftPreview, type GiftPreviewView } from './gift-preview.js';
 import {
     GIFT_GUIDE_STEPS, giftCanProceed, giftDepthIndex, giftFullSet, giftGoTo, giftGuideStart, giftHasFamily,
-    giftIsoDate, giftLivingModel, giftRecipients, giftRemember, giftSuggestedPartner, giftSummary, giftToggleFull,
+    giftCoverPreviewHtml, giftIsoDate, giftLivingModel, giftRecipients, giftRemember, giftResolvedSettings,
+    giftSuggestedPartner, giftSummary, giftToggleFull,
     type GiftLivingModel, type GiftMode, type GiftState, type GiftSummary,
 } from '../gift-guide.js';
 import { uiModule } from './module.js';
 import { MODAL_BACK_CHEVRON } from './modal-back.js';
 import { openPersonPopover } from './person-popover.js';
+import { confirmMemoryForOutput } from './memory-limit-ui.js';
+import { barEl } from './prog-bar.js';
+import { spinEl } from './busy.js';
+import { svgToPngBlob } from './svg-png.js';
+import { fanPhotoPortrait } from './fan-view.js';
 
 export const GIFT_MODAL_ID = 'gift-modal';
 
@@ -89,6 +103,13 @@ interface GiftUi {
     rel: Map<PersonId, { kin: string; path: string }>;
     /** The preview's window listeners (its menu). */
     dropPreview: (() => void) | null;
+    /** The package being made, or the end of the last making (§8); null: the steps. */
+    run: GiftRun | null;
+    /** "Create another": the settings carried to the next person when they have none of their own. */
+    carry: GiftSettings | null;
+    /** The cover page's preview for these settings. */
+    coverKey: string;
+    coverHtml: string;
 }
 
 interface GiftCutInfo {
@@ -104,6 +125,109 @@ interface GiftCutInfo {
 }
 
 let ui: GiftUi | null = null;
+
+/** The cover page's own window over the guide ("Open in a window", "Open the cover page"). */
+export const GIFT_COVER_ID = 'gift-cover-modal';
+
+/** The making of one package (§8): its phase, the progress, the finished file. */
+interface GiftRun {
+    phase: 'making' | 'cancelled' | 'done' | 'nodownload' | 'oom' | 'failed';
+    ctrl: AbortController | null;
+    steps: GiftStep[];
+    progress: GiftProgress | null;
+    /** The steps finished, with the bytes each added to the archive. */
+    sizes: Map<GiftStep, number>;
+    persons: number;
+    result: GiftPackageResult | null;
+    /** The cover page the package wrote ("Open the cover page"). */
+    coverHtml: string;
+    names: string;
+    couple: boolean;
+    oomPart?: GiftStep;
+    error?: string;
+    /** The progress drawing waiting for the next frame. */
+    frame: number;
+}
+
+/** Save a Blob as a file (an `<a download>`; the URL let go once the browser has it). */
+function downloadBlob(blob: Blob, fileName: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** The system's share sheet takes a ZIP file (a phone's "Share…"). */
+function canShareZip(): boolean {
+    try {
+        return typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+            && !!navigator.canShare?.({ files: [new File([''], 'x.zip', { type: 'application/zip' })] });
+    } catch {
+        return false;
+    }
+}
+
+function bookStorage(): Storage | null {
+    try { return window.localStorage; } catch { return null; }
+}
+
+/** What the making needs from the app: the app's file, PNG drawing, fonts, the book's and pages' remembered choices, the fan's look. */
+function giftPackageEnv(treeId: TreeId | null, settings: GiftSettings, onCover: (html: string) => void): GiftPackageEnv {
+    const memory = loadBookMemory(bookStorage(), treeId);
+    const book = bookOptionsFromMemory(settings.letter.lang, memory, { kind: 'tree' });
+    const colorMode = TreeRenderer.getFanColorMode();
+    const lineFonts = appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]);
+    return {
+        app: (data, o) => AppExporter.buildFocusAppBlob(data, { ...o, ...(treeId ? { trackTreeId: treeId } : {}) }),
+        png: svgToPngBlob,
+        fonts: { pages: lineFonts, book: appFontFaceCss(POSTER_SERIF_FACES) + bookItalicFontCss(), fan: lineFonts },
+        book,
+        pages: pagesChoicesFromMemory(memory),
+        fan: {
+            look: TreeRenderer.getFanLook(),
+            colorMode: colorMode === 'rod' ? 'gender' : colorMode,
+            portrait: (p) => fanPhotoPortrait(p, false),
+        },
+        cover: (data, info) => {
+            const html = buildGiftCover(data, info);
+            onCover(html);
+            return html;
+        },
+    };
+}
+
+/** The archive's default name for the guide's recipients (the letter's language, this year). */
+function defaultZipName(u: GiftUi): string {
+    const people = giftRecipients(u.g).map(id => ({ id, name: shownName(u.data.persons[id]) || '?' }));
+    return giftFileNames(u.g.settings.letter.lang, people, new Date().getFullYear()).zip;
+}
+
+/**
+ * "Create another" (§8): the last package's choices for a person without
+ * their own — the depth, the protection, the parts, photos and the letter's
+ * language, motif and date; the branches, the exceptions, the message (the
+ * template again) and the file's name are the new person's.
+ */
+function giftCarried(data: StromData, fresh: GiftSettings, carry: GiftSettings): GiftSettings {
+    const lang = carry.letter.lang;
+    const persons = fresh.cut.recipients.map(id => data.persons[id]).filter((p): p is Person => !!p);
+    const salutation = lang === fresh.letter.lang || !persons.length
+        ? fresh.letter.salutation
+        : giftDefaultSalutation(persons.length === 1 ? persons[0] : persons, lang);
+    return {
+        cut: { ...fresh.cut, depth: carry.cut.depth },
+        privacy: { ...carry.privacy, fullIds: [] },
+        parts: { ...carry.parts },
+        photos: carry.photos,
+        letter: { ...fresh.letter, lang, motif: carry.letter.motif, date: carry.letter.date, salutation, message: '' },
+    };
+}
 
 function lang(): GiftLang {
     return getCurrentLanguage() as GiftLang;
@@ -314,7 +438,7 @@ export const giftTreeMethods = uiModule({
             g, data, focusId, listId: opts.listId, query: '', listWhy: false, closePicker: null,
             summaryKey: '', summary: null, livingKey: '', living: null, mq: null, onMq: null,
             branchesScreen: false, view: null, viewKey: '', expanded: new Set(), cutInfo: null,
-            relKey: '', rel: new Map(), dropPreview: null,
+            relKey: '', rel: new Map(), dropPreview: null, run: null, carry: null, coverKey: '', coverHtml: '',
         };
         if (opts.step && giftCanProceed(g, data)) giftGoTo(g, opts.step);
         // A window turned between phone and wider: the steps drawn again (the greyed list choice, the footer).
@@ -348,6 +472,11 @@ export const giftTreeMethods = uiModule({
         });
         overlay.querySelector('#gift-back')?.addEventListener('click', () => {
             if (!ui) return;
+            if (ui.run) {
+                if (ui.run.phase === 'making') this.giftCancelRun();
+                else this.giftLeaveRun();
+                return;
+            }
             if (ui.branchesScreen) { this.giftBranchesScreen(false); return; }
             if (ui.g.step <= 1) this.closeGiftTree();
             else this.giftStep(-1);
@@ -367,7 +496,9 @@ export const giftTreeMethods = uiModule({
 
     /** Escape: the open person choice first, then the window (nothing made, the settings remembered). */
     giftEscape(): void {
+        if (this.giftCloseCover()) return;
         if (ui?.closePicker) { ui.closePicker(); return; }
+        if (ui?.run?.phase === 'making') { this.giftCancelRun(); return; }
         if (ui?.branchesScreen) { this.giftBranchesScreen(false); return; }
         this.closeGiftTree();
     },
@@ -379,16 +510,216 @@ export const giftTreeMethods = uiModule({
         if (u) {
             u.closePicker?.();
             u.dropPreview?.();
+            // Closed while making: the making stops and nothing stays (the package's own cleanup).
+            u.run?.ctrl?.abort();
+            u.run = null;
             if (u.mq && u.onMq) u.mq.removeEventListener('change', u.onMq);
             if (giftCanProceed(u.g, u.data)) giftRemember(u.g, summaryOf(u).persons, new Date());
         }
+        document.getElementById(GIFT_COVER_ID)?.remove();
+        document.getElementById(GIFT_MODAL_ID)?.querySelector('.gift-run-foot')?.remove();
         document.getElementById(GIFT_MODAL_ID)?.classList.remove('active');
         this.dialogStack = this.dialogStack.filter(id => id !== GIFT_MODAL_ID);
     },
 
-    /** "Create package" (step 6): the package itself is made by the next part of the guide. */
+    /** "Create package" (step 6, §8): the memory check, then the making with its progress. */
     giftCreatePackage(): void {
-        // Made in step 6 (spec 093 §8); until then the button only ends the steps.
+        void this.giftCreateAsync();
+    },
+
+    async giftCreateAsync(): Promise<void> {
+        const u = ui;
+        if (!u || u.run?.phase === 'making' || !giftCanProceed(u.g, u.data)) return;
+        const s = u.g.settings;
+        // Near the browser's limit: the question first; "Leave the photos out" makes it without them.
+        const answer = await confirmMemoryForOutput({
+            what: 'gift', canLeaveOut: s.photos, data: giftCutData(u.data, s.cut), whole: true,
+        });
+        if (ui !== u || answer === 'cancel') return;
+        if (answer === 'without') s.photos = false;
+        await this.giftRunPackage();
+    },
+
+    /** Make the package now: the progress in the pane, then done (the download), cancelled or the error. */
+    async giftRunPackage(): Promise<void> {
+        const u = ui;
+        if (!u) return;
+        u.closePicker?.();
+        const settings = giftResolvedSettings(u.data, u.g.settings);
+        const people = giftRecipients(u.g).map(id => realPerson(u.data, id)).filter((p): p is Person => !!p).map(p => shownName(p) || '?');
+        const run: GiftRun = {
+            phase: 'making', ctrl: new AbortController(), steps: giftStepsFor(settings.parts), progress: null,
+            sizes: new Map(), persons: summaryOf(u).persons, result: null, coverHtml: '',
+            names: giftNamesLabel(lang(), people), couple: people.length > 1, frame: 0,
+        };
+        u.run = run;
+        this.giftRender();
+        const treeId = TreeManager.getActiveTreeId();
+        const treeName = (treeId ? TreeManager.getTreeMetadata(treeId)?.name : '') || strings.giftTree.title;
+        try {
+            const result = await buildGiftPackage({
+                data: u.data, settings, treeName, signal: run.ctrl!.signal,
+                onProgress: (p) => {
+                    run.progress = p;
+                    if (p.size !== undefined) run.sizes.set(p.step, p.size);
+                    this.giftRunTick(run);
+                },
+                env: giftPackageEnv(treeId, settings, (html) => { run.coverHtml = html; }),
+            });
+            if (ui !== u || u.run !== run) return;
+            run.phase = 'done';
+            run.ctrl = null;
+            run.result = result;
+            u.g.memory = giftRemember(u.g, result.persons, new Date(), { made: true }) ?? u.g.memory;
+            this.giftRender();
+            // A desktop saves the file at once; a phone offers Share and Save to Files.
+            if (!isPhone()) this.giftDownload();
+        } catch (e) {
+            if (ui !== u || u.run !== run) return;
+            run.ctrl = null;
+            if (isAbortError(e)) run.phase = 'cancelled';
+            else if (e instanceof GiftOutOfMemory) { run.phase = 'oom'; run.oomPart = e.part; }
+            else { run.phase = 'failed'; run.error = e instanceof Error ? e.message : String(e); }
+            this.giftRender();
+        }
+    },
+
+    /** One progress report: the pane drawn again on the next frame (many reports, one drawing). */
+    giftRunTick(run: GiftRun): void {
+        if (run.frame) return;
+        const draw = (): void => {
+            run.frame = 0;
+            const pane = document.getElementById('gift-pane');
+            if (!ui || ui.run !== run || run.phase !== 'making' || !pane) return;
+            pane.replaceChildren();
+            this.giftRenderRun(pane);
+        };
+        run.frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(draw) : (setTimeout(draw, 16) as unknown as number);
+    },
+
+    /** Cancel the making: nothing stays half-made (the package's own cleanup), the pane says Cancelled. */
+    giftCancelRun(): void {
+        ui?.run?.ctrl?.abort();
+    },
+
+    /** Leave the making's end (done, cancelled, an error) for the steps again. */
+    giftLeaveRun(step?: number): void {
+        const u = ui;
+        if (!u?.run || u.run.phase === 'making') return;
+        u.run = null;
+        if (step) giftGoTo(u.g, step);
+        this.giftRender();
+    },
+
+    /** Save the finished package as a file (the done row's name, "Save to Files", "Download again"). */
+    giftDownload(): void {
+        const r = ui?.run;
+        if (!r?.result) return;
+        try {
+            downloadBlob(r.result.blob, r.result.fileName);
+        } catch {
+            r.phase = 'nodownload';
+            this.giftRender();
+        }
+    },
+
+    /** A phone's "Share…": the system's share sheet with the ZIP; dismissing it is no error. */
+    async giftShare(): Promise<void> {
+        const r = ui?.run;
+        if (!r?.result) return;
+        const file = new File([r.result.blob], r.result.fileName, { type: 'application/zip' });
+        try {
+            await navigator.share({ files: [file], title: r.result.fileName });
+        } catch (e) {
+            if ((e as { name?: string })?.name === 'AbortError') return;
+            if (ui?.run === r) { r.phase = 'nodownload'; this.giftRender(); }
+        }
+    },
+
+    /** "Create another": step 1 with the person choice open; the settings carried over to a person without their own. */
+    giftAnother(): void {
+        const u = ui;
+        if (!u) return;
+        u.carry = JSON.parse(JSON.stringify(u.g.settings)) as GiftSettings;
+        u.run = null;
+        giftGoTo(u.g, 1);
+        this.giftRender();
+        const anchor = document.querySelector<HTMLElement>(`#${GIFT_MODAL_ID} [data-gk="change-0"]`);
+        if (anchor) this.giftPickPerson(0, anchor);
+    },
+
+    /** "Without the app" / "Try without photos" after running out of memory: the smaller package at once. */
+    giftRetrySmaller(what: 'app' | 'photos'): void {
+        const u = ui;
+        if (!u) return;
+        if (what === 'app') u.g.settings.parts = { ...u.g.settings.parts, app: false };
+        else u.g.settings.photos = false;
+        u.run = null;
+        void this.giftRunPackage();
+    },
+
+    /** The cover page in its own window over the guide (steps 5, 6 and the end). */
+    giftOpenCover(html?: string): void {
+        const u = ui;
+        if (!u) return;
+        const doc = html ?? this.giftCoverHtml();
+        document.getElementById(GIFT_COVER_ID)?.remove();
+        const overlay = el('div', 'modal-overlay active gift-cover-overlay');
+        overlay.id = GIFT_COVER_ID;
+        const modal = el('div', 'modal modal--lg modal--page gift-cover-modal');
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.dataset.dialogKind = 'info';
+        const head = el('div', 'modal-header');
+        const title = el('h2', undefined, strings.giftTree.review.coverH);
+        title.id = 'gift-cover-title';
+        modal.setAttribute('aria-labelledby', title.id);
+        const close = button('close-btn', '×', () => this.giftCloseCover());
+        close.setAttribute('aria-label', strings.buttons.close);
+        head.append(title, close);
+        const frame = el('iframe', 'gift-cover-frame');
+        frame.setAttribute('sandbox', '');
+        frame.title = strings.giftTree.review.coverH;
+        frame.srcdoc = doc;
+        modal.append(head, frame);
+        overlay.appendChild(modal);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) this.giftCloseCover(); });
+        document.body.appendChild(overlay);
+        close.focus({ preventScroll: true });
+    },
+
+    giftCloseCover(): boolean {
+        const node = document.getElementById(GIFT_COVER_ID);
+        if (!node) return false;
+        node.remove();
+        document.querySelector<HTMLElement>(`#${GIFT_MODAL_ID} [data-gk="open-cover"]`)?.focus({ preventScroll: true });
+        return true;
+    },
+
+    /** The cover page as the package would write it now (cached while the settings stay). */
+    giftCoverHtml(): string {
+        const u = ui!;
+        const key = JSON.stringify([u.g.settings, lang()]);
+        if (u.coverKey !== key) {
+            const treeId = TreeManager.getActiveTreeId();
+            const treeName = (treeId ? TreeManager.getTreeMetadata(treeId)?.name : '') || strings.giftTree.title;
+            u.coverHtml = giftCoverPreviewHtml(u.data, u.g.settings, { treeName, now: new Date() });
+            u.coverKey = key;
+        }
+        return u.coverHtml;
+    },
+
+    /** The scaled-down cover page (steps 5 and 6): a still picture of the page, a click opens it in a window. */
+    giftCoverThumb(): HTMLElement {
+        const box = el('div', 'gift-thumb');
+        const frame = el('iframe', 'gift-thumb-frame');
+        frame.setAttribute('sandbox', '');
+        frame.setAttribute('aria-hidden', 'true');
+        frame.tabIndex = -1;
+        frame.srcdoc = this.giftCoverHtml();
+        box.appendChild(frame);
+        box.addEventListener('click', () => this.giftOpenCover());
+        return box;
     },
 
     /** A step forward or back. */
@@ -400,7 +731,9 @@ export const giftTreeMethods = uiModule({
     /** Show a step (a side tab, the phone's list of steps, "Straight to preview"). */
     giftGo(step: number): void {
         if (!ui) return;
+        if (ui.run?.phase === 'making') return;
         if (step > 1 && !giftCanProceed(ui.g, ui.data)) return;
+        ui.run = null;
         ui.closePicker?.();
         giftGoTo(ui.g, step);
         ui.query = '';
@@ -459,7 +792,7 @@ export const giftTreeMethods = uiModule({
                 tab.dataset.step = String(i);
                 tab.dataset.gk = `tab-${i}`;
                 if (i === g.step) tab.setAttribute('aria-current', 'step');
-                if (i > 1 && !can) tab.setAttribute('aria-disabled', 'true');
+                if ((i > 1 && !can) || u.run?.phase === 'making') tab.setAttribute('aria-disabled', 'true');
                 const k = el('span', 'gift-k', String(i));
                 k.setAttribute('aria-hidden', 'true');
                 tab.append(k, el('span', 'gift-tab-l', names[i - 1]));
@@ -482,9 +815,11 @@ export const giftTreeMethods = uiModule({
             u.dropPreview?.();
             u.dropPreview = null;
             pane.replaceChildren();
-            if (g.step === 1) this.giftRenderForWhom(pane);
+            if (u.run) this.giftRenderRun(pane);
+            else if (g.step === 1) this.giftRenderForWhom(pane);
             else if (g.step === 2) this.giftRenderCut(pane);
             else if (g.step === 3) this.giftRenderLiving(pane);
+            else if (g.step === 6) this.giftRenderReview(pane);
             else pane.appendChild(el('h3', 'gift-h3', names[g.step - 1]));
             pane.scrollTop = top;
         }
@@ -505,8 +840,256 @@ export const giftTreeMethods = uiModule({
             next.textContent = g.step >= GIFT_GUIDE_STEPS ? t.create : t.guide.next;
             next.disabled = !can;
         }
+        // While making and at its end: the run's own buttons instead of the guide's.
+        overlay.querySelector('.gift-run-foot')?.remove();
+        const foot = overlay.querySelector<HTMLElement>('.gift-foot');
+        foot?.classList.toggle('is-run', !!u.run);
+        for (const b of [footSum, prev, cancel, next]) b?.toggleAttribute('data-run-hidden', !!u.run);
+        if (u.run && foot) this.giftRunFoot(foot);
+        overlay.dataset.run = u.run?.phase ?? '';
 
         if (focusKey) overlay.querySelector<HTMLElement>(`[data-gk="${focusKey}"]`)?.focus({ preventScroll: true });
+    },
+
+    // ---- Step 6: Preview and create (§8) ----
+
+    giftRenderReview(pane: HTMLElement): void {
+        const u = ui!;
+        const s = u.g.settings;
+        const t = strings.giftTree;
+        const G = t.guide;
+        const R = t.review;
+        const language = lang();
+        const sum = summaryOf(u);
+        const cols = el('div', 'gift-cols is-s6');
+        const left = el('div', 'gift-col gift-review');
+        const right = el('div', 'gift-col gift-cover-col');
+
+        const stats = el('div', 'structure-stats gift-stats gift-review-stats');
+        const stat = (value: string, label: string): void => {
+            const box = el('div', 'structure-stat');
+            box.append(el('b', undefined, value), el('span', undefined, label));
+            stats.appendChild(box);
+        };
+        stat(String(sum.persons), G.persons(sum.persons));
+        stat(String(sum.generations), G.generations(sum.generations));
+        stat(String(sum.living), G.living(sum.living));
+        stat(formatTreeSize(sum.bytes, language), R.zipStat);
+        left.appendChild(stats);
+
+        // What the package will be, each row with "Change" to its step.
+        const dl = el('dl', 'gift-dl gift-review-dl');
+        const names = giftRecipients(u.g).map(id => realPerson(u.data, id)).filter((p): p is Person => !!p).map(p => shownName(p) || '?');
+        const row = (dt: string, dd: string, step: number | null): void => {
+            const d = el('dd', undefined, dd);
+            if (step) {
+                const change = button('link-button gift-change', R.change, () => this.giftGo(step));
+                change.dataset.gk = `change-step-${step}`;
+                change.setAttribute('aria-label', `${R.change}: ${dt}`);
+                d.append(' ', change);
+            }
+            dl.append(el('dt', undefined, dt), d);
+        };
+        row(R.forRow, giftNamesLabel(language, names), 1);
+        const rows = this.giftSettingsRows(sum);
+        const L = t.letter;
+        rows.forEach(([dt, dd], i) => {
+            if (i === 3) {
+                const sig = s.letter.signature.trim();
+                dd = [L.langName[s.letter.lang], G.motif[s.letter.motif], giftDateLabel(s.letter.date, language),
+                    ...(sig ? [R.signed(sig)] : [])].join(' · ');
+            }
+            row(dt, dd, i + 2);
+        });
+        left.appendChild(dl);
+
+        // The archive's name (the default from the recipients and the year).
+        const field = el('label', 'gift-field gift-filename');
+        field.appendChild(el('span', 'gift-label', R.fileName));
+        const input = el('input', 'gift-input');
+        input.type = 'text';
+        input.dataset.gk = 'file-name';
+        input.spellcheck = false;
+        input.autocomplete = 'off';
+        const fallback = defaultZipName(u);
+        input.value = s.fileName ?? fallback;
+        input.addEventListener('input', () => {
+            const v = input.value.trim();
+            s.fileName = v && v !== fallback ? v : undefined;
+        });
+        field.appendChild(input);
+        left.appendChild(field);
+        left.appendChild(el('p', 'gift-note', R.local));
+
+        const head = el('div', 'gift-cover-head');
+        head.appendChild(el('h3', 'gift-h3', R.coverH));
+        const open = button('link-button gift-open-cover', L.openWindow, () => this.giftOpenCover());
+        open.dataset.gk = 'open-cover';
+        head.appendChild(open);
+        right.appendChild(head);
+        right.appendChild(this.giftCoverThumb());
+
+        cols.append(left, right);
+        pane.appendChild(cols);
+    },
+
+    // ---- The making (§8): progress, cancelled, done, the errors ----
+
+    giftRenderRun(pane: HTMLElement): void {
+        const u = ui!;
+        const run = u.run!;
+        const t = strings.giftTree;
+        const M = t.make;
+        const language = lang();
+        const box = el('div', 'gift-run');
+        box.dataset.phase = run.phase;
+        pane.appendChild(box);
+        const h = (text: string): void => {
+            const h3 = el('h3', 'gift-h3 gift-run-h', text);
+            h3.tabIndex = -1;
+            box.appendChild(h3);
+        };
+
+        if (run.phase === 'making') {
+            h(`${M.making} · ${run.names}`);
+            const p = run.progress;
+            const n = run.steps.length;
+            const k = p ? p.stepIndex : 1;
+            const step = p?.step ?? run.steps[0];
+            const part = p?.total ? (p.done ?? 0) / p.total : 0;
+            const share = Math.min(1, Math.max(0, (k - 1 + (p?.size !== undefined ? 1 : part)) / n));
+            const prog = el('div', 'prog gift-prog');
+            const line = el('div', 'prog-line');
+            let label = t.steps[step];
+            if (p?.total && step === 'pages') label += ` · ${M.pagesOf(p.done ?? 0, p.total)}`;
+            if (p?.total && step === 'book') label += ` · ${M.chaptersOf(p.done ?? 0, p.total)}`;
+            line.append(el('span', 'prog-t', label), el('span', 'prog-k', M.stepOf(k, n)));
+            prog.append(line, barEl(share));
+            box.appendChild(prog);
+
+            const list = el('ul', 'gift-steps');
+            run.steps.forEach((st, i) => {
+                const done = run.sizes.has(st) && (i + 1 < k || p?.size !== undefined);
+                const now = !done && i + 1 === k;
+                const li = el('li', `gift-stp${done ? ' is-done' : now ? ' is-now' : ' is-wait'}`);
+                const mark = el('span', 'gift-stp-i');
+                mark.setAttribute('aria-hidden', 'true');
+                if (done) mark.innerHTML = iconSvg('check', { size: 14 });
+                else if (now) mark.appendChild(spinEl(12));
+                else mark.textContent = '·';
+                li.append(mark, el('span', 'gift-stp-t', t.steps[st]));
+                const k2 = el('span', 'gift-stp-k');
+                if (done) {
+                    k2.textContent = st === 'cut'
+                        ? `${run.persons} ${t.guide.persons(run.persons)}`
+                        : formatTreeSize(run.sizes.get(st) ?? 0, language);
+                }
+                li.appendChild(k2);
+                list.appendChild(li);
+            });
+            box.appendChild(list);
+            box.appendChild(el('p', 'gift-note', M.note));
+            return;
+        }
+
+        if (run.phase === 'cancelled') {
+            h(M.cancelledH);
+            box.appendChild(el('p', 'gift-lead', M.cancelledLead));
+            return;
+        }
+
+        if (run.phase === 'oom') {
+            h(M.oomH);
+            box.appendChild(el('p', 'gift-lead', M.oomLead(M.oomPart[run.oomPart ?? 'zip'])));
+            return;
+        }
+
+        if (run.phase === 'failed') {
+            h(M.failedH);
+            box.appendChild(el('p', 'gift-lead', M.failedLead(run.error ?? '')));
+            return;
+        }
+
+        const r = run.result!;
+        const size = formatTreeSize(r.bytes, language);
+        if (run.phase === 'nodownload') {
+            h(M.noDownloadH);
+            box.appendChild(el('p', 'gift-lead', M.noDownloadLead(size)));
+            box.appendChild(el('p', 'gift-note', M.noDownloadNote));
+            return;
+        }
+
+        // Done: the file (a click saves it again), open the cover page, create another.
+        h(M.doneH);
+        const file = el('div', 'gift-done-file');
+        const ic = el('span', 'gift-done-ic');
+        ic.setAttribute('aria-hidden', 'true');
+        ic.innerHTML = iconSvg('file', { size: 18 });
+        const name = button('gift-done-name', r.fileName, () => this.giftDownload());
+        name.dataset.gk = 'done-file';
+        file.append(ic, name, el('span', 'gift-done-size', size));
+        box.appendChild(file);
+        const phone = isPhone();
+        const acts = el('div', 'gift-done-acts');
+        const openCover = button(phone ? 'link-button gift-open-cover' : 'secondary gift-open-cover', M.openCover,
+            () => this.giftOpenCover(run.coverHtml || undefined));
+        openCover.dataset.gk = 'open-cover';
+        acts.appendChild(openCover);
+        if (!phone) {
+            const another = button('secondary gift-another', M.another, () => this.giftAnother());
+            another.dataset.gk = 'another';
+            acts.appendChild(another);
+        }
+        box.appendChild(acts);
+        if (phone) box.appendChild(el('p', 'gift-note', M.shareNote));
+        if (u.g.mode !== 'list') {
+            box.appendChild(el('p', 'gift-note', phone ? M.savedShort(run.names, run.couple) : M.saved(run.names, run.couple)));
+        }
+    },
+
+    /** The footer while making and at its end (the guide's own buttons hidden meanwhile). */
+    giftRunFoot(foot: HTMLElement): void {
+        const u = ui!;
+        const run = u.run!;
+        const M = strings.giftTree.make;
+        const host = el('div', 'gift-run-foot');
+        foot.appendChild(host);
+        const add = (cls: string, text: string, key: string, onClick: () => void): HTMLButtonElement => {
+            const b = button(cls, text, onClick);
+            b.dataset.gk = key;
+            host.appendChild(b);
+            return b;
+        };
+        const closeBtn = (): void => { add('secondary', strings.buttons.close, 'run-close', () => this.closeGiftTree()); };
+        switch (run.phase) {
+            case 'making':
+                host.appendChild(el('span', 'gift-run-hint', M.foot));
+                add('secondary is-danger-text', strings.buttons.cancel, 'run-cancel', () => this.giftCancelRun());
+                break;
+            case 'cancelled':
+            case 'failed':
+                closeBtn();
+                add('primary', M.again, 'run-again', () => { u.run = null; void this.giftRunPackage(); });
+                break;
+            case 'nodownload':
+                closeBtn();
+                add('primary', M.downloadAgain, 'run-download', () => { run.phase = 'done'; this.giftRender(); this.giftDownload(); });
+                break;
+            case 'oom':
+                closeBtn();
+                if (u.g.settings.parts.app) add('secondary', M.withoutApp, 'run-no-app', () => this.giftRetrySmaller('app'));
+                if (u.g.settings.photos) add('primary', M.tryWithoutPhotos, 'run-no-photos', () => this.giftRetrySmaller('photos'));
+                break;
+            case 'done':
+                if (isPhone()) {
+                    const share = canShareZip();
+                    add(share ? 'secondary' : 'primary', M.saveFiles, 'run-save', () => this.giftDownload());
+                    if (share) add('primary', M.share, 'run-share', () => { void this.giftShare(); });
+                } else {
+                    add('primary', M.finish, 'run-finish', () => this.closeGiftTree());
+                }
+                break;
+        }
     },
 
     /** The side's summary (§2): the name, people and generations, the living, the ZIP's size. */
@@ -751,6 +1334,7 @@ export const giftTreeMethods = uiModule({
             data: u.data, treeId: u.g.treeId, mode, recipients, lang: lang(), signature, now: new Date(),
         });
         u.g.settings.letter = { ...u.g.settings.letter, signature };
+        if (u.carry && !u.g.memory) u.g.settings = giftCarried(u.data, u.g.settings, u.carry);
         u.query = '';
         this.giftRender();
     },

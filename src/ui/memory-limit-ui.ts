@@ -177,8 +177,8 @@ export interface OutputCheck {
      * worked out only when the tree's images would be near the limit.
      */
     refine?: () => number;
-    /** What the question names: a file (default), the book or the poster. */
-    what?: 'file' | 'book' | 'poster';
+    /** What the question names: a file (default), the book, the poster or the gift package. */
+    what?: 'file' | 'book' | 'poster' | 'gift';
 }
 
 /** The images' volume of an output (all trees: the stored sizes of the others, the open one measured). */
@@ -223,12 +223,13 @@ export async function confirmMemoryForOutput(o: OutputCheck = {}): Promise<'go' 
     const name = treeId ? TreeManager.getTreeMetadata(treeId)?.name ?? '' : '';
     const message = o.what === 'book' ? m.book(name, size)
         : o.what === 'poster' ? m.poster(size)
+            : o.what === 'gift' ? m.gift(size)
             : o.allTrees ? m.outputAll(size) : m.output(name, size);
     const ui = getUI();
     const leaveOut = !!o.canLeaveOut && chars > 0;
     const asked = ui.showConfirm(message, m.title, {
         confirmLabel: m.continue,
-        ...(leaveOut ? { checkbox: { label: m.leaveOut, checked: false } } : {}),
+        ...(leaveOut ? { checkbox: { label: o.what === 'gift' ? m.leaveOutGift : m.leaveOut, checked: false } } : {}),
     });
     // Asked from the export dialog: above it (the next confirm sets its own classes).
     document.getElementById('confirmation-modal')?.classList.add('over-dialog');

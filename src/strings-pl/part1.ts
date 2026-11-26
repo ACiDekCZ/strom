@@ -308,6 +308,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         book: (name: string, size: string) => `Książka z obrazami drzewa „${name}” (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji lub usunąć niepotrzebne obrazy.`,
         poster: (size: string) => `Plakat z portretami (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji lub pokazać mniej portretów.`,
         leaveOut: 'Pominąć obrazy w pliku',
+        gift: (size: string) => `Paczka ze zdjęciami (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji.`,
+        leaveOutGift: 'Pominąć zdjęcia w paczce',
         import: (name: string, size: string) => `Wczytanie pliku „${name}” (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji.`,
         continue: 'Kontynuuj',
     },
