@@ -96,6 +96,8 @@ export const plPart14: Pick<StringsType, 'houses'> = {
         import: 'Przejmij kwerendę z pliku…',
         importNote: 'Tekst zostanie zapisany bez zmian jako materiał domu, a agent przeniesie go do historii domu bez nowego wyszukiwania.',
         familyMemory: 'pamięć rodzinna',
+        witnessBy: (name: string) => `relacja: ${name}`,
+        witnessNone: 'świadek nie podany',
         materials: 'Materiały domu',
         ownResearch: 'Własna kwerenda',
         memoryTitle: 'Wspomnienie',

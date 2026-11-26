@@ -82,7 +82,7 @@ function freshState(parent: string | null): HousesWindowState {
 }
 
 /** "Bělokamen čp. 16" for the change log and the dialogs' subtitles. */
-function houseLabel(h: TreeHouse): string {
+export function houseLabel(h: TreeHouse): string {
     return `${h.ref.town} ${h.text}`;
 }
 
@@ -104,10 +104,7 @@ export const housesMethods = uiModule({
     // The research's state in the row's right column (renderHouseStateSlot, houseStateSlotClick) and in the
     // detail (renderHouseResearchDetail, houseResearchDetailClick): src/ui/house-state-ui.ts.
 
-    /** The research's rows of a house's ⋯ menu (above the line). */
-    houseMenuResearchItems(_house: TreeHouse): HouseMenuItem[] {
-        return [];
-    },
+    // The research's rows of a house's ⋯ menu (above the line), houseMenuResearchItems: src/ui/house-material-ui.ts.
 
     /** The numbers the research knows of a house (its own included). */
     houseResearchNumbers(_id: HouseId): HouseResearchNumber[] {

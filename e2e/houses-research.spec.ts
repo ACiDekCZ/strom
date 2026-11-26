@@ -1,5 +1,5 @@
 import { test, expect, Page, Route } from '@playwright/test';
-import { fakeBridge, openResearch, poll, BRIDGE, FakeBridge } from './research-bridge.js';
+import { fakeBridge, links, openResearch, poll, BRIDGE, FakeBridge } from './research-bridge.js';
 
 /**
  * The research's houses in the Houses window (spec 030 §2 K7.5, §7): the state of a house the research lists in
@@ -17,7 +17,19 @@ interface FakeHouses {
     rev: string;
     rows: Record<string, unknown>[];
     lists: number;
+    reads: string[];
+    posts: unknown[];
+    materials?: Record<string, unknown>[];
+    materialReply?: { status: number; contentType: string; body: string };
 }
+
+const fakeHouses = (rows: Record<string, unknown>[] = [row()], init: Partial<FakeHouses> = {}): FakeHouses =>
+    ({ rev: 'r1', rows, lists: 0, reads: [], posts: [], ...init });
+
+const BATCH_ACCEPTS = {
+    sync: { auto: 'off' }, sources: true, verified: true,
+    media: { max: 500 * 1024 * 1024, region: true, batch: { files: 5000, bytes: 20 * 1024 * 1024 * 1024, zip: true } },
+};
 
 function row(init: Record<string, unknown> = {}): Record<string, unknown> {
     return {
@@ -27,19 +39,32 @@ function row(init: Record<string, unknown> = {}): Record<string, unknown> {
     };
 }
 
-async function setup(page: Page, opts: { features?: string[]; houses?: FakeHouses } = {}): Promise<{ bridge: FakeBridge; houses: FakeHouses }> {
+async function setup(page: Page, opts: { features?: string[]; houses?: FakeHouses; media?: boolean } = {}): Promise<{ bridge: FakeBridge; houses: FakeHouses }> {
     await page.clock.setFixedTime(new Date('2027-03-20T10:30:00Z'));
-    const houses = opts.houses ?? { rev: 'r1', rows: [row()], lists: 0 };
+    const houses = opts.houses ?? fakeHouses();
     const bridge = await fakeBridge(page, {
         features: opts.features ?? HOUSE, links: LINKS,
         statusExtra: { houses: { on: true, rev: houses.rev, counts: { done: 0, running: 1, queued: 0, waiting: 0, held: 0 } } },
         waiting: [{ id: 'T0042', what: 'Which house is čp. 16 after the renumbering?', on: 'user', at: '2027-03-19T09:00:00Z' }],
+        ...(opts.media ? { accepts: BATCH_ACCEPTS } : {}),
     });
     await page.route(u => `${u.origin}${u.pathname}` === `${BRIDGE}/houses`, async (route: Route) => {
         houses.lists++;
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ rev: houses.rev, houses: houses.rows }) });
     });
-    await openResearch(page);
+    await page.route(u => `${u.origin}${u.pathname}`.startsWith(`${BRIDGE}/houses/`), async (route: Route) => {
+        const path = decodeURIComponent(new URL(route.request().url()).pathname.replace(/^.*\/houses\//, ''));
+        if (route.request().method() === 'POST' && path === 'material') {
+            houses.posts.push(JSON.parse(route.request().postData() ?? 'null'));
+            await route.fulfill(houses.materialReply ?? { status: 200, contentType: 'application/json',
+                body: JSON.stringify({ house: null, materials: [{ id: 'I0009' }], head: 'a1b2c3d4e5f6', parent: '9b8c7d6e5f40' }) });
+            return;
+        }
+        houses.reads.push(path);
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...row(), ...houses.rows[0], numbers: [], timeline: [], holders: [],
+            residents: [], maps: [], passed: [], manual: [], unknown: [], archiveOnly: [], sensitive: [], same: [], persons: [], materials: houses.materials ?? [] }) });
+    });
+    await openResearch(page, { media: !!opts.media });
     // Josef and his son Jan born in Bělokamen čp. 16: a house of two generations.
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
@@ -102,7 +127,7 @@ test.describe('Houses: the research\'s state', () => {
     });
 
     test('a house the research does not list shows nothing; "none" shows "not researched"', async ({ page }) => {
-        const { bridge, houses } = await setup(page, { houses: { rev: 'r1', rows: [], lists: 0 } });
+        const { bridge, houses } = await setup(page, { houses: fakeHouses([]) });
         await openHouses(page);
         await expect(houseRow(page)).toBeVisible();
         await expect(houseRow(page).locator('.house-side')).toHaveCount(0);
@@ -131,5 +156,107 @@ test.describe('Houses: the research\'s state', () => {
         await page.evaluate(() => window.Strom.UI.showPlacesManager(undefined, undefined, 'tree'));
         await expect(page.locator('#places-modal .place-town-houses[data-town="Bělokamen"]')).toBeVisible();
         await expect(page.locator('#places-modal .place-town-house-states')).toHaveCount(0);
+    });
+});
+
+const material = (page: Page) => page.locator('#house-material-modal');
+
+async function openAttach(page: Page): Promise<void> {
+    await houseRow(page).locator('.house-more-btn').click();
+    await page.getByRole('menuitem', { name: 'Attach material…' }).click();
+    await expect(material(page).locator('h2')).toHaveText('Attach material to the house');
+}
+
+test.describe('Houses: material of a house', () => {
+    test('⋯ "Attach material…": a memory without the witness\'s consent goes as family memory, no mark; then with it', async ({ page }) => {
+        const { houses } = await setup(page);
+        await openHouses(page);
+        await openAttach(page);
+        await expect(material(page).locator('.house-sub-sub')).toHaveText('Bělokamen čp. 16');
+        await expect(material(page).locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
+        const go = material(page).getByRole('button', { name: 'Attach', exact: true });
+        await expect(go).toBeDisabled();
+        await material(page).locator('.house-memory').fill('U Prouzalů se říkalo podle starého hospodáře.');
+        await material(page).locator('.house-witness').fill('Libuše Kvitelková');
+        await expect(material(page).locator('.house-consent')).toContainText('unticked, the source is “family memory” without a name');
+        await go.click();
+        await expect(material(page)).toHaveCount(0);
+        await expect(page.locator('.toast', { hasText: 'Attached to the house.' })).toBeVisible();
+        expect(houses.posts).toEqual([{ house: KEY, memory: { text: 'U Prouzalů se říkalo podle starého hospodáře.', witnessConsent: false } }]);
+
+        await openAttach(page);
+        await material(page).locator('.house-memory').fill('Studna za stodolou.');
+        await material(page).locator('.house-witness').fill('Libuše Kvitelková');
+        await material(page).locator('.house-witness-consent').check();
+        await material(page).locator('.house-farm-name').fill('U Prouzalů');
+        await material(page).getByRole('button', { name: 'Attach', exact: true }).click();
+        await expect(material(page)).toHaveCount(0);
+        expect(houses.posts[1]).toEqual({ house: KEY, memory: { text: 'Studna za stodolou.', witness: 'Libuše Kvitelková', witnessConsent: true }, name: 'U Prouzalů' });
+    });
+
+    test('a town without a place in the research: the sentence in the dialog, which stays open', async ({ page }) => {
+        const houses = fakeHouses([row()], { materialReply: { status: 400, contentType: 'application/json',
+            body: JSON.stringify({ error: 'the town has no place', code: 'house.body', reasonCode: 'house.town' }) } });
+        await setup(page, { houses });
+        await openHouses(page);
+        await openAttach(page);
+        await material(page).locator('.house-memory').fill('Podle hospodáře.');
+        await material(page).getByRole('button', { name: 'Attach', exact: true }).click();
+        await expect(material(page).locator('.house-material-err')).toHaveText('The research has no record of this town yet; material can be attached once the town is among its places.');
+        await expect(material(page).getByRole('button', { name: 'Attach', exact: true })).toBeEnabled();
+    });
+
+    test('the open row: its materials, "Attach material…" and "Take over research from a file…" with the terminal mark (do=import)', async ({ page }) => {
+        const houses = fakeHouses([row({ state: 'done', at: '2027-03-12', summary: { events: 2, holders: 1, residents: 0, unknown: 0, materials: 2, passed: 0 } })], {
+            materials: [
+                { id: 'I0003', kind: 'own-research', title: 'reserse-cp16.md', at: '2027-03-01', file: 'reserse-cp16.md' },
+                { id: 'I0004', kind: 'memory', title: 'U Prouzalů se říkalo podle hospodáře', at: '2027-03-02' },
+            ],
+        });
+        await setup(page, { houses });
+        await openHouses(page);
+        await houseRow(page).locator('.house-chev').click();
+        const detail = page.locator('#houses-modal .house-detail .house-research');
+        await expect(detail.locator('.house-mat')).toHaveCount(2);
+        expect(houses.reads).toEqual([KEY]);
+        await expect(detail.locator('.house-mat').nth(0)).toContainText('Own research · 1 Mar 2027');
+        await expect(detail.locator('.house-mat').nth(1)).toContainText('family memory · witness not named');
+        const imp = detail.locator('button.house-import');
+        await expect(imp).toContainText('Take over research from a file…');
+        await expect(imp.locator('.research-open-mark')).toHaveCount(1);
+        await expect(detail.locator('.house-research-note')).toHaveText('The text is saved unchanged as house material, and the agent turns it into the house history without a new search.');
+        await expect(detail.locator('button.house-attach .research-open-mark')).toHaveCount(0);
+        await imp.click();
+        await expect.poll(() => links(page)).toContainEqual(expect.stringMatching(/[?&]do=import\b/));
+        await detail.locator('button.house-attach').click();
+        await expect(material(page)).toBeVisible();
+    });
+
+    test('without house.material and house.import: no attach, no take-over', async ({ page }) => {
+        await setup(page, { features: ['house'] });
+        await openHouses(page);
+        await houseRow(page).locator('.house-chev').click();
+        await expect(page.locator('#houses-modal .house-attach, #houses-modal .house-import')).toHaveCount(0);
+        await houseRow(page).locator('.house-more-btn').click();
+        await expect(page.getByRole('menuitem', { name: 'Attach material…' })).toHaveCount(0);
+    });
+
+    test('files go the usual way: a batch of the house (batch/<id>/done with house)', async ({ page }) => {
+        const { bridge } = await setup(page, { media: true });
+        await openHouses(page);
+        await openAttach(page);
+        await material(page).locator('.house-files-input').setInputFiles([
+            { name: 'dum-1930.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('obrazek domu') },
+        ]);
+        await expect(material(page).locator('.house-file')).toHaveCount(1);
+        await expect(material(page).locator('.house-file .n')).toHaveText('dum-1930.jpg');
+        await expect(material(page).locator('.house-files-note')).toHaveText('1 file goes to the research as a batch of the house.');
+        await material(page).getByRole('button', { name: 'Attach', exact: true }).click();
+        const dialog = page.locator('#batch-modal');
+        await expect(dialog.locator('.batch-step.is-active')).toHaveText('Review');
+        await dialog.locator('[data-act="next"]').click();
+        await dialog.getByRole('button', { name: /^Send/ }).click();
+        await expect.poll(() => bridge.batchDone?.length ?? 0).toBe(1);
+        expect(bridge.batchDone![0].body).toMatchObject({ house: KEY });
     });
 });

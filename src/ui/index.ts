@@ -180,6 +180,7 @@ import { tableResearchMethods } from './table-view/table-research-ui.js';
 import { placesManagerMethods } from './places-manager-ui.js';
 import { housesMethods } from './houses-ui.js';
 import { houseStateMethods } from './house-state-ui.js';
+import { houseMaterialMethods } from './house-material-ui.js';
 import { placesResearchMethods } from './places-research-ui.js';
 import { placesIdentifyMethods } from './places-identify-ui.js';
 import { placeMenuMethods } from './place-menu-ui.js';
@@ -1195,6 +1196,9 @@ Object.assign(UIClass.prototype, housesMethods);
 type HouseStateMethods = typeof houseStateMethods;
 export interface UIClass extends HouseStateMethods {}
 Object.assign(UIClass.prototype, houseStateMethods);
+type HouseMaterialMethods = typeof houseMaterialMethods;
+export interface UIClass extends HouseMaterialMethods {}
+Object.assign(UIClass.prototype, houseMaterialMethods);
 
 type PlacesResearchMethods = typeof placesResearchMethods;
 export interface UIClass extends PlacesResearchMethods {}

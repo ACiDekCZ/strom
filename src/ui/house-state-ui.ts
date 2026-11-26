@@ -116,6 +116,11 @@ export const houseStateMethods = uiModule({
         this.refreshPlaceTownHouseStates();
     },
 
+    /** The rev of the list read now ('' none). */
+    houseStatesRev(): string {
+        return list?.rev ?? '';
+    },
+
     /** The research's row of a house of the tree (any of its joined numbers), or null. */
     houseResearchRow(h: Pick<TreeHouse, 'id' | 'townKey' | 'numbers'>): HouseListRow | null {
         const b = this.houseResearchBridge();
@@ -152,16 +157,19 @@ export const houseStateMethods = uiModule({
         this.showOverviewWaitingItem(questionId);
     },
 
-    /** The research's part of an open row's detail: its state (with "Answer"). */
+    /** The research's part of an open row's detail: its state (with "Answer"), its materials and links (§7). */
     renderHouseResearchDetail(h: TreeHouse): string {
+        if (!this.houseResearchBridge()) return '';
         const row = this.houseResearchRow(h);
         const badge = houseStateHtml(row, { lang: getCurrentLanguage(), answer: true });
-        return badge ? `<div class="house-research"><div class="house-research-state">${badge}</div></div>` : '';
+        const more = this.renderHouseMaterialsHtml(h);
+        return badge || more
+            ? `<div class="house-research">${badge ? `<div class="house-research-state">${badge}</div>` : ''}${more}</div>` : '';
     },
 
     /** A click in the detail's research part: true when handled. */
     houseResearchDetailClick(target: HTMLElement, house: TreeHouse): boolean {
-        return this.houseStateSlotClick(target, house);
+        return this.houseStateSlotClick(target, house) || this.houseMaterialClick(target, house);
     },
 
     /** Places: a town's line of its research houses ("1 done, 1 being researched"), or ''. */
