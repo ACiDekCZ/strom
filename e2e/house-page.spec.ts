@@ -130,13 +130,18 @@ const ORTHO_LAYER = {
     id: 'cz-ortho', kind: 'ortho', label: 'Ortofoto (dnes)', type: 'wms', url: 'https://ortho.example.org/wms', layers: '0',
     format: 'image/jpeg', attribution: '© Zeměměřický ústav Brodek', license: 'CC BY 4.0', bbox: [12, 48.5, 19, 51],
 };
+const AERIAL_LAYER = {
+    id: 'cz-ortho-1950', kind: 'ortho-1950', label: 'Letecké snímky 50. let', type: 'wms', url: 'https://aerial.example.org/wms',
+    layers: 'orto', format: 'image/jpeg', crs: 'EPSG:5514', attribution: 'Archiv leteckých snímků Brodek, 1953', license: 'CC BY 4.0',
+    bbox: [12, 48.5, 19, 51],
+};
 const HOUSE_MAP: FakeMap = {
     location: { lat: 49.6118, lon: 15.2251, certainty: 'medium', how: 'old-map', confirmed: null, sources: [] },
     maps: [
         { id: 'm1', kind: 'cadastre', manual: true, sheet: 'list 2', url: 'https://archiv.example.org/skica/belokamen' },
         { id: 'm2', kind: 'ortho', layer: 'cz-ortho' },
     ],
-    layers: [ORTHO_LAYER],
+    layers: [ORTHO_LAYER, AERIAL_LAYER],
 };
 
 const houseRow = (page: Page) => page.locator(`#houses-modal .house-row[data-house="${KEY}"]`);
@@ -283,7 +288,7 @@ test.describe('The house page', () => {
         await openFromHouses(page);
         const map = pageWin(page).locator('#hp-sec-map');
         await expect(map).toBeVisible();
-        await expect(map.locator('.hmap-layer')).toHaveText(['Today', 'Orthophoto today']);
+        await expect(map.locator('.hmap-layer')).toHaveText(['Today', 'Orthophoto today', 'Aerial 1950s']);
         await expect(map.locator('.hmap-layer[aria-checked="true"]')).toHaveText('Today');
         await expect(map.locator('.hpt.main')).toHaveText('16');
         await expect(map.locator('.hmap-attr')).toContainText('OpenStreetMap');
@@ -301,6 +306,21 @@ test.describe('The house page', () => {
         // Zoom: one step out asks for tiles of zoom 16.
         await map.locator('.hmap-zout').click();
         await expect(map.locator('.hmap-tiles img').first()).toHaveAttribute('src', /BBOX=/);
+        // The aerial photos of the 1950s: one picture of the place in S-JTSK, the house in its middle.
+        await map.locator('.hmap-layer', { hasText: 'Aerial 1950s' }).click();
+        const img = map.locator('.hmap-img');
+        await expect(img).toHaveAttribute('src', /^https:\/\/aerial\.example\.org\/wms\?SERVICE=WMS&.*CRS=EPSG:5514&BBOX=-\d+(\.\d+)?,-\d+/);
+        await expect(img).toHaveAttribute('alt', 'Aerial photo of the 1950s around the house');
+        await expect(map.locator('.hmap-tiles img')).toHaveCount(1);
+        await expect(map.locator('.hmap-attr')).toHaveText('Archiv leteckých snímků Brodek, 1953 · CC BY 4.0');
+        const frame = (await map.locator('.hmap').boundingBox())!;
+        const pinBox = (await map.locator('.hpt').boundingBox())!;
+        expect(Math.abs(pinBox.x + pinBox.width / 2 - (frame.x + frame.width / 2))).toBeLessThan(2);
+        expect(Math.abs(pinBox.y + pinBox.height / 2 - (frame.y + frame.height / 2))).toBeLessThan(2);
+        // Moving the point goes on today's map.
+        await map.locator('[data-hmap-act="move"]').click();
+        await expect(map.locator('.hmap-layer[aria-checked="true"]')).toHaveText('Today');
+        await map.locator('[data-hmap-act="cancel"]').click();
         // Confirm location: into the tree and to the research.
         await map.locator('[data-hmap-act="confirm"]').click();
         await expect(map.locator('.hmap-pos-t')).toHaveText('Location confirmed');

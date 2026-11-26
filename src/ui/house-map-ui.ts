@@ -14,7 +14,7 @@ import { SettingsManager } from '../settings.js';
 import { pointInViewport, project, tilesForViewport, tileUrl, unproject } from '../map.js';
 import {
     HOUSE_MAP_MAX_ZOOM, HOUSE_MAP_MIN_ZOOM, HOUSE_MAP_TOWN_ZOOM, HOUSE_MAP_ZOOM,
-    houseMapAttributionHtml, wmsTileUrl, type HouseMapPoint, type HouseMapView,
+    houseImageScale, houseImageUrl, houseMapAttributionHtml, wmsTileUrl, type HouseMapPoint, type HouseMapView,
 } from '../house-map.js';
 import { loadMapTile, releaseMapTile } from './map-tiles.js';
 
@@ -104,6 +104,22 @@ export function mountHouseMap(root: ParentNode, hooks: HouseMapHooks): void {
                 drawTiles();
             });
             frame.appendChild(notice);
+            return;
+        }
+        if (v.kind === 'image' && v.layer) {
+            // A picture of the place in the layer's own system (S-JTSK), the house in the middle.
+            const m = houseImageScale(s.zoom);
+            const dpr = Math.min(2, window.devicePixelRatio || 1);
+            const k = Math.min(1, 2048 / Math.max(w * dpr, h * dpr));
+            const url = houseImageUrl(v.layer, data.point, w * m, h * m, w * dpr * k, h * dpr * k);
+            if (!url) return;
+            const img = document.createElement('img');
+            img.className = 'hmap-img';
+            img.alt = strings.houses.page.map.aerialAlt;
+            img.decoding = 'async';
+            img.referrerPolicy = 'strict-origin-when-cross-origin';
+            img.src = url;
+            tiles.appendChild(img);
             return;
         }
         const minZoom = v.layer?.minZoom ?? HOUSE_MAP_MIN_ZOOM;

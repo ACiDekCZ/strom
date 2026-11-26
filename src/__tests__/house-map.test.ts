@@ -11,8 +11,9 @@ import type { LiveHouseLayer } from '../research-link.js';
 import type { TreeHouse } from '../houses.js';
 import {
     houseMapAttribution, houseMapHtml, houseMapViews, housePointLabel, housePositionText, houseLocationUnsure,
-    tileBox3857, wmsGetMapUrl, wmsTileUrl, type HouseMapInput,
+    houseImageUrl, tileBox3857, wmsGetMapUrl, wmsTileUrl, type HouseMapInput,
 } from '../house-map.js';
+import { wgs84ToSjtsk } from '../sjtsk.js';
 
 const ORTHO: LiveHouseLayer = {
     id: 'cz-ortho', kind: 'ortho', label: 'Ortofoto ČR (dnes)', type: 'wms',
@@ -58,6 +59,12 @@ describe('house map — the layer switch', () => {
         expect(houseMapViews([AERIAL], research(), POINT, 'en', []).map(v => v.id)).toEqual(['today']);
     });
 
+    it('the aerial photos of the 1950s in S-JTSK: their own picture of the place, after the tiles', () => {
+        const views = houseMapViews([AERIAL, ORTHO], research(), POINT, 'cs');
+        expect(views.map(v => [v.id, v.kind, v.label])).toEqual([
+            ['today', 'today', 'Dnes'], ['cz-ortho', 'tiles', 'Ortofoto dnes'], ['cz-ortho-1950', 'image', 'Letecké 50. léta']]);
+    });
+
     it('a layer with an address that is not https is left out', () => {
         expect(houseMapViews([{ ...ORTHO, url: 'javascript:alert(1)' }], research(), POINT, 'en').map(v => v.id)).toEqual(['today']);
     });
@@ -79,6 +86,23 @@ describe('house map — WMS', () => {
         const url = wmsGetMapUrl({ ...ORTHO, url: 'https://ortho.example.org/wms?map=x' }, 'EPSG:5514', [-1, -2, 3, 4], 400, 280, '1.1.1');
         expect(url).toContain('?map=x&SERVICE=WMS&VERSION=1.1.1');
         expect(url).toContain('&SRS=EPSG:5514&BBOX=-1,-2,3,4&WIDTH=400&HEIGHT=280');
+    });
+
+    it('the picture of the place: a GetMap in EPSG:5514 of 400 × 280 m with the house in the middle', () => {
+        const url = new URL(houseImageUrl(AERIAL, POINT, 400, 280, 800, 560)!);
+        expect(url.origin + url.pathname).toBe('https://aerial.example.org/wms');
+        expect(url.searchParams.get('CRS')).toBe('EPSG:5514');
+        expect(url.searchParams.get('LAYERS')).toBe('orto');
+        expect(url.searchParams.get('WIDTH')).toBe('800');
+        expect(url.searchParams.get('HEIGHT')).toBe('560');
+        const [minx, miny, maxx, maxy] = url.searchParams.get('BBOX')!.split(',').map(Number);
+        const p = wgs84ToSjtsk(POINT.lat, POINT.lng);
+        expect(maxx - minx).toBeCloseTo(400, 0);
+        expect(maxy - miny).toBeCloseTo(280, 0);
+        expect(Math.abs((minx + maxx) / 2 - p.x)).toBeLessThan(0.02);
+        expect(Math.abs((miny + maxy) / 2 - p.y)).toBeLessThan(0.02);
+        expect(maxx).toBeLessThan(0);
+        expect(houseImageUrl(OTHER_CRS, POINT, 400, 280, 800, 560)).toBeNull();
     });
 
     it('the attribution goes whole with its licence; today is OpenStreetMap', () => {

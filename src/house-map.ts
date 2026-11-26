@@ -9,7 +9,8 @@
  * (`maps[].layer`) or whose frame holds its point; no other map server is
  * named in the app. A layer the research draws in one system only (`crs`)
  * goes into its own picture of the place when the app can convert into that
- * system, else it is left out.
+ * system (S-JTSK, src/sjtsk.ts: the aerial photos of the 1950s, north turned
+ * a little), else it is left out.
  */
 
 import type { HouseUserData } from './types.js';
@@ -19,6 +20,7 @@ import type { TreeHouse } from './houses.js';
 import { getStringsForLang, type Language } from './strings.js';
 import { safeHttpUrl } from './validation.js';
 import { TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL, TILE_SIZE, type TileRef } from './map.js';
+import { sjtskBox } from './sjtsk.js';
 
 /** The zoom a house is shown at (a street: the house and its neighbours). */
 export const HOUSE_MAP_ZOOM = 17;
@@ -59,8 +61,27 @@ export interface HouseMapInput {
     hasResearch?: boolean;
 }
 
-/** The systems a layer drawn in one system only can be shown in (its own picture of the place). */
-export const HOUSE_MAP_IMAGE_CRS: readonly string[] = [];
+/**
+ * The systems a layer drawn in one system only can be shown in, as its own
+ * picture of the place (the app converts the point into them): S-JTSK
+ * (src/sjtsk.ts), the Czech aerial photos of the 1950s.
+ */
+export const HOUSE_MAP_IMAGE_CRS: readonly string[] = ['EPSG:5514'];
+
+/** Metres per CSS pixel of a picture of the place at a zoom (1 m at the house's zoom: about 400 × 280 m). */
+export function houseImageScale(zoom: number): number {
+    return Math.pow(2, HOUSE_MAP_ZOOM - zoom);
+}
+
+/**
+ * The picture of the place of a layer in S-JTSK (EPSG:5514): a GetMap of
+ * `widthM` × `heightM` metres with the point in the middle, `pxW` × `pxH`
+ * pixels. Null for a system the app cannot convert into.
+ */
+export function houseImageUrl(layer: LiveHouseLayer, point: HouseMapPoint, widthM: number, heightM: number, pxW: number, pxH: number): string | null {
+    if (layer.crs !== 'EPSG:5514') return null;
+    return wmsGetMapUrl(layer, 'EPSG:5514', sjtskBox(point.lat, point.lng, widthM, heightM), pxW, pxH);
+}
 
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
