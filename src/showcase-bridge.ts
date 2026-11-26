@@ -72,10 +72,15 @@ export function showcaseUnanswered(feature: string): boolean {
 }
 
 /**
- * Writes the app offers by a feature alone, with no action of the research to grey (spec 143 K4.1): confirming
- * a source's transcript or a fact from the record. Left out of the status, so the showcase does not draw them.
+ * Writes the app offers or makes by a feature alone, with no action of the research to grey (spec 143 K4.1):
+ * confirming a source's transcript or a fact from the record, sending the tree check's "not an error" marks
+ * (they stay marks of the tree here), and a material's assigning, editing, sorting and deleting. Left out of
+ * the status, so the showcase neither draws nor tries them.
  */
-export const SHOWCASE_WRITE_FEATURES: readonly string[] = ['sources.confirm', 'facts.confirm', 'facts.confirm.value'];
+export const SHOWCASE_WRITE_FEATURES: readonly string[] = [
+    'sources.confirm', 'facts.confirm', 'facts.confirm.value', 'quality.dismiss',
+    'material.assign', 'material.edit', 'material.sort', 'material.sortRun', 'material.delete', 'material.trees',
+];
 
 /** The snapshot's status as the shim gives it: what it cannot answer, and its writes, left out of `features`. */
 function showcaseStatusOf(status: Record<string, unknown> | null): Record<string, unknown> | null {
