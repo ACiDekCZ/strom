@@ -266,6 +266,8 @@ export const plPart14: Pick<StringsType, 'houses'> = {
             statsMarriedIn: (n: number, of: number) => `Wżenienie: ${n} z ${of} ${of === 1 ? 'domu' : 'domów'} z historią`,
             searchGroup: 'Domy',
             searchHouse: 'Dom ›',
+            searchPeople: 'Osoby',
+            searchHouseAria: (house: string) => `Strona domu ${house}`,
         },
     },
 };

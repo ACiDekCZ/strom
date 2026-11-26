@@ -33,6 +33,7 @@ import {
     renameMergeSession
 } from '../merge/index.js';
 import { PersonPicker } from '../person-picker.js';
+import { searchHousesOf } from '../house-search.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
 import { filterPersons, hasSearchCriteria, SearchCriteria } from '../search-filter.js';
@@ -108,6 +109,15 @@ export const searchMethods = uiModule({
             rowNote: (p) => this.mapSearchNote(p.id),
             // Whole tree / Direct line / In view (spec 137 §1–§2).
             scope: toolbarScopeSource(),
+            // The group Houses above the people and "House ›" on a person found by a house number (spec 030 §15).
+            houses: {
+                of: (data) => {
+                    let rev = 0;
+                    try { rev = DataManager.getRevision(); } catch { rev = 0; }
+                    return searchHousesOf(data, rev);
+                },
+                open: (id) => this.openHouse(id),
+            },
         });
         this.wireSearchScope();
 

@@ -13559,6 +13559,8 @@ const stringsEN = {
             statsMarriedIn: (n: number, of: number) => `Married into the house: ${n} of ${of} ${of === 1 ? 'house' : 'houses'} with history`,
             searchGroup: 'Houses',
             searchHouse: 'House ›',
+            searchPeople: 'People',
+            searchHouseAria: (house: string) => `House page ${house}`,
         },
     },
 };
@@ -26508,6 +26510,8 @@ const stringsCZ: StringsType = {
             statsMarriedIn: (n: number, of: number) => `Přiženění nebo přivdání: ${n} z ${of} ${of === 1 ? 'domu' : 'domů'} s historií`,
             searchGroup: 'Domy',
             searchHouse: 'Dům ›',
+            searchPeople: 'Osoby',
+            searchHouseAria: (house: string) => `Stránka domu ${house}`,
         },
     },
 };
@@ -39367,6 +39371,8 @@ const stringsDE: StringsType = {
             statsMarriedIn: (n: number, of: number) => `Eingeheiratet: ${n} von ${of} ${of === 1 ? 'Haus' : 'Häusern'} mit Geschichte`,
             searchGroup: 'Häuser',
             searchHouse: 'Haus ›',
+            searchPeople: 'Personen',
+            searchHouseAria: (house: string) => `Hausseite ${house}`,
         },
     },
 };

@@ -17,6 +17,9 @@ import { withYears } from '../ui/person-list-rule-house.js';
 import { getStringsForLang, setLanguage } from '../strings.js';
 import { DEFAULT_STATS_OPTIONS, STATS_GROUPS, statsContext, statsGroupsOf, statsTable } from '../tree-stats.js';
 import { houseStatsParts } from '../ui/tree-stats-ui.js';
+import { findHousesByQuery, houseOfDetailMatch, searchHousesOf } from '../house-search.js';
+import { detailMatch } from '../search-filter.js';
+import { normalizeSearchText } from '../name-search.js';
 
 function person(id: string, first: string, last: string, gender: Person['gender'], o: Partial<Person> = {}): Person {
     return { id: id as PersonId, firstName: first, lastName: last, gender, isPlaceholder: false, parentIds: [], childIds: [], partnerships: [], ...o };
@@ -208,5 +211,38 @@ describe('the statistics of houses (§15)', () => {
             expect(S.treeStats.note.houses, lang).toBeTruthy();
             expect(S.houses.integration.statsMarriedIn(1, 2), lang).toMatch(/1.*2/);
         }
+    });
+});
+
+describe('the search finds houses (§15)', () => {
+    const data = village();
+    data.houses = { 'belokamen|16': { merged: ['belokamen|9'], name: 'U Prouzalů' } };
+    const s = searchHousesOf(data, 1);
+    const found = (q: string) => findHousesByQuery(s.houses, q).map(h => h.id);
+
+    it('by the title, the town and number, an older number, the name; three letters at least', () => {
+        expect(found('Bělokamen čp. 16')).toEqual(['belokamen|16']);
+        expect(found('belokamen 16')).toEqual(['belokamen|16']);
+        expect(found('čp. 9')).toEqual(['belokamen|16']);
+        expect(found('prouzalu')).toEqual(['belokamen|16']);
+        expect(found('čp. 8')).toEqual(['mlynkovice|8']);
+        expect(found('čp.')).toEqual([]);
+        expect(found('16')).toEqual([]);
+        expect(found('Zálesí')).toEqual([]);
+        expect(findHousesByQuery(s.houses, 'Bělokamen', 0)).toHaveLength(0);
+    });
+
+    it('a person found by a house number leads to that house; by a cause to none', () => {
+        const q = normalizeSearchText('čp. 9');
+        const m = detailMatch(data.persons['svatobor' as PersonId]!, q, data)!;
+        expect(m.value).toBe('čp. 9');
+        expect(houseOfDetailMatch(data, m, s)?.id).toBe('belokamen|16');
+        expect(houseOfDetailMatch(data, { type: 'death', place: 'Bělokamen', value: 'cholera' }, s)).toBeNull();
+        expect(houseOfDetailMatch(data, { type: 'death', value: 'čp. 9' }, s)).toBeNull();
+    });
+
+    it('reads the houses once per revision', () => {
+        expect(searchHousesOf(data, 1)).toBe(s);
+        expect(searchHousesOf(data, 2)).not.toBe(s);
     });
 });

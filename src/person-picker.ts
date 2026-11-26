@@ -3,11 +3,13 @@
  * Replaces plain <select> elements with searchable dropdown
  */
 
-import { Person, PersonId, StromData } from './types.js';
+import { HouseId, Person, PersonId, StromData } from './types.js';
 import { strings } from './strings.js';
 import { DataManager } from './data.js';
 import { normalizeSearchText as normalizeText, alternateNames, nameMatchesQuery } from './name-search.js';
 import { detailMatch } from './search-filter.js';
+import { findHousesByQuery, houseOfDetailMatch, type SearchHouses } from './house-search.js';
+import { houseTitle, type TreeHouse } from './houses.js';
 import { displayYear } from './dates.js';
 import { nameHtml, surnameDisplay, shownName, shownNameParts, shownSurnameIsBirth, titlesShown, birthNoteText } from './person-name.js';
 import { surnameForms } from './surnames.js';
@@ -289,6 +291,12 @@ export interface PersonPickerOptions {
     rowNote?: (person: Person) => { tag: string; action?: { label: string; run: (id: PersonId) => void } } | null;
     /** The search scope (spec 137): without it the picker has no scope head. */
     scope?: PickerScopeSource;
+    /**
+     * Houses in the search (spec 030 §15): the group "Houses" above the people
+     * (a row opens the house's page) and "House ›" on a person found by a
+     * house number. `of` gives the tree's houses (null: none).
+     */
+    houses?: { of(data: StromData): SearchHouses | null; open(id: HouseId): void };
 }
 
 const BATCH_SIZE = 50;
@@ -300,6 +308,8 @@ export class PersonPicker {
     private dropdown: HTMLElement;
     private toggleBtn: HTMLButtonElement;
     private selectedIndex: number = -1;
+    /** The houses the query finds (spec 030 §15), above the people; the selection counts them first. */
+    private houseHits: TreeHouse[] = [];
     private filteredPersons: Person[] = [];
     private allPersons: Person[] = [];
     private selectedPersonId: PersonId | null = null;
@@ -563,10 +573,14 @@ export class PersonPicker {
                     setSearchScope('tree');
                     break;
                 }
-                if (this.selectedIndex >= 0 && this.filteredPersons[this.selectedIndex]) {
-                    this.selectPerson(this.filteredPersons[this.selectedIndex].id);
+                if (this.selectedIndex >= 0 && this.selectedIndex < this.houseHits.length) {
+                    this.openHouse(this.houseHits[this.selectedIndex].id);
+                } else if (this.selectedIndex >= 0 && this.filteredPersons[this.selectedIndex - this.houseHits.length]) {
+                    this.selectPerson(this.filteredPersons[this.selectedIndex - this.houseHits.length].id);
                 } else if (this.filteredPersons.length > 0) {
                     this.selectPerson(this.filteredPersons[0].id);
+                } else if (this.houseHits.length > 0) {
+                    this.openHouse(this.houseHits[0].id);
                 }
                 break;
             case 'Escape':
@@ -641,7 +655,7 @@ export class PersonPicker {
      * Navigate through list items
      */
     private navigateList(direction: number): void {
-        const maxIndex = this.filteredPersons.length - 1;
+        const maxIndex = this.houseHits.length + this.filteredPersons.length - 1;
         if (maxIndex < 0) return;
 
         let newIndex = this.selectedIndex + direction;
@@ -656,7 +670,7 @@ export class PersonPicker {
      * Update visual selection in dropdown
      */
     private updateSelection(): void {
-        const items = this.dropdown.querySelectorAll('.person-picker-item');
+        const items = this.dropdown.querySelectorAll('.person-picker-house, .person-picker-item');
         items.forEach((item, index) => {
             item.classList.toggle('selected', index === this.selectedIndex);
             item.setAttribute('aria-selected', String(index === this.selectedIndex));
@@ -677,6 +691,13 @@ export class PersonPicker {
         this.input.value = this.formatPersonName(person);
         this.hide();
         this.options.onSelect(personId);
+    }
+
+    /** A house's page from the list (a row of the group Houses, or "House ›" of a person): the list closes and the field clears. */
+    private openHouse(id: HouseId): void {
+        this.hide();
+        this.clear();
+        this.options.houses?.open(id);
     }
 
     /** Tree data used to resolve other surname forms while searching. */
@@ -700,6 +721,8 @@ export class PersonPicker {
         // The scope narrows the matches (a Set lookup per row): the direct line or the view.
         const narrow = this.head ? narrowIds(getSearchScope(), this.currentSets()) : null;
         this.filteredPersons = narrow ? whole.filter(p => narrow.has(p.id)) : whole;
+        const houses = this.options.houses && data && query ? this.options.houses.of(data) : null;
+        this.houseHits = houses ? findHousesByQuery(houses.houses, query) : [];
         // Same names of the whole result are counted now; each row's line is worked out when it is drawn.
         this.distinguisher = new PickerDistinguisher(this.filteredPersons, data, !!this.options.showBirthYear,
             person => htmlToText(this.matchHtml(person)));
@@ -724,7 +747,7 @@ export class PersonPicker {
             });
             return;
         }
-        if (this.filteredPersons.length === 0) {
+        if (this.filteredPersons.length === 0 && !this.houseHits.length) {
             this.list.innerHTML = `
                 <div class="person-picker-empty">${strings.personPicker.noResults}</div>
             `;
@@ -757,9 +780,20 @@ export class PersonPicker {
         const itemsToShow = this.filteredPersons.slice(0, this.displayedCount);
         const hasMore = this.displayedCount < this.filteredPersons.length;
 
-        this.list.innerHTML = itemsToShow
+        this.list.innerHTML = this.housesHtml() + itemsToShow
             .map((person, index) => this.renderItem(person, index))
             .join('') + (hasMore ? '<div class="person-picker-loading">…</div>' : '');
+
+        // A house's row and a person's "House ›" open the house's page (spec 030 §15).
+        this.list.querySelectorAll<HTMLElement>('.person-picker-house, .person-picker-houseact').forEach(el => {
+            el.addEventListener('pointerdown', e => e.preventDefault());
+            el.addEventListener('mousedown', e => e.preventDefault());
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = el.dataset.house;
+                if (id) this.openHouse(id);
+            });
+        });
 
         // Attach click listeners
         this.list.querySelectorAll<HTMLElement>('.person-picker-rowact').forEach(btn => {
@@ -806,6 +840,40 @@ export class PersonPicker {
         this.renderItems();
     }
 
+    /** The group "Houses" above the people (spec 030 §15): a house's title, its years, surnames and people, and "House page ›". */
+    private housesHtml(): string {
+        if (!this.houseHits.length) return '';
+        const I = strings.houses.integration;
+        const rows = this.houseHits.map((h, i) => {
+            const selected = i === this.selectedIndex;
+            const title = houseTitle(h);
+            const meta = [
+                h.name ?? '',
+                h.period ? (h.period.from === h.period.to ? String(h.period.from) : `${h.period.from}–${h.period.to}`) : '',
+                h.surnames.join(' → '),
+                I.statsPeople(h.persons),
+            ].filter(Boolean).join(' · ');
+            return `<div class="person-picker-house sel-opt${selected ? ' selected' : ''}" data-sel-form="row" role="option" aria-selected="${selected}"`
+                + ` data-house="${this.escapeHtml(h.id)}" aria-label="${this.escapeHtml(`${title} · ${meta}`)}">`
+                + `<span class="person-picker-name">${this.escapeHtml(title)}</span>`
+                + `<div class="person-picker-dist">${this.escapeHtml(meta)}</div>`
+                + `<span class="link-button person-picker-houselink" aria-hidden="true">${this.escapeHtml(strings.houses.familyHouses.page)}</span></div>`;
+        }).join('');
+        return `<div class="person-picker-group" role="presentation">${this.escapeHtml(I.searchGroup)}</div>${rows}`
+            + (this.filteredPersons.length ? `<div class="person-picker-group" role="presentation">${this.escapeHtml(strings.houses.integration.searchPeople)}</div>` : '');
+    }
+
+    /** The house a person was found by (a house number on a fact), for "House ›"; null: none. */
+    private houseOfPerson(person: Person): TreeHouse | null {
+        const data = this.searchData();
+        if (!this.options.searchDetails || !this.options.houses || !data) return null;
+        const query = normalizeText(this.input.value.trim());
+        if (!query || calculateMatchScore(person, query, data) > 0) return null;
+        const m = detailMatch(person, query, data);
+        const houses = m ? this.options.houses.of(data) : null;
+        return m && houses ? houseOfDetailMatch(data, m, houses) : null;
+    }
+
     /**
      * Render a single item: the name (with the birth year when shown) and,
      * under it, at most one quiet row — what tells it apart from rows of the
@@ -831,7 +899,7 @@ export class PersonPicker {
             const name = shownName(person) + (note ? ` (${note})` : '') + (year ? ` (*${year})` : '');
             label = `${name}, ${dist}${matchText ? ` · ${matchText}` : ''}`;
         }
-        const selected = index === this.selectedIndex;
+        const selected = index + this.houseHits.length === this.selectedIndex;
         const note = this.options.rowNote?.(person) ?? null;
         if (note && label) label = `${label} · ${note.tag}`;
         const labelAttrs = label
@@ -840,11 +908,16 @@ export class PersonPicker {
         const tag = note ? ` <span class="tagx person-picker-tagx">${this.escapeHtml(note.tag)}</span>` : '';
         const act = note?.action
             ? `<button type="button" class="map-link person-picker-rowact">${this.escapeHtml(note.action.label)}</button>` : '';
+        const house = this.houseOfPerson(person);
+        const houseAct = house
+            ? `<button type="button" class="link-button person-picker-houseact" data-house="${this.escapeHtml(house.id)}" tabindex="-1"`
+                + ` aria-label="${this.escapeHtml(strings.houses.integration.searchHouseAria(houseTitle(house)))}">${this.escapeHtml(strings.houses.integration.searchHouse)}</button>`
+            : '';
 
         return `
             <div class="person-picker-item sel-opt${selected ? ' selected' : ''}${dist ? ' has-dist' : ''}${note ? ' has-note' : ''}" data-sel-form="row" role="option" aria-selected="${selected}"${labelAttrs}
                  data-id="${this.escapeHtml(person.id)}">
-                <span class="person-picker-name"><span class="person-picker-nm">${nameHtml(person)}</span> ${birthYear}${tag}</span>${below}${act}
+                <span class="person-picker-name"><span class="person-picker-nm">${nameHtml(person)}</span> ${birthYear}${tag}</span>${below}${act}${houseAct}
             </div>
         `;
     }

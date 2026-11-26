@@ -30906,6 +30906,24 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        /* Houses in the search (spec 030 §15): the group above the people, a house's row as a person's, "House page ›" at its end; "House ›" under a person found by a house number. */
+        .person-picker-group { padding: 8px 12px 4px; color: var(--text-light); font-size: 12px; font-weight: 600; }
+        .person-picker-house {
+            display: flex; flex-direction: column; justify-content: center; gap: 1px; box-sizing: border-box; min-width: min(330px, calc(100vw - 32px));
+            min-height: 46px; padding: 6px 12px; border-bottom: 1px solid var(--divider); font-size: 14px; cursor: pointer; white-space: nowrap; overflow: hidden;
+        }
+        .person-picker-house.selected { background: var(--hover-bg); }
+        .person-picker-houselink { align-self: flex-start; font-size: 12.5px; }
+        .person-picker-houseact { align-self: flex-start; margin-top: 2px; font-size: 12.5px; }
+        @media (hover: hover) {
+            .person-picker-house:hover { background: var(--hover-bg); }
+        }
+        @media (pointer: coarse) {
+            .person-picker-houseact { min-height: 44px; }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .person-picker-house { min-height: 56px; min-width: calc(100vw - 18px); }
+        }
         /* Found by a detail as well: one row, "* 1820 · † 1866 Horní Smyšlenice · cholera". */
         .person-picker-dist .person-picker-match { display: inline; margin: 0; font-size: inherit; color: inherit; }
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
