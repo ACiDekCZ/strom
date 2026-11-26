@@ -126,7 +126,9 @@ export const housePageMethods = uiModule({
         overlay.addEventListener('keydown', (e) => this.onHousePageKey(e));
         this.houseStatesSync();
         this.renderHousePage();
-        overlay.querySelector<HTMLElement>('.pp-body')?.focus({ preventScroll: true });
+        // The body takes the focus, unless the map's point being moved took it (the Map tab's Move the point).
+        const body = overlay.querySelector<HTMLElement>('.pp-body');
+        if (!body?.contains(document.activeElement)) body?.focus({ preventScroll: true });
         return true;
     },
 

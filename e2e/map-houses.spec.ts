@@ -1,0 +1,147 @@
+import { test, expect, Page } from '@playwright/test';
+import { openApp, seedTree, seedSetting } from './helpers.js';
+import { chooseMapWholeTree } from './map-scope-helpers.js';
+
+/**
+ * The Family houses layer of the Map tab (spec 030 §9): its switch after the
+ * kinds, a house with a point of its own as a pill with its number, the town
+ * point's "⌂ N" counting only the houses without one, the house bubble with
+ * House page › and Move the point, and "On the map" in the house page's ⋯ menu.
+ * Invented data: the Prouzal family of Bělokamen, čp. 16 placed by hand.
+ */
+
+const KEY = 'belokamen|16';
+const pill = (page: Page) => page.locator(`#map-container .map-house-pt[data-house="${KEY}"]`);
+const townTag = (page: Page) => page.locator('#map-container .map-marker[data-key="belokamen"] .map-marker-houses');
+const chip = (page: Page) => page.locator('#map-container .map-kind-houses');
+const popup = (page: Page) => page.locator('.map-popup');
+const pageWin = (page: Page) => page.locator('#house-page-modal');
+
+/** Today's tiles answered here: nothing reaches a map server. */
+async function stubTiles(page: Page): Promise<void> {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    await page.route('**://tile.openstreetmap.org/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+    await page.route('**://nominatim.openstreetmap.org/**', route => route.abort());
+    await seedSetting(page, 'mapTiles', true);
+}
+
+/** Three houses of Bělokamen (čp. 4, 16, 31), the town on the map, čp. 16 placed by hand. */
+async function seedHouses(page: Page, opts: { placed?: boolean } = {}): Promise<void> {
+    await seedTree(page, {
+        kvido: { firstName: 'Kvido', lastName: 'Prouzal', birthDate: '1820', birthPlace: 'Bělokamen', birthAddress: 'čp. 16',
+            deathDate: '1880', deathPlace: 'Bělokamen', deathAddress: 'čp. 16', partners: ['vlasta'] },
+        vlasta: { firstName: 'Vlasta', lastName: 'Kvitelková', gender: 'female', birthDate: '1825', birthPlace: 'Bělokamen',
+            birthAddress: 'čp. 4', partners: ['kvido'] },
+        bohumil: { firstName: 'Bohumil', lastName: 'Prouzal', birthDate: '1850', birthPlace: 'Bělokamen', birthAddress: 'čp. 16',
+            deathPlace: 'Bělokamen', deathAddress: 'čp. 31', deathDate: '1911', parents: ['kvido', 'vlasta'] },
+    }, 'Prouzal');
+    await page.evaluate(async (placed) => {
+        const dm = window.Strom.DataManager;
+        dm.setPlaceGeos(new Map([['belokamen', { lat: 49.5, lon: 15.2 }]]));
+        if (placed) dm.setHouseUserData('belokamen|16' as never, { location: { lat: 49.503, lng: 15.204, how: 'manual' } }, 'seed');
+        await window.Strom.TreeManager.flush();
+        window.Strom.TreeRenderer.render();
+    }, opts.placed ?? true);
+}
+
+async function openMap(page: Page): Promise<void> {
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
+    await chooseMapWholeTree(page);
+    await expect(page.locator('.map-marker').first()).toBeVisible();
+    await page.evaluate(() => {
+        window.Strom.UI.dismissUndoToast();
+        document.querySelectorAll('.toast, .family-offer').forEach(t => t.remove());
+    });
+}
+
+test.describe('Family houses on the map', () => {
+    test.use({ viewport: { width: 1280, height: 800 } });
+
+    test.beforeEach(async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2027-03-20T10:30:00Z'));
+        await stubTiles(page);
+        await openApp(page);
+    });
+
+    test('no switch while no house has a point', async ({ page }) => {
+        await seedHouses(page, { placed: false });
+        await openMap(page);
+        await expect(chip(page)).toBeHidden();
+        await expect(page.locator('#map-container .map-house-pt')).toHaveCount(0);
+        await expect(townTag(page)).toHaveText(/3$/);
+    });
+
+    test('the switch on by default: the house as a pill, the town counts the others; off hides it and survives a reload', async ({ page }) => {
+        await seedHouses(page);
+        await openMap(page);
+        await expect(chip(page)).toBeVisible();
+        await expect(chip(page)).toHaveText(/Family houses/);
+        await expect(chip(page)).toHaveAttribute('aria-pressed', 'true');
+        await expect(pill(page)).toHaveText('16');
+        await expect(pill(page)).toHaveAttribute('aria-label', 'House 16 · Bělokamen čp. 16');
+        await expect(townTag(page)).toHaveText(/2$/);
+        await chip(page).click();
+        await expect(chip(page)).toHaveAttribute('aria-pressed', 'false');
+        await expect(pill(page)).toHaveCount(0);
+        await expect(townTag(page)).toHaveText(/3$/);
+        await page.reload();
+        await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+        await openMap(page);
+        await expect(chip(page)).toBeVisible();
+        await expect(chip(page)).toHaveAttribute('aria-pressed', 'false');
+        await expect(pill(page)).toHaveCount(0);
+    });
+
+    test('the bubble: years, surnames, House page › opens the house page; Move the point starts moving there', async ({ page }) => {
+        await seedHouses(page);
+        await openMap(page);
+        await pill(page).click();
+        await expect(pill(page)).toHaveClass(/is-open/);
+        await expect(popup(page).locator('.map-popup-head strong')).toHaveText('Bělokamen čp. 16');
+        await expect(popup(page).locator('.map-popup-summary')).toHaveText('1820–1880 · Prouzal · 2 people');
+        await expect(popup(page).locator('.map-popup-town-houses')).toHaveText('Houses in this town ›');
+        await popup(page).locator('.map-popup-house-page').click();
+        await expect(pageWin(page).locator('#hp-title')).toHaveText('Bělokamen čp. 16');
+        await expect(pill(page)).not.toHaveClass(/is-open/);
+        // Escape: back to the map (the page was opened from there, not from the Houses window).
+        await page.keyboard.press('Escape');
+        await expect(pageWin(page)).toHaveCount(0);
+        await expect(page.locator('#houses-modal')).toHaveCount(0);
+
+        await pill(page).click();
+        await popup(page).locator('.map-popup-house-move').click();
+        const pin = pageWin(page).locator('#hp-sec-map .hpt');
+        await expect(pin).toHaveClass(/drag/);
+        await expect(pin).toBeFocused();
+    });
+
+    test('On the map from the house page\'s ⋯ menu: the map with the house in the middle and its bubble open', async ({ page }) => {
+        await seedHouses(page);
+        // Switched off earlier: On the map turns the layer on again.
+        await page.evaluate(() => window.Strom.SettingsManager.setMapHouses(false));
+        await page.evaluate((id) => window.Strom.UI.openHouse(id as never), KEY);
+        const win = pageWin(page);
+        await expect(win.locator('#hp-title')).toHaveText('Bělokamen čp. 16');
+        await win.locator('.pp-more').click();
+        await win.locator('.pp-menu [data-hp-menu="map"]').click();
+        await expect(win).toHaveCount(0);
+        await expect(pill(page)).toHaveClass(/is-open/);
+        await expect(popup(page).locator('.map-popup-head strong')).toHaveText('Bělokamen čp. 16');
+        await expect(chip(page)).toHaveAttribute('aria-pressed', 'true');
+        // The house in the middle of the map.
+        const map = (await page.locator('#map-container .map-canvas').boundingBox())!;
+        const at = (await pill(page).boundingBox())!;
+        expect(Math.abs(at.x + at.width / 2 - (map.x + map.width / 2))).toBeLessThan(40);
+    });
+
+    test('a house without a point: On the map shows its town', async ({ page }) => {
+        await seedHouses(page, { placed: false });
+        await page.evaluate((id) => window.Strom.UI.openHouse(id as never), KEY);
+        const win = pageWin(page);
+        await win.locator('.pp-more').click();
+        await win.locator('.pp-menu [data-hp-menu="map"]').click();
+        await expect(win).toHaveCount(0);
+        await expect(popup(page)).toBeVisible();
+        await expect(page.locator('#map-container .map-house-pt')).toHaveCount(0);
+    });
+});
