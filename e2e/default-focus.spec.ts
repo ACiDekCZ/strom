@@ -1,7 +1,7 @@
-import { test, expect, Page, type Frame, type ConsoleMessage } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { openApp, reloadApp } from './helpers.js';
+import { importAsNewTree, openApp, reloadApp } from './helpers.js';
 
 /**
  * "Focus default person" (spec 111): ⌂ first in "Focused on" — the desktop
@@ -28,23 +28,7 @@ const toast = (page: Page) => page.locator('.focus-toast-box');
 async function setupTree(page: Page, defaultPersonId?: string): Promise<void> {
     const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'comprehensive.json'), 'utf-8'));
     if (defaultPersonId) data.defaultPersonId = defaultPersonId;
-    // Rarely (a loaded runner) the import fails with "Execution context was destroyed": nothing in the app
-    // navigates by itself here, so the page's own navigations meanwhile go into the error to tell what did.
-    const seen: string[] = [];
-    const onNavigated = (frame: Frame): void => { if (frame === page.mainFrame()) seen.push(`navigated: ${frame.url()}`); };
-    const onConsole = (m: ConsoleMessage): void => { if (m.type() === 'error' || /initialized/.test(m.text())) seen.push(`console: ${m.text()}`); };
-    page.on('framenavigated', onNavigated);
-    page.on('console', onConsole);
-    try {
-        await page.evaluate(async (tree) => {
-            await window.Strom.DataManager.importAsNewTree(tree as never, 'Home');
-        }, data);
-    } catch (err) {
-        throw new Error(`${(err as Error).message}\nmeanwhile: ${seen.join(' | ') || 'nothing seen'}`);
-    } finally {
-        page.off('framenavigated', onNavigated);
-        page.off('console', onConsole);
-    }
+    await importAsNewTree(page, data, 'Home');
     await expect(page.locator(`#tree-canvas .person-card[data-id="${defaultPersonId ?? FIRST}"]`)).toBeVisible();
 }
 

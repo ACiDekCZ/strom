@@ -213,6 +213,33 @@ export async function createFirstPerson(
     await fillPerson(page, firstName, lastName, opts);
 }
 
+/**
+ * Import `data` as a new tree in the page and wait until it is in. The import
+ * is started by one call and its end read by short calls that return at once:
+ * a page.evaluate that awaits a promise (the import's IndexedDB work) is
+ * sometimes answered "Promise was collected" by the DevTools protocol on a
+ * loaded runner, typically while the start's first render still runs, and
+ * Playwright reports that as "Execution context was destroyed, most likely
+ * because of a navigation", although nothing navigated and the import
+ * finishes (the only address change of that moment is the start's own
+ * `?tree=`, a history.replaceState).
+ */
+export async function importAsNewTree(page: Page, data: unknown, name: string): Promise<void> {
+    await page.evaluate(({ data, name }) => {
+        const w = window as unknown as { __e2eImport?: { done: boolean; error?: string } };
+        const state: { done: boolean; error?: string } = { done: false };
+        w.__e2eImport = state;
+        window.Strom.DataManager.importAsNewTree(data as never, name).then(
+            () => { state.done = true; },
+            (err: unknown) => { state.done = true; state.error = String(err); },
+        );
+    }, { data, name });
+    await expect.poll(() => page.evaluate(() => {
+        const state = (window as unknown as { __e2eImport?: { done: boolean; error?: string } }).__e2eImport;
+        return state?.done ? state.error ?? 'imported' : 'importing';
+    })).toBe('imported');
+}
+
 /** A person for seedTree: parents and partners by key; any other field goes on the person as it is. */
 export interface SeedPerson {
     firstName: string;
@@ -247,10 +274,8 @@ export async function seedTree(page: Page, people: Record<string, SeedPerson>, n
         }
     }
     const focusId = focus ?? Object.keys(people)[0];
-    await page.evaluate(async ({ persons, partnerships, name, focusId }) => {
-        await window.Strom.DataManager.importAsNewTree({ persons, partnerships } as never, name);
-        await window.Strom.TreeRenderer.setFocus(focusId as never);
-    }, { persons, partnerships, name, focusId });
+    await importAsNewTree(page, { persons, partnerships }, name);
+    await page.evaluate(async (focusId) => { await window.Strom.TreeRenderer.setFocus(focusId as never); }, focusId);
     await expect(card(page, people[focusId].firstName)).toBeVisible();
 }
 
