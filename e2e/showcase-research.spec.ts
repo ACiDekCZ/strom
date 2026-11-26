@@ -267,6 +267,15 @@ test.describe('the showcase with research', () => {
         await expect(page.locator('#research-overview')).toBeVisible();
     });
 
+    test('the Research menu says nothing is sent, without a way to change it', async ({ page }) => {
+        // A snapshot whose research says what it accepts (the built one says nothing: no state at all).
+        await openShowcase(page, { accepts: true });
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(page.locator('#research-menu')).toContainText('Changes are not sent to the research');
+        await expect(page.locator('#research-menu').getByText('Change', { exact: true })).toHaveCount(0);
+    });
+
     test('the regular ask of the snapshot redraws nothing: the bubble and the focus stay', async ({ page }) => {
         await openShowcase(page);
         await page.evaluate(() => window.Strom.UI.openResearchOverview({}));

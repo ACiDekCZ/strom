@@ -3499,7 +3499,8 @@ export const researchSyncMethods = uiModule({
                 return { tone: 'quiet', title: s.loadedTitle(when(lb?.at)), actions: [{ action: 'restoreBeforeLoad', label: s.restoreBeforeLoad, asLink: true }] };
             },
             // Only loading: a quiet line in place of the state, with the way to change it.
-            off: () => ({ tone: 'quiet', title: s.sendOffLine, actions: [{ action: 'changeSendMode', label: s.sendOffChange, asLink: true }] }),
+            // A showcase only reads its research (spec 143 K4.1): no way to change it to sending.
+            off: () => ({ tone: 'quiet', title: s.sendOffLine, actions: inShowcase() ? [] : [{ action: 'changeSendMode', label: s.sendOffChange, asLink: true }] }),
             // Send goes as any send (by hand through "What will be sent"); the newer version loads only when asked (V-I).
             unsentAndNewer: () => ({ tone: 'warn', title: s.stateUnsentShort, sub: s.unsentNewerSub, actions: [{ action: 'send', label: s.send }] }),
             waitThenLoad: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
