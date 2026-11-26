@@ -25,6 +25,7 @@ import { ageBirthDate } from './recorded-age.js';
 import { birthYearOf, deathAgeOf, deathDateOf } from './tree-overview.js';
 import { feminineFormIn, isGapOnlyName, surnameKey, withSurnameRules } from './surnames.js';
 import { knownStreets, placeKey, townOfPlace } from './places.js';
+import { collectHouses, houseTitle, livedAtHouse, type TreeHouse } from './houses.js';
 import { placeAliasMap, placeRecordOf, variantGroupKey, type PlaceGroupContext } from './place-groups.js';
 import type { BridgePlaces } from './places-bridge.js';
 import type { KnownStreets } from './streets.js';
@@ -34,16 +35,25 @@ import { tableCsvField } from './ui/table-view/table-export.js';
 // ==================== types (§0.2) ====================
 
 export type StatsTopic = 'firstNames' | 'surnames' | 'birthPlaces' | 'deathPlaces' | 'marriagePlaces'
-    | 'occupations' | 'religions' | 'deathAge' | 'firstMarriageAge' | 'firstChildAge' | 'childrenPerCouple' | 'births';
+    | 'occupations' | 'religions' | 'deathAge' | 'firstMarriageAge' | 'firstChildAge' | 'childrenPerCouple' | 'births' | 'houses';
 
 export type StatsGroupId = 'names' | 'places' | 'life' | 'time';
 
 export const STATS_GROUPS: readonly { id: StatsGroupId; topics: readonly StatsTopic[] }[] = [
     { id: 'names', topics: ['firstNames', 'surnames'] },
-    { id: 'places', topics: ['birthPlaces', 'deathPlaces', 'marriagePlaces'] },
+    { id: 'places', topics: ['birthPlaces', 'deathPlaces', 'marriagePlaces', 'houses'] },
     { id: 'life', topics: ['occupations', 'religions', 'deathAge', 'firstMarriageAge', 'firstChildAge', 'childrenPerCouple'] },
     { id: 'time', topics: ['births'] },
 ];
+
+/**
+ * The groups and topics of a tree: Houses (spec 030 §15) only in a tree with
+ * a house (a fact with a house number); the others always.
+ */
+export function statsGroupsOf(data: StromData, ctx: StatsContext): { id: StatsGroupId; topics: readonly StatsTopic[] }[] {
+    const houses = (ctx.houses ??= collectHouses(data)).length > 0;
+    return STATS_GROUPS.map(g => houses ? g : { id: g.id, topics: g.topics.filter(t => t !== 'houses') });
+}
 
 /** Every topic in the order of the groups. */
 export const STATS_TOPICS: readonly StatsTopic[] = STATS_GROUPS.flatMap(g => g.topics);
@@ -118,6 +128,13 @@ export interface StatsTable {
     occurrences: number;
     /** §6: the level choice applies (a hierarchy of places and a place of the topic with a record). */
     hasLevels: boolean;
+    /** Houses (spec 030 §15): the house one family held longest, and how many houses with history somebody married into. */
+    houses?: HouseStats;
+}
+
+export interface HouseStats {
+    longest?: { id: string; title: string; years: number };
+    marriedIn: { houses: number; of: number };
 }
 
 /** Words for values of ordered groups and of the level (§3, §6); the window passes them in the app's language. */
@@ -141,6 +158,8 @@ export interface StatsContext {
     /** The language for lowercasing names and comparing labels (default: the runtime's). */
     lang?: string;
     labels?: StatsValueLabels;
+    /** The tree's houses, read at the first table of houses. */
+    houses?: TreeHouse[];
 }
 
 /** The context of a tree: its place groups, streets and whether it has a hierarchy of places. */
@@ -753,6 +772,39 @@ function birthRows(data: StromData, ids: readonly PersonId[], opts: StatsOptions
 // ==================== the table ====================
 
 /** The frequency table of a topic over the people of a scope (scopePersonIds). */
+/**
+ * Houses (spec 030 §15): a house's row counts the people of the scope with a
+ * birth, marriage, census, residence or death there (a person under each of
+ * the houses); "Not given" are those at none. Under the table the house one
+ * family held longest and the share of the houses with history somebody
+ * married into (of those with a person of the scope).
+ */
+function houseRows(data: StromData, ids: readonly PersonId[], ctx: StatsContext): StatsTable {
+    const houses = ctx.houses ??= collectHouses(data);
+    const t = new Tally();
+    const scope = new Set<PersonId>();
+    for (const id of ids) if (realPerson(data, id)) scope.add(id);
+    const housed = new Set<PersonId>();
+    let longest: HouseStats['longest'];
+    const marriedIn = { houses: 0, of: 0 };
+    for (const h of houses) {
+        const here = [...livedAtHouse(h)].filter(id => scope.has(id));
+        if (!here.length) continue;
+        const title = houseTitle(h);
+        for (const id of here) { t.add(h.id, title, [id]); housed.add(id); }
+        if (h.familyYears !== undefined && h.familyYears > 0 && (!longest || h.familyYears > longest.years)) longest = { id: h.id, title, years: h.familyYears };
+        if (h.overThreshold) {
+            marriedIn.of++;
+            if (h.marriedIn.length) marriedIn.houses++;
+        }
+    }
+    for (const id of scope) {
+        t.units++;
+        if (housed.has(id)) t.known++; else t.addNone([id]);
+    }
+    return { ...t.table('houses'), houses: { ...(longest ? { longest } : {}), marriedIn } };
+}
+
 export function statsTable(data: StromData, ids: readonly PersonId[], topic: StatsTopic, opts: StatsOptions, ctx: StatsContext): StatsTable {
     switch (topic) {
         case 'firstNames': return firstNameRows(data, ids, opts, ctx);
@@ -767,6 +819,7 @@ export function statsTable(data: StromData, ids: readonly PersonId[], topic: Sta
         case 'firstChildAge': return firstChildAgeRows(data, ids, ctx);
         case 'childrenPerCouple': return childrenPerCoupleRows(data, ids, ctx);
         case 'births': return birthRows(data, ids, opts, ctx);
+        case 'houses': return houseRows(data, ids, ctx);
     }
 }
 

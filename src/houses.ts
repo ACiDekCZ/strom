@@ -459,6 +459,21 @@ export function collectHouses(data: StromData): TreeHouse[] {
     return out.sort((a, b) => (a.townKey < b.townKey ? -1 : a.townKey > b.townKey ? 1 : 0) || compareHouses(a.text, b.text));
 }
 
+/** The facts that say a person lived in a house (spec 030 §15: the lists' rule, the statistics): not another event (an occupation…). */
+export const LIVED_FACT_KINDS: ReadonlySet<HouseFactKind> = new Set<HouseFactKind>(['birth', 'marriage', 'census', 'residence', 'death']);
+
+/** The people with a birth, marriage, census, residence or death at the house, in the years when given (then a fact without a year does not count). */
+export function livedAtHouse(house: Pick<TreeHouse, 'facts'>, years?: { from?: number; to?: number }): Set<PersonId> {
+    const dated = !!years && (years.from !== undefined || years.to !== undefined);
+    const out = new Set<PersonId>();
+    for (const f of house.facts) {
+        if (!LIVED_FACT_KINDS.has(f.kind)) continue;
+        if (dated && (f.year === undefined || (years!.from !== undefined && f.year < years!.from) || (years!.to !== undefined && f.year > years!.to))) continue;
+        out.add(f.personId);
+    }
+    return out;
+}
+
 /** "Bělokamen čp. 16": the town and the house as the tree writes it. */
 export function houseTitle(h: Pick<TreeHouse, 'ref' | 'text'>): string {
     return `${h.ref.town} ${h.text}`;

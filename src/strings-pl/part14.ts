@@ -263,6 +263,7 @@ export const plPart14: Pick<StringsType, 'houses'> = {
             statsHouses: 'Domy',
             statsPeople: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
             statsLongest: (n: string, y: number) => `Najdłużej jedna rodzina: ${n}, ${nPl(y, 'rok', 'lata', 'lat')}`,
+            statsMarriedIn: (n: number, of: number) => `Wżenienie: ${n} z ${of} ${of === 1 ? 'domu' : 'domów'} z historią`,
             searchGroup: 'Domy',
             searchHouse: 'Dom ›',
         },

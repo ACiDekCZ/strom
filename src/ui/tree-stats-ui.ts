@@ -22,7 +22,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import type { Person, PersonId, PersonList, StromData, TreeId } from '../types.js';
 import { buildLineages, rodLabels, rods, type LineageIndex, type RodId } from '../lineage.js';
 import {
-    STATS_GROUPS, STATS_TOPICS, DEFAULT_STATS_OPTIONS, type StatsTopic, type StatsOptions, type StatsSort, type StatsScope,
+    STATS_TOPICS, statsGroupsOf, DEFAULT_STATS_OPTIONS, type StatsTopic, type StatsOptions, type StatsSort, type StatsScope,
     type StatsScopeRef, type StatsTable, type StatsRow, type StatsContext, type StatsValueLabels,
     statsContext, isValueTopic, defaultSort, scopePersonIds, sexCounts, statsTable, sortRows, searchRows,
     rowShare, shareText, statsCsv,
@@ -326,8 +326,20 @@ function totalText(r: Runtime, t: StatsTable, shown: readonly StatsRow[]): strin
         case 'deathAge': case 'firstMarriageAge': case 'firstChildAge': return T.ages(t.units, t.known, t.rows.length);
         case 'childrenPerCouple': return T.couples(t.units, t.rows.length);
         case 'births': return r.win.opts.births === 'month' ? T.months(t.units, t.known, t.rows.length) : T.births(t.units, t.known, t.rows.length);
+        case 'houses': return [T.persons(t.units, t.rows.length), ...houseStatsParts(t)].join(' · ');
         default: return T.persons(t.units, t.rows.length);
     }
+}
+
+/** Under the table of houses (spec 030 §15): the house one family held longest, the houses with history somebody married into. */
+export function houseStatsParts(t: StatsTable): string[] {
+    const h = t.houses;
+    if (!h) return [];
+    const I = strings.houses.integration;
+    const out: string[] = [];
+    if (h.longest) out.push(I.statsLongest(h.longest.title, h.longest.years));
+    if (h.marriedIn.of > 0) out.push(I.statsMarriedIn(h.marriedIn.houses, h.marriedIn.of));
+    return out;
 }
 
 function noteText(r: Runtime, t: StatsTable): string {
@@ -345,6 +357,7 @@ function noteText(r: Runtime, t: StatsTable): string {
     if (isAgeTopic(topic)) parts.push(N.ages, N.ageNone);
     if (topic === 'childrenPerCouple') parts.push(N.couples);
     if (topic === 'births') parts.push(N.births);
+    if (topic === 'houses') parts.push(N.houses);
     if (!(topic === 'firstNames' && r.win.opts.names === 'each')) parts.push(N.share);
     parts.push(N.real);
     return parts.join(' ');
@@ -356,6 +369,7 @@ function valueColumn(r: Runtime, topic: StatsTopic): string {
         case 'firstNames': return v.name;
         case 'surnames': return v.surname;
         case 'birthPlaces': case 'deathPlaces': case 'marriagePlaces': return v.place;
+        case 'houses': return v.house;
         case 'occupations': return v.occupation;
         case 'religions': return v.religion;
         case 'childrenPerCouple': return v.children;
@@ -373,7 +387,7 @@ function searchPlaceholder(topic: StatsTopic): string {
     const s = strings.treeStats.search;
     if (topic === 'firstNames') return s.names;
     if (topic === 'surnames') return s.surnames;
-    if (isPlaceTopic(topic)) return s.places;
+    if (isPlaceTopic(topic) || topic === 'houses') return s.places;
     return s.other;
 }
 
@@ -396,9 +410,14 @@ function seg(name: string, label: string, items: ReadonlyArray<{ v: string; html
         + '</div></div>';
 }
 
+/** The window's groups and topics: Houses only in a tree with a house (spec 030 §15). */
+function groupsOf(r: Runtime): ReturnType<typeof statsGroupsOf> {
+    return statsGroupsOf(r.data, r.ctx);
+}
+
 function shellHtml(r: Runtime): string {
     const t = strings.treeStats;
-    const groups = STATS_GROUPS.map(g => `<div class="stv-group" role="presentation">${esc(t.groups[g.id])}</div>`
+    const groups = groupsOf(r).map(g => `<div class="stv-group" role="presentation">${esc(t.groups[g.id])}</div>`
         + g.topics.map(topic => `<button type="button" class="stv-topic sel-opt" data-sel-form="row" data-topic="${topic}">`
             + `<span class="stv-topic-t">${esc(t.topics[topic])}</span><span class="stv-topic-n" aria-hidden="true"></span></button>`).join('')).join('');
     const sc = t.scope;
@@ -576,6 +595,8 @@ export const statsWindowMethods = uiModule({
             ctx: statsContext(data, { live: active ? this.placesLivePayload() : null, lang: lang(), labels: valueLabels() }),
             focusId, scoped: null, sex: null, tables: new Map(), shown: [], focusIndex: 0, periodInvalid: false,
         };
+        // A topic kept from another tree that this one does not have (Houses): the first one.
+        if (!groupsOf(rt).some(g => g.topics.includes(rt!.win.topic))) rt.win.topic = 'firstNames';
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = OVERLAY_ID;
@@ -733,7 +754,7 @@ export const statsWindowMethods = uiModule({
                 whenIdle(step);
                 return;
             }
-            const next = STATS_TOPICS.find(t => !cachedTable(r, t));
+            const next = groupsOf(r).flatMap(g => g.topics).find(t => !cachedTable(r, t));
             if (!next) return;
             computeTable(r, next);
             this.renderTreeStatsCounts();
@@ -1417,7 +1438,7 @@ export const statsWindowMethods = uiModule({
         const r = rt;
         if (!r) return;
         const t = strings.treeStats;
-        const body = STATS_GROUPS.map(g => `<div class="bottom-sheet-section">${esc(t.groups[g.id])}</div>`
+        const body = groupsOf(r).map(g => `<div class="bottom-sheet-section">${esc(t.groups[g.id])}</div>`
             + g.topics.map(topic => {
                 const tab = cachedTable(r, topic);
                 const n = r.scoped?.ids.length === 0 ? 0 : tab ? tab.rows.length : null;

@@ -15,6 +15,8 @@ import { ruleCatalog } from '../ui/person-list-rule-editors.js';
 import '../ui/person-list-rule-near.js';
 import { withYears } from '../ui/person-list-rule-house.js';
 import { getStringsForLang, setLanguage } from '../strings.js';
+import { DEFAULT_STATS_OPTIONS, STATS_GROUPS, statsContext, statsGroupsOf, statsTable } from '../tree-stats.js';
+import { houseStatsParts } from '../ui/tree-stats-ui.js';
 
 function person(id: string, first: string, last: string, gender: Person['gender'], o: Partial<Person> = {}): Person {
     return { id: id as PersonId, firstName: first, lastName: last, gender, isPlaceholder: false, parentIds: [], childIds: [], partnerships: [], ...o };
@@ -163,5 +165,48 @@ describe('the lists\' rule Lived in the house (§15)', () => {
         for (const p of Object.values(none.persons)) { delete p!.birthAddress; delete p!.deathAddress; delete p!.events; }
         for (const u of Object.values(none.partnerships)) delete u!.address;
         expect(ruleCatalog(lineageIndexOf(none)).map(e => e.c)).not.toContain('livedInHouse');
+    });
+});
+
+describe('the statistics of houses (§15)', () => {
+    afterEach(() => setLanguage('cs'));
+    const data = village();
+    const all = Object.keys(data.persons) as PersonId[];
+    const table = (ids: PersonId[]) => statsTable(data, ids, 'houses', { ...DEFAULT_STATS_OPTIONS }, statsContext(data));
+
+    it('a topic Houses among the places, only in a tree with a house', () => {
+        expect(STATS_GROUPS.find(g => g.id === 'places')!.topics).toContain('houses');
+        expect(statsGroupsOf(data, statsContext(data)).find(g => g.id === 'places')!.topics).toEqual(['birthPlaces', 'deathPlaces', 'marriagePlaces', 'houses']);
+        const none: StromData = { persons: { vratislav: data.persons['vratislav' as PersonId]! } as StromData['persons'], partnerships: {} };
+        expect(statsGroupsOf(none, statsContext(none)).flatMap(g => g.topics)).not.toContain('houses');
+    });
+
+    it('ranks the houses by their people (a person under each house), those at none Not given', () => {
+        const t = table(all);
+        expect(t.rows.map(r => [r.label, r.count])).toEqual([['Bělokamen čp. 16', 5], ['Mlýnkovice čp. 8', 3]]);
+        expect(t.none).toEqual(['vratislav']);
+        expect(t.units).toBe(7);
+        expect(t.known).toBe(6);
+        // A scope counts only its people.
+        expect(table(['dobromil', 'vratislav'] as PersonId[]).rows.map(r => [r.label, r.count])).toEqual([['Mlýnkovice čp. 8', 1]]);
+    });
+
+    it('the house one family held longest and the houses with history somebody married into', () => {
+        const t = table(all);
+        expect(t.houses?.longest).toMatchObject({ id: 'belokamen|16', title: 'Bělokamen čp. 16' });
+        expect(t.houses!.longest!.years).toBeGreaterThanOrEqual(100);
+        expect(t.houses!.marriedIn.of).toBeGreaterThanOrEqual(1);
+        expect(t.houses!.marriedIn.houses).toBeGreaterThanOrEqual(1);
+        setLanguage('cs');
+        const parts = houseStatsParts(t);
+        expect(parts[0]).toBe(`Nejdéle jedna rodina: Bělokamen čp. 16, ${t.houses!.longest!.years} let`);
+        expect(parts[1]).toMatch(/^Přiženění nebo přivdání: \d+ z \d+ dom/);
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            const S = getStringsForLang(lang);
+            expect(S.treeStats.topics.houses, lang).toBeTruthy();
+            expect(S.treeStats.empty.houses, lang).toBeTruthy();
+            expect(S.treeStats.note.houses, lang).toBeTruthy();
+            expect(S.houses.integration.statsMarriedIn(1, 2), lang).toMatch(/1.*2/);
+        }
     });
 });

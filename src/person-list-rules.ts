@@ -26,7 +26,7 @@ import type {
 import { FAMILY_PRESETS, familyPresetOf, familySet, partnersOf, rodLabels, type LineageIndex, type RodId } from './lineage.js';
 import { parseFlexDate, formatFlexDate } from './dates.js';
 import { placeKey, townOfPlace } from './places.js';
-import { collectHouses, houseTitle, type HouseFactKind, type TreeHouse } from './houses.js';
+import { collectHouses, houseTitle, livedAtHouse, type TreeHouse } from './houses.js';
 import { geoOfKey } from './live-follow-map.js';
 import { personMediaIndex } from './media.js';
 import { shownName } from './person-name.js';
@@ -321,10 +321,6 @@ export function ruleOccupationChoices(index: LineageIndex): Array<{ key: string;
     });
 }
 
-/** Whether a place key is still a place of the tree (a person's or a union's place, a located or researched place). */
-/** The facts that say a person lived in a house (spec 030 §15): not an event of another kind (an occupation…). */
-const LIVED_KINDS: ReadonlySet<HouseFactKind> = new Set<HouseFactKind>(['birth', 'marriage', 'census', 'residence', 'death']);
-
 /** The tree's houses, read once per index: by id, and a house joined by hand under its own id too. */
 function housesOf(index: LineageIndex): { list: TreeHouse[]; byId: Map<string, TreeHouse> } {
     return memo(index, 'houses', () => {
@@ -348,18 +344,11 @@ export function ruleHouseChoices(index: LineageIndex): Array<{ id: string; name:
 /** The people with a birth, marriage, census, residence or death at the house, in the years when given (a fact without a year not then). */
 export function livedInHouseIds(index: LineageIndex, p: RuleParamsMap['livedInHouse']): Set<PersonId> {
     const house = ruleHouseOf(index, p.house);
-    const out = new Set<PersonId>();
-    if (!house) return out;
-    const y = p.years;
-    const dated = !!y && (y.from !== undefined || y.to !== undefined);
-    for (const f of house.facts) {
-        if (!LIVED_KINDS.has(f.kind)) continue;
-        if (dated && (f.year === undefined || (y!.from !== undefined && f.year < y!.from) || (y!.to !== undefined && f.year > y!.to))) continue;
-        if (realPerson(index.data, f.personId)) out.add(f.personId);
-    }
-    return out;
+    if (!house) return new Set<PersonId>();
+    return new Set([...livedAtHouse(house, p.years)].filter(id => !!realPerson(index.data, id)));
 }
 
+/** Whether a place key is still a place of the tree (a person's or a union's place, a located or researched place). */
 function placeInTree(index: LineageIndex, key: string): boolean {
     const data = index.data;
     return placeIndexOf(index).places.has(key) || !!data.places?.[key] || !!data.placeRefs?.[key];

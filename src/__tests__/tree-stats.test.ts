@@ -73,9 +73,9 @@ const row = (t: StatsTable, label: string): StatsRow | undefined => t.rows.find(
 const counts = (t: StatsTable): Record<string, number> => Object.fromEntries(t.rows.map(r => [r.label, r.count]));
 
 describe('topics (§0.2)', () => {
-    it('twelve topics in four groups, value topics sorted by value by default', () => {
+    it('thirteen topics in four groups (Houses only in a tree with a house), value topics sorted by value by default', () => {
         expect(STATS_GROUPS.map(g => g.id)).toEqual(['names', 'places', 'life', 'time']);
-        expect(STATS_TOPICS).toHaveLength(12);
+        expect(STATS_TOPICS).toHaveLength(13);
         expect(defaultSort('firstNames', opts())).toBe('count');
         expect(defaultSort('deathAge', opts())).toBe('value');
         expect(defaultSort('births', opts({ births: 'month' }))).toBe('value');
