@@ -20,7 +20,7 @@ import { houseGroupIds } from '../houses-view.js';
 import { fetchHouse, houseCache, type HouseResearch } from '../house-bridge.js';
 import { pointInViewport } from '../map.js';
 import { HOUSE_MAP_MAX_ZOOM } from '../house-map.js';
-import { housesWithPoint, mapHouseLocation, mapHousePoints, mapHouseSummary, mapHousesSwitch, type MapHousePoint } from '../map-houses.js';
+import { housesApartFromTowns, housesWithPoint, mapHouseLocation, mapHousePoints, mapHouseSummary, mapHousesSwitch, type MapHousePoint } from '../map-houses.js';
 import { houseStateHtml } from './house-state-ui.js';
 import { requestHouseMapMove } from './house-map-ui.js';
 import { getCurrentLanguage } from '../strings.js';
@@ -121,14 +121,15 @@ export const mapHousesMethods = uiModule({
         return !this.mapTimeOn && this.mapHousesSwitch().on;
     },
 
-    /** The houses drawn now: with someone of the map's scope among their people. */
+    /** The houses drawn now: with someone of the map's scope among their people, apart from their town's point. */
     mapHousePointsShown(): MapHousePoint[] {
         if (!this.mapHousesOn()) return [];
-        const all = this.mapHousePointsAll();
         const scope = this.mapScopePersons();
-        if (!scope) return all;
         const { byId } = treeHousesNow();
-        return all.filter(p => byId.get(p.id)?.personIds.some(id => scope.has(id)));
+        const all = scope ? this.mapHousePointsAll().filter(p => byId.get(p.id)?.personIds.some(id => scope.has(id))) : this.mapHousePointsAll();
+        // A house over its town's point stays in that point until the map is zoomed in.
+        const towns = new Map(Object.entries(DataManager.getData().places ?? {}));
+        return housesApartFromTowns(all, towns, this.mapZoom);
     },
 
     /** The ids of the houses drawn as points of their own (a town point's tag leaves them out); undefined: the layer is off. */
@@ -263,14 +264,20 @@ export const mapHousesMethods = uiModule({
         // To the map: the page and every dialog under it close (as the Houses window's way to the tree).
         this.closeHousePage({ restore: false });
         this.closeHousesWindow(false);
-        if (!at) { this.showPlaceOnMap(house.townKey); return; }
+        // Zoomed in until the house stands apart from its town's point; one on the town's point shows the town.
+        const town = DataManager.getData().places?.[house.townKey];
+        const apart = (z: number): boolean => !town || !at
+            || housesApartFromTowns([{ townKey: house.townKey, lat: at.lat, lon: at.lon }], new Map([[house.townKey, town]]), z).length > 0;
+        let zoom = Math.min(MAP_HOUSE_ZOOM, HOUSE_MAP_MAX_ZOOM);
+        while (zoom < HOUSE_MAP_MAX_ZOOM && !apart(zoom)) zoom++;
+        if (!at || !apart(zoom)) { this.showPlaceOnMap(house.townKey); return; }
         SettingsManager.setMapHouses(true);
         // A house of people outside the map's scope: the whole tree.
         const scope = this.mapScopePersons();
         if (scope && !house.personIds.some(id => scope.has(id))) this.rememberMapScope('tree');
         if (this.mapTimeOn) this.setMapTimeOn(false);
         this.mapCenter = { lat: at.lat, lon: at.lon };
-        this.mapZoom = Math.min(MAP_HOUSE_ZOOM, HOUSE_MAP_MAX_ZOOM);
+        this.mapZoom = zoom;
         this.closeMapPopup();
         TreeRenderer.presetViewMode('map');
         void TreeRenderer.renderAsync().then(() => this.showMapHouse(house.id));

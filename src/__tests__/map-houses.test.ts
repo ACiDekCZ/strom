@@ -8,7 +8,7 @@ import type { PersonId, PlaceGeo, StromData } from '../types.js';
 import type { HouseResearch } from '../house-bridge.js';
 import { collectHouses } from '../houses.js';
 import { collectPlaces, groupTownPoints, placeKey, type MappedPlaceInput, type TownPoint } from '../places.js';
-import { housesWithPoint, mapHouseLocation, mapHousePoints, mapHouseSummary, mapHousesSwitch } from '../map-houses.js';
+import { HOUSE_TOWN_GAP_PX, housesApartFromTowns, housesWithPoint, mapHouseLocation, mapHousePoints, mapHouseSummary, mapHousesSwitch } from '../map-houses.js';
 import { HOUSE_ID, OLD_HOUSE_ID, houseResearch, houseTree } from './helpers/house-book-fixture.js';
 
 const P = (id: string) => id as PersonId;
@@ -106,5 +106,30 @@ describe('groupTownPoints with houses drawn on their own', () => {
         expect(drawn.housesHere).toBe(2);
         // A house of another town with a point changes nothing here.
         expect(town(new Set([OLD_HOUSE_ID])).housesHere).toBe(3);
+    });
+});
+
+describe('housesApartFromTowns', () => {
+    const town: PlaceGeo = { lat: 49.5, lon: 15.2 };
+    // About 330 m north of the town's point.
+    const near = { id: 'a', townKey: 'belokamen', lat: 49.503, lon: 15.2 };
+    const towns = new Map([['belokamen', town]]);
+
+    it('keeps a house over its town\'s point in the town at a town\'s zoom, draws it once zoomed in', () => {
+        // Zoom 11 (the map of one town): ~7 px from the town's dot, under it.
+        expect(housesApartFromTowns([near], towns, 11)).toEqual([]);
+        // Zoom 14: ~55 px apart, its own pill.
+        expect(housesApartFromTowns([near], towns, 14)).toEqual([near]);
+    });
+
+    it('measures the gap in screen pixels: under it the house stays in the town', () => {
+        // Zoom 13: ~27 px apart, the pill (24 px) would still touch the town's dot (26 px).
+        expect(HOUSE_TOWN_GAP_PX).toBeGreaterThanOrEqual(26);
+        expect(housesApartFromTowns([near], towns, 13)).toEqual([]);
+        expect(housesApartFromTowns([near], towns, 13, 26)).toEqual([near]);
+    });
+
+    it('a house whose town is not on the map keeps its pill', () => {
+        expect(housesApartFromTowns([{ ...near, townKey: 'zalesi' }], towns, 5)).toHaveLength(1);
     });
 });

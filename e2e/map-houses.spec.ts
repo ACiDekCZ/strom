@@ -44,7 +44,8 @@ async function seedHouses(page: Page, opts: { placed?: boolean } = {}): Promise<
     }, opts.placed ?? true);
 }
 
-async function openMap(page: Page): Promise<void> {
+/** The Map tab on the whole tree; `zoomIn`: steps in from the town's zoom (11), where čp. 16 (~440 m off) stands apart. */
+async function openMap(page: Page, zoomIn = 4): Promise<void> {
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
     await chooseMapWholeTree(page);
     await expect(page.locator('.map-marker').first()).toBeVisible();
@@ -52,6 +53,7 @@ async function openMap(page: Page): Promise<void> {
         window.Strom.UI.dismissUndoToast();
         document.querySelectorAll('.toast, .family-offer').forEach(t => t.remove());
     });
+    for (let i = 0; i < zoomIn; i++) await page.locator('#map-container .map-zoom-in').click();
 }
 
 test.describe('Family houses on the map', () => {
@@ -90,6 +92,29 @@ test.describe('Family houses on the map', () => {
         await expect(chip(page)).toBeVisible();
         await expect(chip(page)).toHaveAttribute('aria-pressed', 'false');
         await expect(pill(page)).toHaveCount(0);
+    });
+
+    test('a house over its town\'s point stays in the town (its ⌂ counts it, the town clickable) until zoomed in', async ({ page }) => {
+        await seedHouses(page);
+        await openMap(page, 0);
+        // Zoom 11: čp. 16 lies ~9 px from the town's dot — no pill over it, the town counts all three houses.
+        await expect(chip(page)).toBeVisible();
+        await expect(pill(page)).toHaveCount(0);
+        await expect(townTag(page)).toHaveText(/3$/);
+        await page.locator('#map-container .map-marker[data-key="belokamen"] .map-marker-dot').click();
+        await expect(popup(page)).toBeVisible();
+        await page.keyboard.press('Escape');
+        // One step in (~18 px) still over the dot; the second (~36 px) draws it.
+        await page.locator('#map-container .map-zoom-in').click();
+        await expect(townTag(page)).toHaveText(/3$/);
+        await expect(pill(page)).toHaveCount(0);
+        await page.locator('#map-container .map-zoom-in').click();
+        await expect(pill(page)).toHaveText('16');
+        await expect(townTag(page)).toHaveText(/2$/);
+        const dot = (await page.locator('#map-container .map-marker[data-key="belokamen"] .map-marker-dot').boundingBox())!;
+        const at = (await pill(page).boundingBox())!;
+        const apart = at.y + at.height <= dot.y || at.y >= dot.y + dot.height || at.x >= dot.x + dot.width || at.x + at.width <= dot.x;
+        expect(apart).toBe(true);
     });
 
     test('the bubble: years, surnames, House page › opens the house page; Move the point starts moving there', async ({ page }) => {

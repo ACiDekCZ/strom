@@ -11,9 +11,10 @@
 
 import type { HouseResearch } from './house-bridge.js';
 import { housePointLabel } from './house-map.js';
+import { project } from './map.js';
 import type { TreeHouse } from './houses.js';
 import { houseGroupIds } from './houses-view.js';
-import type { HouseId, HouseUserData, PersonId } from './types.js';
+import type { HouseId, HouseUserData, PersonId, PlaceGeo } from './types.js';
 
 /** Where a house stands on the map, and who says so. */
 export interface MapHouseLocation {
@@ -67,6 +68,28 @@ export function mapHousePoints(
         out.push({ id: h.id, ids: houseGroupIds(h), townKey: h.townKey, label: housePointLabel(h.text), lat: at.lat, lon: at.lon, how: at.how });
     }
     return out;
+}
+
+/**
+ * How far (CSS px) a house's pill must stand from its town's point to be drawn: the town's dot is 26 px, the pill 24 px,
+ * and nearer the pill would cover the town's dot (its ⌂ count and its click).
+ */
+export const HOUSE_TOWN_GAP_PX = 30;
+
+/**
+ * The houses drawn apart from their town at this zoom: a house nearer its town's point than `gap` px stays in the town
+ * point (counted by its ⌂ and listed in its bubble) until the map is zoomed in. A town not on the map keeps its houses.
+ */
+export function housesApartFromTowns<T extends Pick<MapHousePoint, 'townKey' | 'lat' | 'lon'>>(
+    points: readonly T[], towns: ReadonlyMap<string, PlaceGeo>, zoom: number, gap = HOUSE_TOWN_GAP_PX,
+): T[] {
+    return points.filter(p => {
+        const town = towns.get(p.townKey);
+        if (!town) return true;
+        const a = project({ lat: p.lat, lon: p.lon }, zoom);
+        const b = project(town, zoom);
+        return Math.hypot(a.x - b.x, a.y - b.y) >= gap;
+    });
 }
 
 /** The house ids that have a point of their own (each house's joined numbers too): a town point counts the others. */
