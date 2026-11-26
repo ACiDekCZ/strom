@@ -119,6 +119,24 @@ test.describe('family book: the options dialog', () => {
         await expect(dialog.locator('.book-open-hint')).toHaveText('The book opens in a new window. From there it can be printed or saved.');
     });
 
+    test('the book\'s language beside Privacy: all four languages whole in their segment, at 1440 and 1024', async ({ page }) => {
+        await setup(page);
+        const dialog = await openDialog(page);
+        const seg = dialog.locator('.book-sec[data-sec="lang"] .book-seg');
+        await expect(seg.locator('button')).toHaveText(['Čeština', 'English', 'Deutsch', 'Polski']);
+        for (const width of [1440, 1024]) {
+            await page.setViewportSize({ width, height: 900 });
+            await seg.scrollIntoViewIfNeeded();
+            const fit = await seg.evaluate(el => {
+                const box = el.getBoundingClientRect();
+                const last = el.lastElementChild!.getBoundingClientRect();
+                return { over: el.scrollWidth - el.clientWidth, lastOut: last.right - box.right };
+            });
+            expect(fit.over, `${width}`).toBeLessThanOrEqual(0);
+            expect(fit.lastOut, `${width}`).toBeLessThanOrEqual(0.5);
+        }
+    });
+
     test('family lines: none chosen → Open book disabled with the message; the estimate follows the choice; Other families only for the whole tree', async ({ page }) => {
         await setup(page);
         const dialog = await openDialog(page);
