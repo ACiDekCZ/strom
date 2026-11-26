@@ -166,3 +166,45 @@ test('on a phone: the whole screen, the list of steps as a sheet, step 3 in one 
     await dialog.locator('#gift-back').click();
     await expect(subBtn).toHaveText(/^Step 2 of 6/);
 });
+
+test('step 2: the preview\'s counts cover no card, on a phone upright and sideways, a tablet and a computer, light and dark', async ({ page }) => {
+    await sampleOnDaniel(page);
+    await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+    for (const [w, h] of [[390, 844], [844, 390], [1024, 768], [1440, 900]] as const) {
+        for (const theme of ['light', 'dark'] as const) {
+            await page.setViewportSize({ width: w, height: h });
+            await page.evaluate(t => window.Strom.SettingsManager.setTheme(t), theme);
+            await page.evaluate(() => window.Strom.UI.showGiftTree({ personId: 'demo_daniel' as never }));
+            const dialog = page.locator('#gift-modal');
+            await expect(dialog).toHaveClass(/active/);
+            const nav = dialog.locator('#gift-nav');
+            if (await nav.isVisible()) await nav.locator('[data-step="2"]').click();
+            else {
+                await dialog.locator('#gift-sub-btn').click();
+                await page.locator('.gift-steps-sheet #gift-sheet-step-2').click();
+            }
+            const host = dialog.locator('.gift-prev-host:visible').first();
+            const top = host.locator('.gift-prev-top');
+            await expect(top).toContainText('Personen');
+            const where = `${w}×${h} ${theme}`;
+            const clash = await host.evaluate((hostEl) => {
+                // The part of a card the stage shows (it clips the drawing) must stay clear of the counts.
+                const t = hostEl.querySelector('.gift-prev-top')!.getBoundingClientRect();
+                const stage = hostEl.querySelector('.gift-prev-stage')!.getBoundingClientRect();
+                const cut = (a: DOMRect, b: DOMRect) => new DOMRect(Math.max(a.left, b.left), Math.max(a.top, b.top),
+                    Math.min(a.right, b.right) - Math.max(a.left, b.left), Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+                const meet = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+                return [...hostEl.querySelectorAll<HTMLElement>('.gift-mc, .gift-stub')]
+                    .map(c => ({ c, seen: cut(c.getBoundingClientRect(), stage) }))
+                    .filter(({ seen }) => seen.width > 0 && seen.height > 0 && meet(seen, t))
+                    .map(({ c }) => c.textContent);
+            });
+            expect(clash, where).toEqual([]);
+            const wide = await dialog.locator('.modal').evaluate(m => [m, ...m.querySelectorAll('.gift-pane, .gift-prev-host')]
+                .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.className));
+            expect(wide, where).toEqual([]);
+            await dialog.locator('.modal-header .close-btn').click();
+            await expect(dialog).not.toHaveClass(/active/);
+        }
+    }
+});

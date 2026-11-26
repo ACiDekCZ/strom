@@ -32608,11 +32608,18 @@
             /* Step 2: the depth as rows, a small still preview, the branches on their own screen. */
             .gift-cols.is-s2 { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
             .gift-cut-hint { display: none; }
-            .gift-cut > .gift-prev-host { order: 1; height: 200px; }
+            .gift-cut > .gift-prev-host { order: 1; height: 226px; }
             .gift-cut > .gift-cut-note { order: 2; }
             .gift-modal .gift-cut > button.gift-br-open { order: 3; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; }
             .gift-cut-sub { display: flex; flex-direction: column; gap: 12px; }
             .gift-cut-sub > .gift-prev-host { height: min(360px, 50dvh); flex: none; }
+            /* The counts in a row of their own above the drawing: over it they hid the top row of cards. */
+            .gift-prev-host.gift-prev { display: flex; flex-direction: column; }
+            .gift-prev > .gift-prev-top {
+                position: static; order: -1; flex: none; max-width: none; padding: 4px 10px;
+                border-radius: 0; border-bottom: 1px solid var(--divider); background: var(--surface);
+            }
+            .gift-prev > .gift-prev-stage { position: relative; inset: auto; flex: 1 1 auto; min-height: 0; }
             .gift-depth { min-height: 52px; }
             .gift-br-r { grid-template-columns: 20px minmax(0, 1fr) auto; min-height: 52px; }
             .gift-modal .gift-br-r input[type="checkbox"] { width: 20px; height: 20px; }
@@ -32624,7 +32631,7 @@
             .gift-modal .buttons.gift-foot { flex-direction: row; align-items: center; padding: 6px 16px calc(6px + env(safe-area-inset-bottom)); }
             .gift-modal .gift-foot button { min-height: 44px; }
             .gift-modal .gift-foot > .gift-foot-sum { order: -2; flex: 1 1 auto; text-align: left; }
-            .gift-cut > .gift-prev-host { height: 150px; }
+            .gift-cut > .gift-prev-host { height: 176px; }
             .gift-cut-sub > .gift-prev-host { height: 200px; }
         }
 

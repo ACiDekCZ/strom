@@ -336,7 +336,9 @@ export function giftDefaultSalutation(person: Person | readonly Person[], lang: 
 
 /**
  * The letter's template for the motif, in the letter's language (§6): the
- * greeting by the recipient's gender (the plural for a couple), the oldest
+ * greeting (by the recipient's gender where the name needs no vocative; a
+ * label "Pro: …" / "Dla: …" in cs and pl, which the first name fits as it is),
+ * the oldest
  * ancestor and the figures of the cut, the sentence about the browser and a
  * closing. The salutation stays a placeholder (giftMessage puts it in). The
  * oldest ancestor is named only when not living.

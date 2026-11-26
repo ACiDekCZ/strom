@@ -13,7 +13,7 @@ export type Language = 'en' | 'cs' | 'de' | 'pl';
  * not shown by name (a living person).
  */
 export interface GiftTemplateFacts {
-    /** The recipient's gender (the greeting); a couple is greeted in the plural. */
+    /** The recipient's gender (the greeting where it varies); a couple is greeted in the plural. */
     gender: Gender;
     couple: boolean;
     /** Whether the cut holds any ancestor of the recipients. */
@@ -25391,18 +25391,16 @@ const stringsCZ: StringsType = {
         template: {
             none: (f: GiftTemplateFacts): string => {
                 const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
-                const hi = f.couple ? 'Milí' : f.gender === 'female' ? 'Milá' : f.gender === 'male' ? 'Milý' : 'Milý/Milá';
-                return `${hi} [oslovení],\n\n`
-                    + `posílám kus naší rodiny: ${f.ancestors ? `${f.couple ? 'vaše' : 'tvé'} předky a rodiny kolem nich` : 'nejbližší rodinu a rodiny kolem ní'}.`
+                return 'Pro: [oslovení]\n\n'
+                    + `Posílám kus naší rodiny: ${f.ancestors ? `${f.couple ? 'vaše' : 'tvé'} předky a rodiny kolem nich` : 'nejbližší rodinu a rodiny kolem ní'}.`
                     + (f.oldest ? ` Nejstarší z nich je ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
                     + ` Celkem ${nCs(f.persons, 'osoba', 'osoby', 'osob')}${f.years ? ` a ${nCs(f.years, 'rok', 'roky', 'let')}` : ''}.\n\n`
                     + `Všechno se otevře v prohlížeči, nic se neinstaluje. Kdyby ${f.couple ? 'vás' : 'tě'} napadlo, co doplnit, stačí napsat.`;
             },
             xmas: (f: GiftTemplateFacts): string => {
                 const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
-                const hi = f.couple ? 'Milí' : f.gender === 'female' ? 'Milá' : f.gender === 'male' ? 'Milý' : 'Milý/Milá';
-                return `${hi} [oslovení],\n\n`
-                    + `k Vánocům posílám kus naší rodiny: ${f.ancestors ? `${f.couple ? 'vaše' : 'tvé'} předky a rodiny kolem nich` : 'nejbližší rodinu a rodiny kolem ní'}.`
+                return 'Pro: [oslovení]\n\n'
+                    + `K Vánocům posílám kus naší rodiny: ${f.ancestors ? `${f.couple ? 'vaše' : 'tvé'} předky a rodiny kolem nich` : 'nejbližší rodinu a rodiny kolem ní'}.`
                     + (f.oldest ? ` Nejstarší z nich je ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
                     + ` Celkem ${nCs(f.persons, 'osoba', 'osoby', 'osob')}${f.years ? ` a ${nCs(f.years, 'rok', 'roky', 'let')}` : ''}.\n\n`
                     + `Všechno se otevře v prohlížeči, nic se neinstaluje. Kdyby ${f.couple ? 'vás' : 'tě'} napadlo, co doplnit, stačí napsat.\n\n`

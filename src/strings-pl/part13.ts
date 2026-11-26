@@ -34,18 +34,16 @@ export const plPart13: Pick<StringsType, 'giftTree'> = {
         template: {
             none: (f: GiftTemplateFacts): string => {
                 const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
-                const hi = f.couple ? 'Drodzy' : f.gender === 'female' ? 'Droga' : f.gender === 'male' ? 'Drogi' : 'Drogi/Droga';
-                return `${hi} [imię],\n\n`
-                    + `przesyłam kawałek naszej rodziny: ${f.ancestors ? `${f.couple ? 'waszych' : 'twoich'} przodków i rodziny wokół nich` : 'najbliższą rodzinę i rodziny wokół niej'}.`
+                return 'Dla: [imię]\n\n'
+                    + `Przesyłam kawałek naszej rodziny: ${f.ancestors ? `${f.couple ? 'waszych' : 'twoich'} przodków i rodziny wokół nich` : 'najbliższą rodzinę i rodziny wokół niej'}.`
                     + (f.oldest ? ` Najdalej sięga ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
                     + ` Razem ${nPl(f.persons, 'osoba', 'osoby', 'osób')}${f.years ? ` i ${nPl(f.years, 'rok', 'lata', 'lat')}` : ''}.\n\n`
                     + `Wszystko otwiera się w przeglądarce, niczego nie trzeba instalować. Gdyby ${f.couple ? 'wam' : 'ci'} coś przyszło do głowy, wystarczy napisać.`;
             },
             xmas: (f: GiftTemplateFacts): string => {
                 const d = f.oldest ? [f.oldest.when, f.oldest.place].filter(Boolean).join(', ') : '';
-                const hi = f.couple ? 'Drodzy' : f.gender === 'female' ? 'Droga' : f.gender === 'male' ? 'Drogi' : 'Drogi/Droga';
-                return `${hi} [imię],\n\n`
-                    + `na święta przesyłam kawałek naszej rodziny: ${f.ancestors ? `${f.couple ? 'waszych' : 'twoich'} przodków i rodziny wokół nich` : 'najbliższą rodzinę i rodziny wokół niej'}.`
+                return 'Dla: [imię]\n\n'
+                    + `Na święta przesyłam kawałek naszej rodziny: ${f.ancestors ? `${f.couple ? 'waszych' : 'twoich'} przodków i rodziny wokół nich` : 'najbliższą rodzinę i rodziny wokół niej'}.`
                     + (f.oldest ? ` Najdalej sięga ${f.oldest.name}${d ? ` (${d})` : ''}.` : '')
                     + ` Razem ${nPl(f.persons, 'osoba', 'osoby', 'osób')}${f.years ? ` i ${nPl(f.years, 'rok', 'lata', 'lat')}` : ''}.\n\n`
                     + `Wszystko otwiera się w przeglądarce, niczego nie trzeba instalować. Gdyby ${f.couple ? 'wam' : 'ci'} coś przyszło do głowy, wystarczy napisać.\n\n`

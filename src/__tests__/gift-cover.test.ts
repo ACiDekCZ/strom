@@ -244,10 +244,10 @@ describe('the facts of the cut', () => {
 
 describe('the letter\'s templates (§6)', () => {
     const greeting: Record<GiftLang, { male: string; female: string; couple: string }> = {
-        cs: { male: 'Milý [oslovení],', female: 'Milá [oslovení],', couple: 'Milí [oslovení],' },
+        cs: { male: 'Pro: [oslovení]\n\n', female: 'Pro: [oslovení]\n\n', couple: 'Pro: [oslovení]\n\n' },
         en: { male: 'Dear [name],', female: 'Dear [name],', couple: 'Dear [name],' },
         de: { male: 'Lieber [Name],', female: 'Liebe [Name],', couple: 'Liebe [Name],' },
-        pl: { male: 'Drogi [imię],', female: 'Droga [imię],', couple: 'Drodzy [imię],' },
+        pl: { male: 'Dla: [imię]\n\n', female: 'Dla: [imię]\n\n', couple: 'Dla: [imię]\n\n' },
     };
     const closing: Record<GiftLang, string> = { cs: 'Krásné Vánoce!', en: 'Merry Christmas!', de: 'Frohe Weihnachten!', pl: 'Wesołych Świąt!' };
     const plural: Record<GiftLang, string> = { cs: 'vaše předky', en: 'your ancestors', de: 'eure Vorfahren', pl: 'waszych przodków' };
@@ -279,8 +279,23 @@ describe('the letter\'s templates (§6)', () => {
         for (const lang of LANGS) {
             const message = giftLetterTemplate(getDemoTree(), cutOf('daniel'), { lang, motif: 'none', date: '2026-12-24' });
             const out = giftMessage({ message, salutation: 'Danieli' });
-            expect(out).toMatch(/^\S+ Danieli,/);
+            expect(out).toMatch(/^\S+ Danieli[,\n]/);
             expect(out).not.toMatch(/\[(?:oslovení|name|Name|imię)\]/);
+        }
+    });
+
+    it('the default salutation (the first name as it is) never stands in a vocative greeting in cs and pl', () => {
+        // The app declines no names: "Milý Daniel," / "Drogi Daniel," would be wrong,
+        // so the greeting there is a label ("Pro: Daniel") the nominative fits.
+        const tree = getDemoTree();
+        const expected: Partial<Record<GiftLang, string>> = { cs: 'Pro: Daniel\n\nPosílám', pl: 'Dla: Daniel\n\nPrzesyłam' };
+        for (const lang of ['cs', 'pl'] as const) {
+            for (const motif of ['none', 'xmas'] as const) {
+                const message = giftLetterTemplate(tree, cutOf('daniel'), { lang, motif, date: '2026-12-24' });
+                const out = giftMessage({ message, salutation: giftDefaultSalutation(tree.persons[P('daniel')], lang) });
+                expect(out).not.toMatch(/\b(?:Milý|Milá|Milí|Drogi|Droga|Drodzy) Daniel/);
+                if (motif === 'none') expect(out.startsWith(expected[lang]!)).toBe(true);
+            }
         }
     });
 
