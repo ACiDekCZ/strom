@@ -124,4 +124,20 @@ describe('houses in an export under privacy (spec 030 §10)', () => {
         const out = applyLivingPrivacy(data, 'initials', 2026);
         expect(out.houses?.[HOUSE_ID]).toEqual({ merged: ['belokamen|9'], revealInOutputs: ['e9'] });
     });
+
+    it('a house joined to a protected one without a fact of its own loses its name and location too', () => {
+        const data = houseTree();
+        data.houses!['belokamen|9'] = { name: 'U Starého', location: { lat: 49.9, lng: 15.9, how: 'confirmed' }, merged: ['belokamen|5'] };
+        data.houses!['belokamen|5'] = { name: 'Na Vršku' };
+        data.houses![HOUSE_ID] = { ...data.houses![HOUSE_ID], merged: ['belokamen|9'] };
+        // Told apart: another house, its own word stays.
+        data.houses!['belokamen|7'] = { name: 'U Lípy', merged: [HOUSE_ID], split: [HOUSE_ID] };
+        for (const mode of ['initials', 'anonymous', 'minimal'] as const) {
+            const out = applyLivingPrivacy(data, mode, 2026);
+            expect(out.houses?.['belokamen|9']).toEqual({ merged: ['belokamen|5'] });
+            expect(out.houses?.['belokamen|5']).toBeUndefined();
+            expect(out.houses?.['belokamen|7']?.name).toBe('U Lípy');
+            expect(out.houses?.[OLD_HOUSE_ID]?.name).toBe('Na Mlýnku');
+        }
+    });
 });

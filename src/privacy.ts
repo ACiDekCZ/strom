@@ -394,6 +394,26 @@ function protectHouses(copy: StromData, data: StromData, currentYear: number, bo
             for (const n of h.numbers) protectedIds.add(`${h.townKey}|${houseKey(n.house)}`);
         }
     }
+    // A house joined to a protected one (`merged`, either side, never across a
+    // `split`) is the same house even without a fact of its own in the tree:
+    // the whole joined group goes the same way.
+    const user = data.houses ?? {};
+    const apart = (a: string, b: string): boolean => !!user[a]?.split?.includes(b) || !!user[b]?.split?.includes(a);
+    const links = new Map<string, Set<string>>();
+    const link = (a: string, b: string): void => {
+        if (a === b || apart(a, b)) return;
+        (links.get(a) ?? links.set(a, new Set()).get(a)!).add(b);
+        (links.get(b) ?? links.set(b, new Set()).get(b)!).add(a);
+    };
+    for (const [id, entry] of Object.entries(user)) for (const other of entry.merged ?? []) link(id, other);
+    const queue = [...protectedIds];
+    while (queue.length) {
+        for (const next of links.get(queue.pop()!) ?? []) {
+            if (protectedIds.has(next)) continue;
+            protectedIds.add(next);
+            queue.push(next);
+        }
+    }
     for (const [id, entry] of Object.entries(copy.houses)) {
         if (!protectedIds.has(id)) continue;
         delete entry.location;
