@@ -8,8 +8,9 @@ import type { TreeHouse } from '../houses.js';
 import { sanitizeLiveHouses } from '../research-link.js';
 import {
     houseActionMark, houseActionOf, houseNeighbours, houseNeighboursChosen, houseRequestCostText, houseRequestEstimate,
-    houseRequestRefusal, type HouseActionGate,
+    houseRequestRefusal, placeHouseMeta, townFamilyHouses, type HouseActionGate,
 } from '../ui/house-request-ui.js';
+import { eventDetailLineHtml } from '../ui/event-details-ui.js';
 
 afterEach(() => setLanguage('en'));
 
@@ -110,5 +111,34 @@ describe('The request\'s estimate', () => {
     it('a refusal says the bridge\'s words, else the usual sentence', () => {
         expect(houseRequestRefusal({ ok: false, code: 'invalid', status: 400, reason: 'Another town.', bridgeCode: 'house.body' }, () => '')).toBe('Another town.');
         expect(houseRequestRefusal({ ok: false, code: 'busy', status: 503, reason: '', bridgeCode: 'research.busy' }, () => '')).not.toBe('');
+    });
+});
+
+describe('A town\'s family houses and an event\'s house (§5)', () => {
+    const all = [
+        house('16', { overThreshold: true }),
+        house('9'),
+        house('4'),
+        house('3', { townKey: 'zalesi', id: 'zalesi|3', overThreshold: true }),
+    ];
+
+    it('the town\'s houses with history and those the research knows, only where the tree\'s people lived', () => {
+        expect(townFamilyHouses(all, 'belokamen', h => h.id === 'belokamen|4').map(h => h.id)).toEqual(['belokamen|16', 'belokamen|4']);
+        expect(townFamilyHouses(all, 'brodek', () => true)).toEqual([]);
+    });
+
+    it('a house\'s line: name, years, surnames', () => {
+        expect(placeHouseMeta({ name: 'U Prouzalů', period: { from: 1780, to: 1902 }, surnames: ['Prouzal', 'Kvitelka'] }))
+            .toBe('U Prouzalů · 1780–1902 · Prouzal → Kvitelka');
+        expect(placeHouseMeta({ period: { from: 1850, to: 1850 }, surnames: [] })).toBe('1850');
+    });
+
+    it('an event\'s address drawn as the link to its house, the rest escaped', () => {
+        setLanguage('en');
+        const line = eventDetailLineHtml({ cause: 'a <fever>', address: 'čp. 16' }, false,
+            a => a === 'čp. 16' ? '<button class="pm-house-link">čp. 16</button>' : null);
+        expect(line).toBe('a &lt;fever&gt; · <button class="pm-house-link">čp. 16</button>');
+        expect(eventDetailLineHtml({ address: 'Brodek & co' }, false, () => null)).toBe('Brodek &amp; co');
+        expect(eventDetailLineHtml(undefined)).toBe('');
     });
 });

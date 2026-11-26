@@ -92,16 +92,18 @@ export const placeMenuMethods = uiModule({
             return;
         }
         const lang = getCurrentLanguage();
-        const menu = placeMenu(id, this.placesResearchContext().stepAccess);
+        // The row's event at a house of the tree (spec 030 §5): its history in the menu.
+        const houseId = anchor.closest('.pm-lifeline-row')?.querySelector<HTMLElement>('.pm-house-link')?.dataset.house;
+        const menu = placeMenu(id, this.placesResearchContext().stepAccess, !!houseId && !!this.treeHouseOf(houseId));
         const s = strings.places;
         const labels: Record<PlaceMenuAction, string> = {
             answer: s.dialog.answer, find: strings.map.findOnMap, look: s.research.look,
-            lookAgain: s.research.lookAgain, unqueue: s.research.unqueue, places: s.menu.openPlaces,
+            lookAgain: s.research.lookAgain, unqueue: s.research.unqueue, places: s.menu.openPlaces, house: '',
         };
         const stateLine = placeStateText(id, lang) + (id.state === 'undet' && id.why ? `: ${id.why}` : '');
         const head = `<div class="place-menu-head" role="presentation"><strong class="place-menu-name">${esc(place)}</strong>`
             + `<span class="place-menu-state" data-state="${id.state}"><span class="${placeGlyphClass(PLACE_STATE_GLYPHS[id.state])}" aria-hidden="true">${PLACE_STATE_GLYPHS[id.state]}</span> ${esc(stateLine)}</span></div>`;
-        const items = menu.items.map(it => `<button type="button" role="menuitem" class="place-menu-item${it.primary ? ' is-primary' : ''}" data-action="${it.action}">`
+        const items = menu.items.map(it => it.action === 'house' && houseId ? this.placeMenuHouseHtml(houseId) : `<button type="button" role="menuitem" class="place-menu-item${it.primary ? ' is-primary' : ''}" data-action="${it.action}">`
             + `${esc(labels[it.action])}</button>`).join('');
         const note = menu.note ? `<p class="place-menu-note">${esc(s.menu.note)}</p>` : '';
         const label = s.menu.label(place);
@@ -164,6 +166,11 @@ export const placeMenuMethods = uiModule({
             case 'unqueue':
                 step(ctl => this.unqueuePlace(key, ctl), PLACES_UNQUEUE_MS);
                 return;
+            case 'house': {
+                const house = item?.dataset.house;
+                if (house) this.leavePersonModalThen(() => this.openHouse(house));
+                return;
+            }
         }
     },
 });

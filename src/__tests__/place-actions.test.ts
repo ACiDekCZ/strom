@@ -108,6 +108,13 @@ describe('placeMenu', () => {
         }
     });
 
+    it('an event at a house of the tree: its history last, never a step of the research (spec 030 §5)', () => {
+        expect(actions(placeMenu(id('none'), 'ok', true))).toEqual(['find', 'look', 'places', 'house']);
+        expect(actions(placeMenu(id('running'), 'none', true))).toEqual(['places', 'house']);
+        expect(placeMenu(id('none'), 'ok', true).items.find(i => i.action === 'house')).toEqual({ action: 'house', primary: false, research: false });
+        expect(actions(placeMenu(id('none'), 'ok'))).not.toContain('house');
+    });
+
     it('queued: remove from the queue with the research here', () => {
         expect(actions(placeMenu(id('queued'), 'ok'))).toEqual(['unqueue', 'places']);
         expect(actions(placeMenu(id('queued'), 'elsewhere'))).toEqual(['places']);

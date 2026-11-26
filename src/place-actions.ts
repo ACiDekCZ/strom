@@ -84,7 +84,7 @@ export function mapBubbleResearch(id: PlaceIdentity, access: PlacesResearchAcces
 
 // ==================== PERSON CARD ====================
 
-export type PlaceMenuAction = 'answer' | 'find' | 'look' | 'lookAgain' | 'unqueue' | 'places';
+export type PlaceMenuAction = 'answer' | 'find' | 'look' | 'lookAgain' | 'unqueue' | 'places' | 'house';
 
 export interface PlaceMenuItem {
     action: PlaceMenuAction;
@@ -108,10 +108,10 @@ export function placeMenuBadge(id: PlaceIdentity): boolean {
 
 /**
  * The menu of a place without a location on the person card (§8), by its
- * state. The research's steps only with the research here; any other research access
+ * state; `house`: the row's event is at a house of the tree (its history item last). The research's steps only with the research here; any other research access
  * says where they go instead (not for a place waiting for an answer).
  */
-export function placeMenu(id: PlaceIdentity, access: PlacesResearchAccess): PlaceMenu {
+export function placeMenu(id: PlaceIdentity, access: PlacesResearchAccess, house = false): PlaceMenu {
     const res = access === 'ok';
     const item = (action: PlaceMenuAction, primary = false): PlaceMenuItem =>
         ({ action, primary, research: action === 'look' || action === 'lookAgain' || action === 'unqueue' });
@@ -136,5 +136,7 @@ export function placeMenu(id: PlaceIdentity, access: PlacesResearchAccess): Plac
             researchStep = true;
             items = res ? [item('find', true), item('look'), item('places')] : [item('find', true), item('places')];
     }
+    // The event's house of the tree (spec 030 §5): its history, last.
+    if (house) items.push(item('house'));
     return { items, note: researchStep && !res && access !== 'none' };
 }

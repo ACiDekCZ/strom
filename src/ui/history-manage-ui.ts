@@ -521,6 +521,13 @@ export const historyManageMethods = uiModule({
         return out;
     },
 
+    /** "Houses in this town (N) ›" of a place whose town has family houses (spec 030 §5): the Houses window on it. */
+    historyManageHousesLink(r: PlaceRow): string {
+        if (r.under) return '';
+        const n = this.townFamilyHouseCount(r.name);
+        return n ? `<button type="button" class="link hm-row-link hm-houses" data-hm="houses" data-key="${esc(r.key)}" data-town="${esc(r.name)}">${esc(strings.houses.familyHouses.townLink(n))}</button>` : '';
+    },
+
     historyManagePlaceRow(r: PlaceRow, group: string): string {
         const h = strings.history;
         const busy = view.busy.has(`place:${r.key}`);
@@ -543,6 +550,7 @@ export const historyManageMethods = uiModule({
             + (r.events !== null && group === 'all' ? `<span class="hm-p-count">${r.events}</span>` : '')
             + (assign ? `<button type="button" class="hm-assign" data-hm="assign" data-key="${esc(r.key)}">${esc(h.assign)}</button>` : '')
             + (find ? `<button type="button" class="link hm-row-link" data-hm="find" data-key="${esc(r.key)}">${esc(h.placeFind)}</button>` : '')
+            + this.historyManageHousesLink(r)
             + (actions.length ? `<button type="button" class="hm-dots" data-hm="menu" data-kind="place" data-key="${esc(r.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(h.more)}"${rowBusyAttrs(busy)}>${rowDotsInner(busy)}</button>` : '')
             + '</div>'
             + (note ? this.historyManageNote(`place:${r.key}`, note) : '');
@@ -833,6 +841,7 @@ export const historyManageMethods = uiModule({
             case 'showAgain': this.historyManageShowAgain(key); return;
             case 'assign': this.historyManagePlaceHook('assign')?.(key); return;
             case 'find': this.historyManagePlaceHook('find')?.(key); return;
+            case 'houses': if (el.dataset.town) this.showTownHouses(el.dataset.town, HISTORY_MANAGE_DIALOG_ID); return;
             // Working from the click until the research answers (B192): one send however often it is asked.
             case 'placeAgain': void runBusy(el, () => this.historyPlaceSearchAgain(key), { label: strings.busy.sending, kind: 'write' }); return;
             case 'restoreHidden': this.historyManageRestoreHidden(Number(el.dataset.index)); return;

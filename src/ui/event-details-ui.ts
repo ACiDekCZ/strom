@@ -111,6 +111,22 @@ export function eventDetailLine(d: { cause?: string; age?: string; address?: str
 }
 
 /**
+ * eventDetailLine as HTML, its parts escaped: `addressHtml` may draw the address its own way (a house of the
+ * tree as a link to it, spec 030 §5); null keeps it as text.
+ */
+export function eventDetailLineHtml(d: { cause?: string; age?: string; address?: string } | undefined,
+    recordedWords = false, addressHtml?: (address: string) => string | null): string {
+    if (!d) return '';
+    const age = d.age?.trim();
+    const address = d.address?.trim() ?? '';
+    return [
+        escapeHtml(d.cause?.trim() ?? ''),
+        age ? escapeHtml(recordedWords ? strings.fields.ageRecorded(age) : age) : '',
+        address ? (addressHtml?.(address) ?? escapeHtml(address)) : '',
+    ].filter(Boolean).join(' · ');
+}
+
+/**
  * The line under an age field: "Calculated 56–57 years", or in amber
  * "Differs from calculation (56–57 years) by 2 years" when the record lies
  * outside what the dates allow — a lead, never an error. Hidden without a

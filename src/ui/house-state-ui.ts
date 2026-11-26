@@ -150,6 +150,7 @@ export const houseStateMethods = uiModule({
     houseStatesChanged(): void {
         this.refreshHousesWindow();
         this.refreshPlaceTownHouseStates();
+        this.refreshPlaceHousesRows();
     },
 
     /** The rev of the list read now ('' none). */

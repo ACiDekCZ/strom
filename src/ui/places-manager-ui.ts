@@ -209,6 +209,7 @@ export const placesManagerMethods = uiModule({
         placesView.usages = managerPlaces;
         managerYears = placeYearSpans(data);
         managerHouseTowns = houseTownKeys(data);
+        this.placeHousesPrepare();
         const research = this.placesResearchContext();
         managerCanResearch = research.canResearch;
         if (!managerCanResearch) resetPlacesView();
@@ -315,6 +316,7 @@ export const placesManagerMethods = uiModule({
             if (hist) this.placesHistoryAction(hist.dataset.placeHist ?? '', hist.dataset.hkey ?? '');
             const houses = (e.target as HTMLElement).closest<HTMLElement>('.place-town-houses');
             if (houses?.dataset.town) this.showTownHouses(houses.dataset.town, 'places-modal');
+            else this.placeHousesClick(e.target as HTMLElement);
         };
         (overlay.querySelector('#places-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-close') as HTMLButtonElement).onclick = close;
@@ -427,11 +429,12 @@ export const placesManagerMethods = uiModule({
         return sortPlacesForManager(items, this.placesSort, getCurrentLanguage(), rank);
     },
 
-    /** "Houses in this town ›" of a town with a numbered house: opens the Houses window on it. */
+    /**
+     * "Houses in this town ›" of a town with a numbered house: opens the Houses window on it. The research's
+     * states of the town's houses (spec 030 K7.5) are in its "Family houses" line (placeHousesHtml, §5).
+     */
     placeTownHousesHtml(town: string): string {
-        // With the research's houses (spec 030 K7.5): how many of the town's houses are in each state.
-        return `<button type="button" class="place-act place-town-houses" data-town="${this.escapeHtml(town)}">${this.escapeHtml(strings.houses.townHouses)}</button>`
-            + this.placeTownHouseStatesHtml(town);
+        return `<button type="button" class="place-act place-town-houses" data-town="${this.escapeHtml(town)}">${this.escapeHtml(strings.houses.townHouses)}</button>`;
     },
 
     renderPlaceGroup(g: DialogGroup, byKey: ReadonlyMap<string, ManagerPlace>): string {
@@ -449,7 +452,7 @@ export const placesManagerMethods = uiModule({
                        <span class="place-count">${this.escapeHtml(meta)}</span>
                        ${g.unplacedCount ? `<span class="place-unplaced-tag">${this.escapeHtml(m.unplacedN(g.unplacedCount))}</span>` : ''}
                    </div>
-                   ${managerHouseTowns.has(placeKey(g.town)) ? `<div class="place-acts">${this.placeTownHousesHtml(g.town)}</div>` : ''}
+                   ${managerHouseTowns.has(placeKey(g.town)) ? `${this.placeHousesHtml(g.town)}<div class="place-acts">${this.placeTownHousesHtml(g.town)}</div>` : ''}
                </div>`;
         const members = g.members.map(mem => byKey.get(mem.key)).filter((p): p is ManagerPlace => !!p);
         return `
@@ -771,11 +774,10 @@ export const placesManagerMethods = uiModule({
                 acts.push(`<button type="button" class="place-split-one place-act">${m.splitOne}</button>`);
             }
         }
-        // "Houses in this town ›": the Houses window on the town (spec 030 §1), for a town of a numbered house.
-        if (!opts.sub) {
-            const town = g ? g.town : p.usage.display;
-            if (managerHouseTowns.has(placeKey(town))) acts.push(this.placeTownHousesHtml(town));
-        }
+        // "Houses in this town ›": the Houses window on the town (spec 030 §1), for a town of a numbered house;
+        // its "Family houses" line under the place's head (§5).
+        const houseTown = !opts.sub && managerHouseTowns.has(placeKey(g ? g.town : p.usage.display)) ? (g ? g.town : p.usage.display) : null;
+        if (houseTown) acts.push(this.placeTownHousesHtml(houseTown));
         const cls = ['place-row'];
         if (!geo) cls.push('place-row-unplaced');
         if (opts.sub) cls.push('place-row-sub');
@@ -795,6 +797,7 @@ export const placesManagerMethods = uiModule({
                             <span class="place-count">${this.escapeHtml(meta)}</span>
                             ${g?.unplacedCount ? `<span class="place-unplaced-tag">${this.escapeHtml(m.unplacedN(g.unplacedCount))}</span>` : ''}
                         </div>
+                        ${houseTown ? this.placeHousesHtml(houseTown) : ''}
                         <div class="place-acts">${acts.join('')}</div>
                         <div class="place-rename-form" hidden>
                             <label class="place-field-label">${m.newName}

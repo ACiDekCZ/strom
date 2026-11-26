@@ -10,9 +10,10 @@
  * Only houses of the tree (a person of the tree lived there), only with `house.request` in `/status.features`.
  */
 
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
 import { DataManager } from '../data.js';
-import { collectHouses, type TreeHouse } from '../houses.js';
+import { collectHouses, findHouse, houseContext, houseOfFact, type TreeHouse } from '../houses.js';
+import { placeKey } from '../places.js';
 import { houseGroupIds } from '../houses-view.js';
 import {
     HOUSE_WRITE_TIMEOUT_MS, houseFeature, houseStatus, requestHouse, type HouseRequestResult,
@@ -23,7 +24,7 @@ import type { HouseId } from '../types.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { houseUsd, houseWorkDuration } from './houses-auto-view.js';
 import { workConfirmText } from './queue-work-dialog.js';
-import type { HouseStateOf } from './house-state-ui.js';
+import { houseStateHtml, type HouseStateOf } from './house-state-ui.js';
 import { runBusy } from './busy.js';
 import { uiModule } from './module.js';
 
@@ -144,6 +145,36 @@ interface RequestState {
 }
 
 let req: RequestState | null = null;
+
+/** The family houses of a town as Places lists them (§5): its houses with history and those the research knows. */
+export function townFamilyHouses(all: readonly TreeHouse[], townKey: string, known: (h: TreeHouse) => boolean): TreeHouse[] {
+    return all.filter(h => h.townKey === townKey && (h.overThreshold || known(h)));
+}
+
+/** A house's line under its number in Places: its name, its years, its surnames. */
+export function placeHouseMeta(h: Pick<TreeHouse, 'name' | 'period' | 'surnames'>): string {
+    const years = h.period ? (h.period.from === h.period.to ? String(h.period.from) : `${h.period.from}–${h.period.to}`) : '';
+    return [h.name ?? '', years, h.surnames.join(' → ')].filter(Boolean).join(' · ');
+}
+
+/** The tree's houses by town for one drawing (a list of many rows asks per row); dropped after it. */
+let byTownNow: Map<string, TreeHouse[]> | null = null;
+function housesByTownNow(): Map<string, TreeHouse[]> {
+    if (byTownNow) return byTownNow;
+    const map = new Map<string, TreeHouse[]>();
+    for (const h of collectHouses(DataManager.getData())) {
+        const list = map.get(h.townKey);
+        if (list) list.push(h); else map.set(h.townKey, [h]);
+    }
+    byTownNow = map;
+    queueMicrotask(() => { byTownNow = null; });
+    return map;
+}
+
+/** Towns whose family houses are open in Places (town keys). */
+const openTowns = new Set<string>();
+/** The tree's houses by town while Places is drawn (prepared with its data). */
+let townHouses: Map<string, TreeHouse[]> | null = null;
 
 export const houseRequestMethods = uiModule({
     /** What decides the actions of the houses now (null: no research with `house`). */
@@ -351,5 +382,117 @@ export const houseRequestMethods = uiModule({
         }
         st.note = houseRequestRefusal(r, () => (r.held ? this.researchWriteHeldText(r.held, false).toast : ''));
         this.renderHouseRequest();
+    },
+
+    // ─── An event's house (§5) ────────────────────────────────────────────
+
+    /**
+     * Finds the tree's house of an event by its place and address (null: none). The tree's houses are read once,
+     * at its first address, for one drawing of the timeline.
+     */
+    eventHouseFinder(): (place: string | undefined, address: string | undefined) => TreeHouse | null {
+        let all: { data: ReturnType<typeof DataManager.getData>; houses: TreeHouse[]; ctx: ReturnType<typeof houseContext> } | null = null;
+        return (place, address) => {
+            if (!place?.trim() || !address?.trim()) return null;
+            if (!all) {
+                const data = DataManager.getData();
+                all = { data, houses: collectHouses(data), ctx: houseContext(data) };
+            }
+            const ref = houseOfFact({ place, house: address }, all.ctx);
+            return ref ? findHouse(all.data, ref.town, ref.house, all.houses) : null;
+        };
+    },
+
+    /** An event's address as the link to its house. */
+    houseLinkHtml(house: TreeHouse, address: string): string {
+        return `<button type="button" class="link pm-house-link" data-house="${esc(house.id)}" title="${esc(strings.houses.familyHouses.menuItem(house.text))}">${esc(address)}</button>`;
+    },
+
+    /** The place menu's item of an event's house: "House history čp. 16", under it its state and "house page". */
+    placeMenuHouseHtml(houseId: string): string {
+        const h = this.treeHouseOf(houseId);
+        if (!h) return '';
+        const f = strings.houses.familyHouses;
+        const row = this.houseResearchRow(h);
+        const badge = row && row.state !== 'none' ? `${houseStateHtml(row, { lang: getCurrentLanguage() })} · ` : '';
+        return `<button type="button" role="menuitem" class="place-menu-item place-menu-house" data-action="house" data-house="${esc(h.id)}">`
+            + `<span class="place-menu-house-name">${esc(f.menuItem(h.text))}</span>`
+            + `<span class="place-menu-house-line">${badge}${esc(f.pageLine)}</span></button>`;
+    },
+
+    // ─── Places: a town's family houses (§5) ──────────────────────────────
+
+    /** How many family houses a town has (as its "Family houses" line in Places). */
+    townFamilyHouseCount(town: string): number {
+        const key = placeKey(town);
+        if (!key) return 0;
+        return townFamilyHouses(housesByTownNow().get(key) ?? [], key, h => !!this.houseResearchRow(h)).length;
+    },
+
+    /** Places is drawn anew: the tree's houses by town, once for all its rows. */
+    placeHousesPrepare(): void {
+        townHouses = housesByTownNow();
+    },
+
+    /**
+     * The "Family houses" line of a town ('' without a house with history or known to the research): how many,
+     * the research's states, and the link that opens its houses under it — each with its state, its action (§2)
+     * and "House page ›". Without the research only the houses and their pages.
+     */
+    placeHousesHtml(town: string): string {
+        const key = placeKey(town);
+        if (!townHouses) this.placeHousesPrepare();
+        const houses = townFamilyHouses(townHouses?.get(key) ?? [], key, h => !!this.houseResearchRow(h));
+        if (!houses.length) return '';
+        const f = strings.houses.familyHouses;
+        const open = openTowns.has(key);
+        const subId = `place-houses-${key.replace(/[^a-z0-9]+/g, '-')}`;
+        return `<div class="place-houses-wrap" data-town="${esc(key)}" data-town-name="${esc(town)}">`
+            + `<div class="place-houses"><span class="place-history-label">${esc(f.label)}</span>`
+            + `<span class="place-history-text">${esc(f.summary(houses.length))}${this.placeTownHouseStatesHtml(town)}</span>`
+            + `<button type="button" class="link place-history-link place-houses-toggle" aria-expanded="${open}" aria-controls="${subId}">`
+            + `${esc(f.link(houses.length))} <span aria-hidden="true">${open ? '▾' : '›'}</span></button></div>`
+            + (open ? `<div class="place-houses-sub" id="${subId}">${houses.map(h => this.placeHouseRowHtml(h)).join('')}</div>` : '')
+            + '</div>';
+    },
+
+    placeHouseRowHtml(h: TreeHouse): string {
+        const row = this.houseResearchRow(h);
+        const badge = row && row.state !== 'none' ? houseStateHtml(row, { lang: getCurrentLanguage() }) : '';
+        return `<div class="r" data-house="${esc(h.id)}"><b>${esc(h.text)}</b><span class="m">${esc(placeHouseMeta(h))}</span>`
+            + `<span class="a">${badge}${this.houseActionHtml(h)}`
+            + `<button type="button" class="link place-history-link place-house-page" data-house="${esc(h.id)}">${esc(strings.houses.familyHouses.page)}</button>`
+            + '</span></div>';
+    },
+
+    /** A click in a town's family houses: true when handled. */
+    placeHousesClick(target: HTMLElement): boolean {
+        const toggle = target.closest<HTMLElement>('.place-houses-toggle');
+        if (toggle) {
+            const wrap = toggle.closest<HTMLElement>('.place-houses-wrap');
+            const key = wrap?.dataset.town ?? '';
+            if (openTowns.has(key)) openTowns.delete(key); else openTowns.add(key);
+            this.refreshPlaceHousesRows();
+            document.querySelector<HTMLElement>(`#places-modal .place-houses-wrap[data-town="${CSS.escape(key)}"] .place-houses-toggle`)?.focus({ preventScroll: true });
+            return true;
+        }
+        if (target.closest('.place-houses-wrap .house-req')) return this.houseActionClick(target);
+        const page = target.closest<HTMLElement>('.place-house-page');
+        if (page?.dataset.house) {
+            this.openHouse(page.dataset.house, 'places-modal');
+            return true;
+        }
+        return false;
+    },
+
+    /** The research's houses changed (or a town opened): the open Places draws its family houses again. */
+    refreshPlaceHousesRows(): void {
+        document.querySelectorAll<HTMLElement>('#places-modal .place-houses-wrap[data-town]').forEach(wrap => {
+            const html = this.placeHousesHtml(wrap.dataset.townName ?? '');
+            if (!html) { wrap.remove(); return; }
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            if (tmp.firstElementChild) wrap.replaceWith(tmp.firstElementChild);
+        });
     },
 });

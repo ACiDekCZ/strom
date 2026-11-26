@@ -74,7 +74,7 @@ import { personRodRowValue } from '../lineage-row.js';
 import { clearRodSelection, getSelectedRod, setRodSelection } from './rod-view.js';
 import { interleaveHistory } from '../history.js';
 import { storyWithDraft } from './story-compare-ui.js';
-import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
+import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLineHtml } from './event-details-ui.js';
 import { bindDeceasedAutoTick } from './deceased-autotick.js';
 import { TreeEditLock } from './tree-edit-lock.js';
 import { IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, imageLoads, type ImagesArrivedDetail } from '../image-loads.js';
@@ -1127,11 +1127,16 @@ export const personModalMethods = uiModule({
         body.classList.toggle('has-ranges', points.some(pt => pt.yearLabel));
         // A redraw keeps the focus on the layer's button it was on (or the head when that row went).
         const focusKey = (document.activeElement as HTMLElement | null)?.closest?.('#pm-lifeline-body [data-hfocus]')?.getAttribute('data-hfocus');
+        // An address at a house of the tree is the link to the house (spec 030 §5).
+        const houseOf = this.eventHouseFinder();
         const rows = points.map(pt => {
             const desc = this.lifelineDescription(pt);
-            let extra = eventDetailLine(pt.details, true);
+            let extra = eventDetailLineHtml(pt.details, true, address => {
+                const house = houseOf(pt.place, address);
+                return house ? this.houseLinkHtml(house, address) : null;
+            });
             if (pt.kind === 'coupleEvent' && pt.participants?.length) {
-                extra = [extra, strings.partnerEvents.witnesses(pt.participants.join(', '))].filter(Boolean).join(' · ');
+                extra = [extra, this.escapeHtml(strings.partnerEvents.witnesses(pt.participants.join(', ')))].filter(Boolean).join(' · ');
             }
             const link = pt.kind === 'coupleEvent' && editable && pt.partnershipId && pt.eventId
                 ? ` is-link" role="button" tabindex="0" data-partnership-id="${this.escapeHtml(pt.partnershipId)}" data-event-id="${this.escapeHtml(pt.eventId)}`
@@ -1143,7 +1148,7 @@ export const personModalMethods = uiModule({
                 + `<span class="pm-lifeline-year">${this.escapeHtml(pt.yearLabel ?? String(pt.year))}</span>`
                 + `<span class="pm-lifeline-glyph k-${pt.kind}">${this.lifelineGlyph(pt)}</span>`
                 + `<span class="pm-lifeline-desc">${desc}${shared}${extra
-                    ? `<span class="event-details-line">${this.escapeHtml(extra)}</span>` : ''}</span>`
+                    ? `<span class="event-details-line">${extra}</span>` : ''}</span>`
                 + `</div>`;
         });
         // Spec 020 K1.6: without the layer, a line when the research does not search yet.
@@ -1165,7 +1170,7 @@ export const personModalMethods = uiModule({
         }
         // A name or a place inside a row is its own link (T17); it must not
         // also open the row's couple event.
-        const fromLink = (e: Event): boolean => !!(e.target as HTMLElement).closest('.pm-lifeline-link, .pm-place-badge');
+        const fromLink = (e: Event): boolean => !!(e.target as HTMLElement).closest('.pm-lifeline-link, .pm-place-badge, .pm-house-link');
         body.querySelectorAll<HTMLElement>('.pm-lifeline-row.is-link').forEach(row => {
             const open = () => this.showEditCoupleEventModal(
                 row.dataset.partnershipId as PartnershipId, row.dataset.eventId ?? '');
@@ -1180,6 +1185,13 @@ export const personModalMethods = uiModule({
                 e.stopPropagation();
                 if (btn.dataset.personId) this.openLifelinePerson(btn.dataset.personId as PersonId);
                 else if (btn.dataset.place !== undefined) this.openLifelinePlace(btn.dataset.place, btn);
+            });
+        });
+        body.querySelectorAll<HTMLButtonElement>('.pm-house-link[data-house]').forEach(btn => {
+            btn.addEventListener('click', (e: MouseEvent) => {
+                e.stopPropagation();
+                const house = btn.dataset.house ?? '';
+                this.leavePersonModalThen(() => this.openHouse(house));
             });
         });
         // The state badge of a place without a location opens the same menu as its name.
