@@ -1,7 +1,8 @@
 /**
  * Which re-verification actions a fact offers (spec 065, table 10z), row by row.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { setInShowcaseLookup } from '../research-link.js';
 import { verifyOffer, personVerifyOffer, researchVerifies, researchConfirms, VerifyResearch } from '../verify-offer.js';
 
 const FULL: VerifyResearch = { features: ['verify', 'verify.bulk', 'facts.confirm'] };
@@ -146,5 +147,20 @@ describe('the state of the research tree', () => {
                 .toEqual({ verify: false, scan: true, undo: false, row: null });
         }
         expect(researchVerifies({ ...FULL, treeState: 'research' })).toBe(true);
+    });
+});
+
+describe('the showcase (spec 143 K4.1)', () => {
+    afterEach(() => setInShowcaseLookup(null));
+
+    it('draws neither "Verified from the scan" nor "Take back" (its writes are hidden); outside it as before', () => {
+        setInShowcaseLookup(() => true);
+        expect(verifyOffer({ step: 'probable', research: FULL, cited: true }).scan).toBe(false);
+        expect(verifyOffer({ step: 'probable', research: null, cited: true }).scan).toBe(false);
+        expect(verifyOffer({ step: 'human', research: FULL, cited: true, confirmedBy: 'app' }))
+            .toEqual({ verify: false, scan: false, undo: false, row: 'confirmed' });
+        setInShowcaseLookup(null);
+        expect(verifyOffer({ step: 'probable', research: FULL, cited: true }).scan).toBe(true);
+        expect(verifyOffer({ step: 'human', research: FULL, cited: true, confirmedBy: 'app' }).undo).toBe(true);
     });
 });

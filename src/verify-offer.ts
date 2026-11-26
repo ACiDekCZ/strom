@@ -6,7 +6,7 @@
 
 import type { FactVerifyPending } from './types.js';
 import type { ReliabilityStepName } from './reliability.js';
-import { researchDeviceAllows, type ResearchTreeState } from './research-link.js';
+import { inShowcase, researchDeviceAllows, type ResearchTreeState } from './research-link.js';
 import { VERIFY_FEATURE, VERIFY_BULK_FEATURE, FACTS_CONFIRM_FEATURE } from './verify.js';
 
 /** The research the tree is linked to, as the offer needs it; null: no research. */
@@ -125,6 +125,12 @@ export function researchConfirms(research: VerifyResearch | null): boolean {
  * (`source`): a fact the tip lists without a source offers none.
  */
 export function verifyOffer(input: VerifyOfferInput): VerifyOffer {
+    const offer = offerOf(input);
+    // The showcase (spec 143 K4.1): its writes not drawn — no "Verified from the scan", no "Take back".
+    return inShowcase() && !researchDeviceAllows('fact-confirm') ? { ...offer, scan: false, undo: false } : offer;
+}
+
+function offerOf(input: VerifyOfferInput): VerifyOffer {
     const { step, research, cited } = input;
     const sourced = input.source ?? cited;
     const none: VerifyOffer = { verify: false, scan: false, undo: false, row: null };
