@@ -9,7 +9,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-    downloadShowcase, fetchShowcaseVersion, fileLooksLikeShowcase, formatShowcaseMb, isQuotaError, newerShowcaseVersion, readShowcaseText,
+    SHOWCASE_DOWNLOAD_BYTES, downloadShowcase, fetchShowcaseVersion, fileLooksLikeShowcase, formatShowcaseMb, isQuotaError, newerShowcaseVersion, readShowcaseText,
     readShowcaseValue, showcaseFetchFailure, showcaseWebFileUrl, showcaseFileUrl, showcaseLangParam, showcasePercent, showcaseRoomShort, showcaseSizeFromPrefix,
     type ShowcaseDownloadDeps,
 } from '../showcase-download.js';
@@ -240,5 +240,14 @@ describe('a showcase file opened or dropped (§4)', () => {
         expect(showcaseTryDesc(true)).toContain('(.json)');
         setLanguage('en');
         expect(showcaseTryDesc(false)).toMatch(/· \d+\.\d MB download$/);
+    });
+
+    it('says the download as big as the built files are (0.2–0.3 MB), not more', () => {
+        expect(SHOWCASE_DOWNLOAD_BYTES).toBeGreaterThanOrEqual(269_784);
+        expect(SHOWCASE_DOWNLOAD_BYTES).toBeLessThanOrEqual(0.3 * 1024 * 1024);
+        setLanguage('cs');
+        expect(showcaseTryDesc(false)).toMatch(/stáhne se 0,3 MB$/);
+        setLanguage('en');
+        expect(showcaseTryDesc(false)).toMatch(/· 0\.3 MB download$/);
     });
 });

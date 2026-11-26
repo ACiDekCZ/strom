@@ -53,9 +53,11 @@ export function showcaseWebFileUrl(lang: ShowcaseLang): string {
 
 /**
  * About how big the showcase's download is (the New tree row says it before
- * anything is fetched; the file's header has the exact size).
+ * anything is fetched; the file's header has the exact size): the largest of
+ * the built files (cs 259 973, en 233 573, de 263 126, pl 269 784 bytes; the
+ * scans and excerpts in the tree are reduced).
  */
-export const SHOWCASE_DOWNLOAD_BYTES = 7_450_000;
+export const SHOWCASE_DOWNLOAD_BYTES = 270_000;
 
 /** The address of the showcase's version beside its file. */
 export function showcaseVersionUrl(lang: ShowcaseLang): string {
