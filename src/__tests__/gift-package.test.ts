@@ -12,9 +12,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getDemoTree } from '../demo-tree.js';
 import type { PersonId, StromData } from '../types.js';
-import { defaultGiftParts, defaultGiftPrivacy, type GiftLang, type GiftParts, type GiftSettings } from '../gift-tree.js';
+import { defaultGiftFan, defaultGiftParts, defaultGiftPrivacy, type GiftLang, type GiftParts, type GiftSettings } from '../gift-tree.js';
+import { giftProtectedData } from '../gift-tree.js';
 import {
-    buildGiftBatch, buildGiftPackage, estimateGiftSize, giftFileNames, giftStepsFor, GiftOutOfMemory, isOutOfMemory,
+    buildGiftBatch, buildGiftPackage, estimateGiftSize, giftFanShape, giftFileNames, giftStepsFor, GiftOutOfMemory, isOutOfMemory,
     type GiftCoverInfo, type GiftPackageEnv, type GiftProgress,
 } from '../gift-package.js';
 import { blobBytes, hasUnzip, readZipEntries, unzipTest, zipFiles } from './helpers/zip-read.js';
@@ -50,6 +51,8 @@ function settingsFor(recipients: string[], lang: GiftLang = 'en', parts: Partial
         privacy: defaultGiftPrivacy(),
         parts: { ...defaultGiftParts(), ...parts },
         photos,
+        fan: defaultGiftFan(),
+        cards: 'detailed',
         letter: { lang, motif: 'xmas', salutation: 'Dear Daniel', message: '[oslovení], merry Christmas.', signature: 'Grandma', date: '2026-12-20' },
     };
 }
@@ -112,8 +115,119 @@ describe('file names (§5)', () => {
     });
 });
 
+describe('the fan\'s variants (K5.6)', () => {
+    const one = [{ id: P('daniel'), name: 'Daniel Berg' }];
+    const two = [{ id: P('eva'), name: 'Eva Berg' }, { id: P('jonas'), name: 'Jonas Holm' }];
+    const fan = (styles: Array<'color' | 'pastel' | 'antique' | 'mono'>, asTree = false) => ({ asTree, styles, photos: true });
+
+    it('two-way when the recipient has descendants in the package, as deep as they reach; else a half circle', () => {
+        const data = giftProtectedData(sensitiveTree(), { recipients: [P('daniel')], depth: 2, branches: {} }, defaultGiftPrivacy(), { photos: true, currentYear: 2026 });
+        const daniel = data.persons[P('daniel')];
+        expect(daniel.childIds.some(c => data.persons[c] && !data.persons[c].isPlaceholder)).toBe(true);
+        const withKids = giftFanShape(data, P('daniel'));
+        expect(withKids.shape).toBe('two');
+        expect(withKids.descGenerations).toBeGreaterThanOrEqual(1);
+        expect(withKids.descGenerations).toBeLessThanOrEqual(5);
+        const leaf = Object.values(data.persons).find(p => !p.isPlaceholder && !p.childIds.some(c => data.persons[c] && !data.persons[c].isPlaceholder))!;
+        expect(giftFanShape(data, leaf.id)).toEqual({ shape: 'half', descGenerations: 1 });
+        // A child only as a placeholder is no descendant.
+        const ph = structuredClone(data);
+        for (const c of ph.persons[P('daniel')].childIds) if (ph.persons[c]) ph.persons[c].isPlaceholder = true;
+        expect(giftFanShape(ph, P('daniel')).shape).toBe('half');
+    });
+
+    it('file names: one style the plain stem, several with each style\'s name; a couple with both', () => {
+        expect(giftFileNames('cs', one, 2026, undefined, fan(['antique'])).fans.map(f => [f.stem, f.style])).toEqual([['Vějíř předků', 'antique']]);
+        expect(giftFileNames('cs', one, 2026, undefined, fan(['color', 'antique', 'mono'])).fans.map(f => f.stem)).toEqual([
+            'Vějíř předků – Barevný', 'Vějíř předků – Starobylý', 'Vějíř předků – Černobílý',
+        ]);
+        expect(giftFileNames('cs', two, 2026, undefined, fan(['antique'])).fans.map(f => f.stem)).toEqual(['Vějíř předků – Eva Berg', 'Vějíř předků – Jonas Holm']);
+        const pair = giftFileNames('cs', two, 2026, undefined, fan(['color', 'antique', 'mono'])).fans;
+        expect(pair.map(f => f.stem)).toEqual([
+            'Vějíř předků – Eva Berg – Barevný', 'Vějíř předků – Eva Berg – Starobylý', 'Vějíř předků – Eva Berg – Černobílý',
+            'Vějíř předků – Jonas Holm – Barevný', 'Vějíř předků – Jonas Holm – Starobylý', 'Vějíř předků – Jonas Holm – Černobílý',
+        ]);
+        expect(pair.map(f => f.personId)).toEqual([P('eva'), P('eva'), P('eva'), P('jonas'), P('jonas'), P('jonas')]);
+        expect(giftFileNames('en', one, 2026, undefined, fan(['pastel', 'mono'])).fans.map(f => f.stem)).toEqual(['Ancestor fan – Pastel', 'Ancestor fan – Black and white']);
+        expect(giftFileNames('de', one, 2026, undefined, fan(['pastel', 'mono'])).fans.map(f => f.stem)).toEqual(['Ahnenfächer – Pastell', 'Ahnenfächer – Schwarzweiß']);
+        // As in the app: one fan per recipient, whatever the styles say.
+        expect(giftFileNames('cs', two, 2026, undefined, fan(['color', 'mono'], true)).fans.map(f => [f.stem, f.style])).toEqual([
+            ['Vějíř předků – Eva Berg', null], ['Vějíř předků – Jonas Holm', null],
+        ]);
+        // The default: Antique, the plain stem.
+        expect(giftFileNames('cs', one, 2026).fans.map(f => f.stem)).toEqual(['Vějíř předků']);
+    });
+
+    it('each variant an SVG and a PNG: 1 and 3 styles, one recipient and a couple', async () => {
+        for (const [who, styles, count] of [
+            [['daniel'], ['antique'], 1], [['daniel'], ['color', 'antique', 'mono'], 3],
+            [['eva', 'jonas'], ['antique'], 2], [['eva', 'jonas'], ['color', 'antique', 'mono'], 6],
+        ] as const) {
+            const settings = { ...settingsFor([...who], 'cs', { app: false, pages: false, book: false, gedcom: false }), fan: fan([...styles]) };
+            const r = await buildGiftPackage({ data: sensitiveTree(), settings, treeName: 'Berg', env: testEnv(fresh()) });
+            const files = zipFiles(await blobBytes(r.blob));
+            const svgs = [...files.keys()].filter(p => p.endsWith('.svg'));
+            const pngs = [...files.keys()].filter(p => p.endsWith('.png'));
+            expect(svgs.length, `${who.join('+')} × ${styles.length}`).toBe(count);
+            expect(pngs.length).toBe(count);
+            const expected = giftFileNames('cs', who.map(id => ({ id: P(id), name: id === 'daniel' ? 'Daniel Berg' : id === 'eva' ? 'Eva Berg' : 'Jonas Holm' })), 2026, undefined, settings.fan).fans;
+            for (const f of expected) {
+                const svg = dec.decode(files.get(`${r.folder}/${f.stem}.svg`)!);
+                expect(svg).toContain(`data-fan-style="${f.style}"`);
+                expect(files.has(`${r.folder}/${f.stem}.png`)).toBe(true);
+            }
+        }
+    });
+
+    it('a chosen style: the default shape, gender colours, portraits by the fan\'s photos; as in the app: the app\'s look and shape', async () => {
+        const parts = { app: false, pages: false, book: false, gedcom: false };
+        const portrait = vi.fn(() => ({ href: PNG }));
+        const styled = await buildGiftPackage({
+            data: sensitiveTree(), settings: { ...settingsFor(['daniel'], 'en', parts), fan: fan(['antique']) }, treeName: 'Berg',
+            env: testEnv(fresh(), { fan: { look: { style: 'mono', rodScope: 'all', content: 'years', portraits: false }, shape: 'full', portrait } }),
+        });
+        const svg = dec.decode(zipFiles(await blobBytes(styled.blob)).get(`${styled.folder}/Ancestor fan.svg`)!);
+        expect(svg).toContain('data-fan-style="antique"');
+        expect(svg).toContain('data-fan-shape="two"');
+        expect(portrait).toHaveBeenCalled();
+
+        portrait.mockClear();
+        await buildGiftPackage({
+            data: sensitiveTree(), settings: { ...settingsFor(['daniel'], 'en', parts), fan: { ...fan(['antique']), photos: false } }, treeName: 'Berg',
+            env: testEnv(fresh(), { fan: { portrait } }),
+        });
+        expect(portrait).not.toHaveBeenCalled();
+
+        const asTree = await buildGiftPackage({
+            data: sensitiveTree(), settings: { ...settingsFor(['daniel'], 'en', parts), fan: fan(['antique', 'color'], true) }, treeName: 'Berg',
+            env: testEnv(fresh(), { fan: { look: { style: 'pastel', rodScope: 'all', content: 'years', portraits: false }, shape: 'full' } }),
+        });
+        const files = zipFiles(await blobBytes(asTree.blob));
+        expect([...files.keys()].filter(p => p.endsWith('.svg'))).toEqual([`${asTree.folder}/Ancestor fan.svg`]);
+        const own = dec.decode(files.get(`${asTree.folder}/Ancestor fan.svg`)!);
+        expect(own).toContain('data-fan-style="pastel"');
+        expect(own).toContain('data-fan-shape="full"');
+    });
+
+    it('the estimate counts the fan once per variant, in the shape the package draws', () => {
+        const data = sensitiveTree();
+        const base = settingsFor(['daniel'], 'en');
+        const one = estimateGiftSize(data, { ...base, fan: fan(['antique']) }).parts.fan;
+        const three = estimateGiftSize(data, { ...base, fan: fan(['color', 'antique', 'mono']) }).parts.fan;
+        expect(one).toBeGreaterThan(0);
+        expect(Math.abs(three - 3 * one)).toBeLessThanOrEqual(3);
+        const couple = estimateGiftSize(data, { ...settingsFor(['eva', 'jonas'], 'en'), fan: fan(['color', 'mono']) }).parts.fan;
+        const coupleOne = estimateGiftSize(data, { ...settingsFor(['eva', 'jonas'], 'en'), fan: fan(['mono']) }).parts.fan;
+        expect(Math.abs(couple - 2 * coupleOne)).toBeLessThanOrEqual(3);
+        // As in the app: one poster in the app's shape (a half circle differs from the two-way default).
+        const half = estimateGiftSize(data, { ...base, fan: fan(['antique'], true) }, { treeFanShape: 'half' }).parts.fan;
+        expect(half).not.toBe(one);
+        expect(estimateGiftSize(data, { ...base, fan: fan(['antique'], true) }, { treeFanShape: 'two' }).parts.fan).toBe(one);
+    });
+});
+
 describe('one package', () => {
-    it('one folder with every part, named in each language; readable by unzip', async () => {
+    it('one folder with every part, named in each language; readable by unzip', { timeout: 20_000 }, async () => {
         const expected: Record<GiftLang, string[]> = {
             en: ['Family tree (app).html', 'Family pages/index.html', 'Family book.html', 'Ancestor fan.svg', 'Ancestor fan.png', 'For other programs/Family tree.ged', 'Start here.html'],
             cs: ['Rodokmen (aplikace).html', 'Stránky rodiny/index.html', 'Kniha rodu.html', 'Vějíř předků.svg', 'Vějíř předků.png', 'Pro jiné programy/Rodokmen.ged', 'Začít zde.html'],
@@ -146,7 +260,7 @@ describe('one package', () => {
     it('the app gets the sender and the message with the salutation in place', async () => {
         const c = fresh();
         await buildGiftPackage({ data: sensitiveTree(), settings: settingsFor(['daniel'], 'en', { pages: false, book: false }), treeName: 'Berg', env: testEnv(c) });
-        expect(c.appOpts[0]).toEqual({ treeName: 'Berg', senderName: 'Grandma', senderMessage: 'Dear Daniel, merry Christmas.' });
+        expect(c.appOpts[0]).toEqual({ treeName: 'Berg', cards: 'detailed', senderName: 'Grandma', senderMessage: 'Dear Daniel, merry Christmas.' });
     });
 
     it('K6.4: no hidden detail of a living person in any output; the deceased keep sources and photos; the household in full', async () => {

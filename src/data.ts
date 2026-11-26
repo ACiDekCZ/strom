@@ -59,6 +59,8 @@ import { convertLegacyCensusEvents, isCoupleEventType } from './events.js';
 import { sanitizeGedcomDates } from './gedcom-date-form.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
 import { TreeManager } from './tree-manager.js';
+import { SettingsManager } from './settings.js';
+import { embeddedCardView } from './card-fields.js';
 import { isEncrypted, EncryptedData, decrypt, classifyCryptoError, CryptoFailure } from './crypto.js';
 import { cryptoErrorText } from './crypto-errors.js';
 import * as CrossTree from './cross-tree.js';
@@ -731,6 +733,7 @@ class DataManagerClass {
      */
     private handleEmbeddedData(data: StromData): void {
         if (!this.embeddedEnvelope) return;
+        this.applyEmbeddedCardView(this.embeddedEnvelope);
 
         // Check data version compatibility
         const dataVersion = data.version ?? 1;
@@ -762,6 +765,19 @@ class DataManagerClass {
             this.data = migrateData(data);
             this.currentTreeId = null;
         }
+    }
+
+    /**
+     * The card type the file asks for (a gift package's app, spec 093 K5.7),
+     * set before the first drawing — only when the reader never chose one
+     * (their own choice is never replaced) and this window keeps settings.
+     */
+    private applyEmbeddedCardView(envelope: EmbeddedDataEnvelope): void {
+        if (SettingsManager.isReadOnly()) return;
+        const view = embeddedCardView(envelope.view, SettingsManager.hasCardDensity());
+        if (!view) return;
+        if (view.fields) SettingsManager.setCardFields(view.fields);
+        SettingsManager.setCardDensity(view.density);
     }
 
     /**

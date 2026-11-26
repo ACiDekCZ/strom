@@ -8,7 +8,8 @@
  * it and changes it. × and Escape make nothing and remember the settings.
  */
 
-import type { Person, PersonId, StromData, TreeId } from '../types.js';
+import type { CardDensity, Person, PersonId, StromData, TreeId } from '../types.js';
+import type { CardFieldSettings } from '../card-fields.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -24,7 +25,7 @@ import { iconSvg } from '../icons.js';
 import { inferBirthUpperBounds, isLivingPerson, type PrivacyMode } from '../privacy.js';
 import { giftPersonKey, loadGiftMemory, saveGiftMemory } from '../gift-memory.js';
 import {
-    buildGiftBatch, buildGiftPackage, estimateGiftSize, GiftOutOfMemory, giftBatchFileName, giftFileNames, giftNamesLabel, giftStepsFor, isAbortError,
+    buildGiftBatch, buildGiftPackage, estimateGiftSize, GiftOutOfMemory, giftBatchFileName, giftFanShape, giftFileNames, giftNamesLabel, giftStepsFor, isAbortError,
     type GiftBatchProgress, type GiftBatchResult, type GiftBatchRow, type GiftPackageEnv, type GiftPackageResult, type GiftPartKey, type GiftProgress, type GiftSizeEstimate, type GiftStep,
 } from '../gift-package.js';
 import { buildGiftCover, giftDefaultSalutation, giftFacts } from '../gift-cover.js';
@@ -33,8 +34,8 @@ import { appFontFaceCss, POSTER_LINE_FACES, POSTER_SERIF_FACES } from '../poster
 import { bookItalicFontCss } from '../book-font.js';
 import { bookOptionsFromMemory, loadBookMemory, pagesChoicesFromMemory } from '../book-memory.js';
 import {
-    GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftBranchCandidates, giftCutData, giftCutIds, giftDepthCounts,
-    type GiftBranch, type GiftCut, type GiftDepth, type GiftLang, type GiftLetter, type GiftSettings,
+    GIFT_CARDS, GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftBranchCandidates, giftCutData, giftCutIds, giftDepthCounts, giftProtectedData,
+    type GiftBranch, type GiftCards, type GiftCut, type GiftDepth, type GiftLang, type GiftLetter, type GiftSettings,
 } from '../gift-tree.js';
 import { ancestorGenerations, descentParentIds } from '../lineage.js';
 import { findRelationship } from '../kinship.js';
@@ -53,6 +54,7 @@ import { confirmMemoryForOutput } from './memory-limit-ui.js';
 import { barEl } from './prog-bar.js';
 import { spinEl } from './busy.js';
 import { svgToPngBlob } from './svg-png.js';
+import { FAN_STYLES, type FanStyle } from '../fan-colors.js';
 import { fanPhotoPortrait } from './fan-view.js';
 import { selectionPersonIds, type SelectionRef } from '../view-selection.js';
 import { selectionIndex, selectionText } from './view-selection-ui.js';
@@ -122,9 +124,9 @@ interface GiftUi {
     /** The cover page's preview for these settings. */
     coverKey: string;
     coverHtml: string;
-    /** Step 4's estimates for these settings. */
+    /** Step 4's estimates for these settings, and each recipient's fan shape by default (K5.6). */
     estKey: string;
-    est: { now: GiftSizeEstimate; all: GiftSizeEstimate } | null;
+    est: GiftEstimates | null;
     /** Step 5's typing: the cover page's preview drawn again a moment later. */
     letterTimer: number;
     /** A list or the selection (§7 [53]): its recipients' rows; null for a person or a couple. */
@@ -255,6 +257,13 @@ function bookStorage(): Storage | null {
     try { return window.localStorage; } catch { return null; }
 }
 
+/** The card type the package's app opens with (K5.7): 'tree' is the app's own now, a custom set with its fields. */
+function giftCardsView(cards: GiftCards): { cardDensity: CardDensity; cardFields?: CardFieldSettings } {
+    if (cards !== 'tree') return { cardDensity: cards };
+    const density = SettingsManager.getCardDensity();
+    return density === 'custom' ? { cardDensity: density, cardFields: SettingsManager.getCardFields() } : { cardDensity: density };
+}
+
 /** What the making needs from the app: the app's file, PNG drawing, fonts, the book's and pages' remembered choices, the fan's look. */
 function giftPackageEnv(treeId: TreeId | null, settings: GiftSettings, onCover: (html: string) => void): GiftPackageEnv {
     const memory = loadBookMemory(bookStorage(), treeId);
@@ -262,7 +271,9 @@ function giftPackageEnv(treeId: TreeId | null, settings: GiftSettings, onCover: 
     const colorMode = TreeRenderer.getFanColorMode();
     const lineFonts = appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]);
     return {
-        app: (data, o) => AppExporter.buildFocusAppBlob(data, { ...o, ...(treeId ? { trackTreeId: treeId } : {}) }),
+        app: (data, { cards, ...o }) => AppExporter.buildFocusAppBlob(data, {
+            ...o, view: giftCardsView(cards), ...(treeId ? { trackTreeId: treeId } : {}),
+        }),
         png: svgToPngBlob,
         fonts: { pages: lineFonts, book: appFontFaceCss(POSTER_SERIF_FACES) + bookItalicFontCss(), fan: lineFonts },
         book,
@@ -270,6 +281,7 @@ function giftPackageEnv(treeId: TreeId | null, settings: GiftSettings, onCover: 
         fan: {
             look: TreeRenderer.getFanLook(),
             colorMode: colorMode === 'rod' ? 'gender' : colorMode,
+            shape: TreeRenderer.getFanShape(),
             portrait: (p) => fanPhotoPortrait(p, false),
         },
         cover: (data, info) => {
@@ -286,15 +298,26 @@ function defaultZipName(u: GiftUi): string {
     return giftFileNames(u.g.settings.letter.lang, people, new Date().getFullYear()).zip;
 }
 
-/** Step 4's estimates: the package as chosen, and every part's size as if it were in (cached by the settings). */
-function estimatesOf(u: GiftUi): { now: GiftSizeEstimate; all: GiftSizeEstimate } {
-    const key = JSON.stringify([cutKey(u.g)]);
+interface GiftEstimates {
+    now: GiftSizeEstimate;
+    all: GiftSizeEstimate;
+    /** Each recipient's fan shape by default: two-way with descendants in the cut. */
+    shapes: Array<'two' | 'half'>;
+}
+
+/** Step 4's estimates: the package as chosen, and every part's size as if it were in (cached by the settings and the fan's variants). */
+function estimatesOf(u: GiftUi): GiftEstimates {
+    const s = u.g.settings;
+    const treeFanShape = s.fan.asTree ? TreeRenderer.getFanShape() : undefined;
+    const key = JSON.stringify([cutKey(u.g), s.fan, treeFanShape ?? null]);
     if (!u.est || u.estKey !== key) {
         const now = new Date();
-        const s = u.g.settings;
+        const protectedData = giftProtectedData(u.data, s.cut, s.privacy, { photos: true, currentYear: now.getFullYear() });
+        const opts = { now, protectedData, ...(treeFanShape ? { treeFanShape } : {}) };
         u.est = {
-            now: estimateGiftSize(u.data, s, { now }),
-            all: estimateGiftSize(u.data, { ...s, photos: s.photos, parts: { app: true, pages: true, book: true, fan: true, gedcom: true } }, { now }),
+            now: estimateGiftSize(u.data, s, opts),
+            all: estimateGiftSize(u.data, { ...s, photos: s.photos, parts: { app: true, pages: true, book: true, fan: true, gedcom: true } }, opts),
+            shapes: giftRecipients(u.g).filter(id => !!protectedData.persons[id]).map(id => giftFanShape(protectedData, id).shape),
         };
         u.estKey = key;
     }
@@ -351,6 +374,8 @@ function giftCarried(data: StromData, fresh: GiftSettings, carry: GiftSettings):
         privacy: { ...carry.privacy, fullIds: [] },
         parts: { ...carry.parts },
         photos: carry.photos,
+        fan: { ...carry.fan, styles: [...carry.fan.styles] },
+        cards: carry.cards,
         letter: { ...fresh.letter, lang, motif: carry.letter.motif, date: carry.letter.date, salutation, message: '' },
     };
 }
@@ -416,7 +441,7 @@ function realPerson(data: StromData, id: PersonId | null | undefined): Person | 
 /** The settings the summary and step 3 depend on, as a key (computed again only when it changes). */
 function cutKey(g: GiftState): string {
     const s = g.settings;
-    return JSON.stringify([s.cut, s.privacy, s.parts, s.photos]);
+    return JSON.stringify([s.cut, s.privacy, s.parts, s.photos, s.fan]);
 }
 
 function summaryOf(u: GiftUi): GiftSummary {
@@ -1217,7 +1242,7 @@ export const giftTreeMethods = uiModule({
         left.appendChild(el('h3', 'gift-h3', K.partsH));
         const list = el('div', 'gift-pt');
         const part = (key: 'cover' | GiftPartKey, on: boolean, link?: { text: string; run: () => void }): void => {
-            const row = el('label', `gift-pt-r${on ? '' : ' is-off'}${key === 'cover' ? ' is-locked' : ''}`);
+            const row = el('label', `gift-pt-r${on ? '' : ' is-off'}${key === 'cover' ? ' is-locked' : ''}${key === 'app' || key === 'fan' ? ' has-sub' : ''}`);
             const input = el('input');
             input.type = 'checkbox';
             input.checked = on;
@@ -1243,9 +1268,11 @@ export const giftTreeMethods = uiModule({
         };
         part('cover', true);
         part('app', s.parts.app);
+        list.appendChild(this.giftCardsSub());
         part('pages', s.parts.pages);
         part('book', s.parts.book, { text: K.bookSettings, run: () => this.giftBookSettings() });
-        part('fan', s.parts.fan, { text: K.fanLook, run: () => { void this.giftFanLook(); } });
+        part('fan', s.parts.fan, s.fan.asTree ? { text: K.fanLook, run: () => { void this.giftFanLook(); } } : undefined);
+        list.appendChild(this.giftFanSub(est.shapes));
         part('gedcom', s.parts.gedcom);
         left.appendChild(list);
 
@@ -1265,7 +1292,7 @@ export const giftTreeMethods = uiModule({
         right.appendChild(el('h3', 'gift-h3', K.zipH));
         const tree = el('div', 'gift-zip-tree');
         const people = giftRecipients(u.g).map(id => ({ id, name: shownName(u.data.persons[id]) || '?' }));
-        const names = giftFileNames(s.letter.lang, people, new Date().getFullYear(), s.fileName);
+        const names = giftFileNames(s.letter.lang, people, new Date().getFullYear(), s.fileName, s.fan);
         const row = (level: number, name: string, opts: { folder?: boolean; bytes?: number; off?: boolean } = {}): void => {
             const r = el('div', `gift-zip-r is-l${level}${opts.off ? ' is-off' : ''}`);
             const ic = el('span', 'gift-zip-ic');
@@ -1299,6 +1326,103 @@ export const giftTreeMethods = uiModule({
 
         cols.append(left, right);
         pane.appendChild(cols);
+    },
+
+    /**
+     * The fan's variants under its part (K5.6): chosen styles (at least one,
+     * with or without portraits) and the shape they get, or as in the app;
+     * inactive while the fan is left out.
+     */
+    giftFanSub(shapes: Array<'two' | 'half'>): HTMLElement {
+        const s = ui!.g.settings;
+        const K = strings.giftTree.pkg;
+        const on = s.parts.fan;
+        const box = el('div', `gift-pt-sub gift-fan${on ? '' : ' is-off'}`);
+        const mode = giftSegment(K.fanModeH, 'fan-mode', [
+            { key: 'styles', label: K.fanStyles, on: !s.fan.asTree },
+            { key: 'tree', label: K.asTree, on: s.fan.asTree },
+        ], (key) => {
+            if (!s.parts.fan) return;
+            s.fan = { ...s.fan, asTree: key === 'tree' };
+            this.giftRender();
+        });
+        if (!on) {
+            mode.setAttribute('aria-disabled', 'true');
+            mode.querySelectorAll('button').forEach(b => b.setAttribute('aria-disabled', 'true'));
+        }
+        box.appendChild(mode);
+        if (s.fan.asTree) {
+            box.appendChild(el('p', 'gift-note', K.fanAsTreeNote));
+            return box;
+        }
+        const S = strings.fan;
+        const styleName: Record<FanStyle, string> = { color: S.styleColor, pastel: S.stylePastel, antique: S.styleAntique, mono: S.styleMono };
+        const checks = el('div', 'content-checks gift-fan-styles');
+        checks.setAttribute('role', 'group');
+        checks.setAttribute('aria-label', K.fanStylesH);
+        const check = (key: string, label: string, checked: boolean, disabled: boolean, set: (v: boolean) => void): HTMLElement => {
+            const lab = el('label', 'content-check');
+            const input = el('input');
+            input.type = 'checkbox';
+            input.checked = checked;
+            input.disabled = disabled;
+            input.dataset.gk = key;
+            input.addEventListener('change', () => {
+                set(input.checked);
+                this.giftRender();
+            });
+            lab.append(input, el('span', undefined, label));
+            return lab;
+        };
+        for (const st of FAN_STYLES) {
+            const picked = s.fan.styles.includes(st);
+            // The last style chosen stays: a fan has at least one.
+            const last = picked && s.fan.styles.length === 1;
+            checks.appendChild(check(`fan-style-${st}`, styleName[st], picked, !on || last, (v) => {
+                const styles = FAN_STYLES.filter(x => (x === st ? v : s.fan.styles.includes(x)));
+                if (styles.length) s.fan = { ...s.fan, styles };
+            }));
+        }
+        box.appendChild(checks);
+        // Portraits need the package's photos.
+        const photos = check('fan-photos', K.withPhotos, s.fan.photos && s.photos, !on || !s.photos, (v) => {
+            s.fan = { ...s.fan, photos: v };
+        });
+        photos.classList.add('gift-fan-photos');
+        box.appendChild(photos);
+        const shape = shapes.length && shapes.every(x => x === shapes[0])
+            ? (shapes[0] === 'two' ? K.fanShapeTwo : K.fanShapeHalf)
+            : K.fanShapeEach;
+        box.appendChild(el('p', 'gift-note gift-fan-shape', K.fanShape(shape)));
+        return box;
+    },
+
+    /** The app's card detail under its part (K5.7); inactive while the app is left out. */
+    giftCardsSub(): HTMLElement {
+        const s = ui!.g.settings;
+        const K = strings.giftTree.pkg;
+        const D = strings.cardDensity;
+        const on = s.parts.app;
+        const box = el('div', `gift-pt-sub gift-cards${on ? '' : ' is-off'}`);
+        const field = el('label', 'gift-field');
+        field.appendChild(el('span', 'gift-label', K.cardsH));
+        const select = el('select', 'gift-select');
+        select.dataset.gk = 'cards';
+        select.disabled = !on;
+        const label: Record<GiftCards, string> = { compact: D.compact, normal: D.normal, detailed: D.detailed, register: D.register, tree: K.asTree };
+        for (const c of GIFT_CARDS) {
+            const o = el('option', undefined, label[c]);
+            o.value = c;
+            o.selected = s.cards === c;
+            select.appendChild(o);
+        }
+        select.addEventListener('change', () => {
+            s.cards = select.value as GiftCards;
+            this.giftRender();
+        });
+        field.appendChild(select);
+        box.append(field, el('p', 'gift-note', K.cardsNote));
+        return box;
     },
 
     /**

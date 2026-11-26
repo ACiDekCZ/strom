@@ -461,7 +461,7 @@ class AppExporterClass {
      * and the baseline on the source tree (a reply can be read back). Throws
      * outside the built app (the dev server has no inlined bundle).
      */
-    async buildFocusAppBlob(data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string; trackTreeId?: TreeId }): Promise<Blob> {
+    async buildFocusAppBlob(data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string; trackTreeId?: TreeId; view?: EmbeddedDataEnvelope['view'] }): Promise<Blob> {
         if (!this.isBuiltVersion()) throw new Error(strings.export.devModeNotSupported);
         const html = this.getExportHtml();
         const exportId = generateExportId();
@@ -473,6 +473,7 @@ class AppExporterClass {
             data,
             ...(opts.senderMessage ? { senderMessage: opts.senderMessage } : {}),
             ...(opts.senderName ? { senderName: opts.senderName } : {}),
+            ...(opts.view ? { view: opts.view } : {}),
         };
         let baseline: (() => void) | null = null;
         if (opts.trackTreeId) {

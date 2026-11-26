@@ -90,6 +90,30 @@ describe('giving a family tree to each person of a list (spec 093 §7 [53, 54])'
         expect(c.privacy.othersSensitive.sources).toBe(false);
     });
 
+    it('K5.6, K5.7: the fan and the cards are step 4\'s; the common ones carry them, a row\'s own replace them', () => {
+        const c = common();
+        expect(c.fan).toEqual({ asTree: false, styles: ['antique'], photos: true });
+        expect(c.cards).toBe('detailed');
+        expect(giftMergeOwn(c, undefined, [P('emma')], '').fan).toEqual(c.fan);
+        const edited = giftMergeOwn(c, undefined, [P('emma')], 'Dear Emma');
+        edited.fan = { asTree: false, styles: ['color', 'mono'], photos: false };
+        edited.cards = 'register';
+        const own = giftOwnDiff(c, edited)!;
+        expect(own).toEqual({ fan: { asTree: false, styles: ['color', 'mono'], photos: false }, cards: 'register' });
+        expect(giftOwnParts(own)).toEqual(['parts']);
+        const merged = giftMergeOwn(c, own, [P('emma')], 'Dear Emma');
+        expect(merged.fan).toEqual(own.fan);
+        expect(merged.cards).toBe('register');
+        // The merged fan is a copy: changing it leaves the row's own as it was.
+        merged.fan.styles.push('pastel');
+        expect(own.fan!.styles).toEqual(['color', 'mono']);
+        // Common settings with another fan: a row without its own follows them.
+        const otherCommon = { ...c, fan: { ...c.fan, asTree: true }, cards: 'tree' as const };
+        const follows = giftMergeOwn(otherCommon, undefined, [P('emma')], '');
+        expect(follows.fan.asTree).toBe(true);
+        expect(follows.cards).toBe('tree');
+    });
+
     it('makes one item per package: its recipients, its salutation, its own settings', () => {
         const c = common();
         const rows = giftBatchRows(data, [P('emma'), P('daniel'), P('julia'), P('zora')], true);

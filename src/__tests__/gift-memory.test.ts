@@ -22,6 +22,8 @@ describe('gift memory', () => {
         expect(s.privacy.dead).toEqual({ causes: true, notes: true, sources: true });
         expect(s.parts).toEqual({ app: true, pages: true, book: true, fan: true, gedcom: true });
         expect(s.photos).toBe(true);
+        expect(s.fan).toEqual({ asTree: false, styles: ['antique'], photos: true });
+        expect(s.cards).toBe('detailed');
         expect(s.letter).toEqual(LETTER);
         expect(s.letter).not.toBe(LETTER);
     });
@@ -107,5 +109,30 @@ describe('gift memory', () => {
         expect(loadGiftMemory('t1', 'a', broken)).toBeNull();
         expect(() => saveGiftMemory('t1', 'a', { lastAt: 'x', settings: defaultGiftSettings([P('a')], LETTER), cutSize: 1 }, broken)).not.toThrow();
         expect(loadGiftMemory('t1', 'a', null)).toBeNull();
+    });
+
+    it('K5.6, K5.7: an entry from before has the default fan and cards; malformed ones are repaired', () => {
+        const old = { lastAt: '2026-11-20T10:00:00Z', settings: { parts: { app: true }, photos: true }, cutSize: 3 };
+        const a = parseGiftMemory(old, [P('a')])!;
+        expect(a.settings.fan).toEqual({ asTree: false, styles: ['antique'], photos: true });
+        expect(a.settings.cards).toBe('detailed');
+
+        const odd = { lastAt: 'x', settings: { fan: { asTree: 'yes', styles: ['mono', 'bogus', 'color', 'mono'], photos: false }, cards: 'custom' }, cutSize: 1 };
+        const b = parseGiftMemory(odd, [P('a')])!;
+        expect(b.settings.fan).toEqual({ asTree: false, styles: ['color', 'mono'], photos: false });
+        expect(b.settings.cards).toBe('detailed');
+
+        const none = parseGiftMemory({ lastAt: 'x', settings: { fan: { asTree: true, styles: [] }, cards: 'tree' } }, [P('a')])!;
+        expect(none.settings.fan).toEqual({ asTree: true, styles: ['antique'], photos: true });
+        expect(none.settings.cards).toBe('tree');
+
+        const storage = memStorage();
+        const kept = defaultGiftSettings([P('a')], LETTER);
+        kept.fan = { asTree: false, styles: ['pastel', 'antique'], photos: false };
+        kept.cards = 'register';
+        saveGiftMemory('t1', 'a', { lastAt: 'x', settings: kept, cutSize: 1 }, storage);
+        const back = loadGiftMemory('t1', 'a', storage)!;
+        expect(back.settings.fan).toEqual(kept.fan);
+        expect(back.settings.cards).toBe('register');
     });
 });

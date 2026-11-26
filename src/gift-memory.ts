@@ -8,9 +8,10 @@
 import type { PersonId } from './types.js';
 import type { PrivacyMode } from './privacy.js';
 import {
-    GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, defaultGiftParts, defaultGiftPrivacy,
-    type GiftCut, type GiftDepth, type GiftLang, type GiftLetter, type GiftMemory, type GiftParts, type GiftPrivacy, type GiftSettings,
+    GIFT_CARDS, GIFT_DEFAULT_CARDS, GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, defaultGiftFan, defaultGiftParts, defaultGiftPrivacy,
+    type GiftCards, type GiftCut, type GiftDepth, type GiftFan, type GiftLang, type GiftLetter, type GiftMemory, type GiftParts, type GiftPrivacy, type GiftSettings,
 } from './gift-tree.js';
+import { FAN_STYLES } from './fan-colors.js';
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -31,6 +32,8 @@ export function defaultGiftSettings(recipients: readonly PersonId[], letter: Gif
         privacy: defaultGiftPrivacy(),
         parts: defaultGiftParts(),
         photos: true,
+        fan: defaultGiftFan(),
+        cards: GIFT_DEFAULT_CARDS,
         letter: { ...letter },
     };
 }
@@ -77,6 +80,19 @@ function parsePrivacy(raw: unknown): GiftPrivacy {
     };
 }
 
+/** The fan's choices (K5.6): the valid styles in their order, none valid → Antique; an entry from before K5.6 takes the defaults. */
+export function parseGiftFan(raw: unknown): GiftFan {
+    const d = defaultGiftFan();
+    if (!isObj(raw)) return d;
+    const listed = Array.isArray(raw.styles) ? raw.styles : [];
+    const styles = FAN_STYLES.filter(st => listed.includes(st));
+    return { asTree: bool(raw.asTree, d.asTree), styles: styles.length ? styles : d.styles, photos: bool(raw.photos, d.photos) };
+}
+
+function parseCards(raw: unknown): GiftCards {
+    return GIFT_CARDS.includes(raw as GiftCards) ? raw as GiftCards : GIFT_DEFAULT_CARDS;
+}
+
 function parseLetter(raw: unknown): GiftLetter {
     const o = isObj(raw) ? raw : {};
     return {
@@ -102,6 +118,8 @@ export function parseGiftMemory(raw: unknown, recipients: readonly PersonId[]): 
         privacy: parsePrivacy(s.privacy),
         parts: flags<GiftParts>(s.parts, defaultGiftParts()),
         photos: bool(s.photos, true),
+        fan: parseGiftFan(s.fan),
+        cards: parseCards(s.cards),
         letter: parseLetter(s.letter),
         ...(typeof s.fileName === 'string' && s.fileName ? { fileName: s.fileName } : {}),
     };

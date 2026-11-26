@@ -337,7 +337,7 @@ export function giftCoverPreviewHtml(
     const lang = settings.letter.lang;
     const recipients = settings.cut.recipients.filter(id => !!data.persons[id]);
     const people = recipients.map(id => ({ id, name: shownName(data.persons[id]) || '?' }));
-    const names = giftFileNames(lang, people, year, settings.fileName);
+    const names = giftFileNames(lang, people, year, settings.fileName, settings.fan);
     const est = estimateGiftSize(source, settings, { now: o.now, ...(o.appProgramBytes ? { appProgramBytes: o.appProgramBytes } : {}) });
     const p = settings.parts;
     const files: GiftCoverFile[] = [];

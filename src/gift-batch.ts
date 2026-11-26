@@ -7,7 +7,7 @@
  */
 
 import type { Person, PersonId, StromData } from './types.js';
-import type { GiftCut, GiftLang, GiftLetter, GiftParts, GiftPrivacy, GiftSettings } from './gift-tree.js';
+import type { GiftCards, GiftCut, GiftFan, GiftLang, GiftLetter, GiftParts, GiftPrivacy, GiftSettings } from './gift-tree.js';
 import { giftPersonKey } from './gift-memory.js';
 import { giftDefaultSalutation } from './gift-cover.js';
 import { giftHasFamily, giftResolvedSettings } from './gift-guide.js';
@@ -28,6 +28,9 @@ export interface GiftOwnSettings {
     privacy?: Partial<GiftPrivacy>;
     parts?: Partial<GiftParts>;
     photos?: boolean;
+    /** Step 4's fan and cards (K5.6, K5.7), each whole. */
+    fan?: GiftFan;
+    cards?: GiftCards;
     letter?: Partial<Omit<GiftLetter, 'salutation'>>;
 }
 
@@ -93,6 +96,8 @@ export function giftMergeOwn(common: GiftSettings, own: GiftOwnSettings | undefi
         privacy: { ...common.privacy, ...o.privacy },
         parts: { ...common.parts, ...o.parts },
         photos: o.photos ?? common.photos,
+        fan: { ...(o.fan ?? common.fan), styles: [...(o.fan ?? common.fan).styles] },
+        cards: o.cards ?? common.cards,
         letter: { ...common.letter, ...o.letter, salutation },
         // Each package of a batch is named from its recipients.
         fileName: undefined,
@@ -117,6 +122,8 @@ export function giftOwnDiff(common: GiftSettings, edited: GiftSettings): GiftOwn
     for (const k of Object.keys(edited.parts) as (keyof GiftParts)[]) if (edited.parts[k] !== common.parts[k]) parts[k] = edited.parts[k];
     if (Object.keys(parts).length) out.parts = parts;
     if (edited.photos !== common.photos) out.photos = edited.photos;
+    if (!same(edited.fan, common.fan)) out.fan = { ...edited.fan, styles: [...edited.fan.styles] };
+    if (edited.cards !== common.cards) out.cards = edited.cards;
     const letter: Partial<Omit<GiftLetter, 'salutation'>> = {};
     for (const k of ['lang', 'motif', 'message', 'signature', 'date'] as const) {
         if (edited.letter[k] !== common.letter[k]) (letter as Record<string, unknown>)[k] = edited.letter[k];
@@ -131,7 +138,7 @@ export function giftOwnParts(own: GiftOwnSettings | undefined): GiftOwnPart[] {
     const out: GiftOwnPart[] = [];
     if (own.cut) out.push('cut');
     if (own.privacy) out.push('privacy');
-    if (own.parts || own.photos !== undefined) out.push('parts');
+    if (own.parts || own.photos !== undefined || own.fan || own.cards) out.push('parts');
     if (own.letter) out.push('letter');
     return out;
 }

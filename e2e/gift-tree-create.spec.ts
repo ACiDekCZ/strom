@@ -89,8 +89,10 @@ function checkPackage(download: Download, buf: Buffer): string[] {
     const app = at('Family tree (app).html').toString('utf8');
     const m = /window\.STROM_EMBEDDED_DATA = (\{[\s\S]*?\});<\/script>/.exec(app);
     expect(m).toBeTruthy();
-    const envelope = JSON.parse(m![1]) as { data: { defaultPersonId?: string; persons: Record<string, unknown> } };
+    const envelope = JSON.parse(m![1]) as { data: { defaultPersonId?: string; persons: Record<string, unknown> }; view?: unknown };
     expect(envelope.data.defaultPersonId).toBe('demo_daniel');
+    // The card detail chosen in step 4 (K5.7), Detailed by default.
+    expect(envelope.view).toEqual({ cardDensity: 'detailed' });
     expect(envelope.data.persons.demo_daniel).toBeTruthy();
     expect(at('Family pages/index.html').toString('utf8')).toContain('Daniel');
     expect(at('Family book.html').toString('utf8')).toContain('Berg');
@@ -221,6 +223,40 @@ test('step 4: the parts with their sizes, photos, the ZIP as a tree; Book settin
     await dialog.locator('[data-gk="photos-off"]').click();
     await expect(dialog.locator('[data-gk="photos-off"]')).toHaveAttribute('aria-checked', 'true');
 
+    // The fan (K5.6): Antique with photos, the plain stem; a second style, a file pair of its own each.
+    await expect(dialog.locator('[data-gk="fan-mode-styles"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(dialog.locator('[data-gk="fan-style-antique"]')).toBeChecked();
+    await expect(dialog.locator('[data-gk="fan-style-antique"]')).toBeDisabled();
+    // Photos off above: the fan's photos off and fixed; photos back, the fan's back too.
+    await expect(dialog.locator('[data-gk="fan-photos"]')).not.toBeChecked();
+    await expect(dialog.locator('[data-gk="fan-photos"]')).toBeDisabled();
+    await dialog.locator('[data-gk="photos-on"]').click();
+    await expect(dialog.locator('[data-gk="fan-photos"]')).toBeChecked();
+    await expect(dialog.locator('[data-gk="fan-photos"]')).toBeEnabled();
+    const zipRows = dialog.locator('.gift-zip-r');
+    await expect(zipRows.filter({ hasText: 'Ancestor fan.svg' })).toHaveCount(1);
+    const count = await zipRows.count();
+    await dialog.locator('[data-gk="fan-style-color"]').check();
+    await expect(zipRows).toHaveCount(count + 2);
+    await expect(zipRows.filter({ hasText: 'Ancestor fan – Colour.svg' })).toHaveCount(1);
+    await expect(zipRows.filter({ hasText: 'Ancestor fan – Antique.png' })).toHaveCount(1);
+    await expect(dialog.locator('[data-gk="fan-style-antique"]')).toBeEnabled();
+    // As in the tree: one fan, the look's link back.
+    await dialog.locator('[data-gk="fan-mode-tree"]').click();
+    await expect(zipRows).toHaveCount(count);
+    await expect(dialog.locator('[data-gk="fan-style-color"]')).toHaveCount(0);
+    await dialog.locator('[data-gk="fan-mode-styles"]').click();
+    await expect(dialog.locator('[data-gk="fan-style-color"]')).toBeChecked();
+
+    // Card detail of the app in the package (K5.7): Detailed by default.
+    await expect(dialog.locator('[data-gk="cards"]')).toHaveValue('detailed');
+    await dialog.locator('[data-gk="cards"]').selectOption('register');
+
+    // Nothing overflows sideways.
+    const wide = await dialog.locator('.modal').evaluate(m => [m, ...m.querySelectorAll('.gift-pane, .gift-pt-sub, .gift-pt-r')]
+        .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.className));
+    expect(wide).toEqual([]);
+
     // Book settings…: the book's dialog over the app; closed, the guide is back at step 4.
     await dialog.locator('[data-gk="part-link-book"]').click();
     await expect(page.locator('#book-modal')).toHaveClass(/active/);
@@ -230,6 +266,36 @@ test('step 4: the parts with their sizes, photos, the ZIP as a tree; Book settin
     await expect(dialog).toHaveClass(/active/);
     await expect(dialog.locator('#gift-sub')).toHaveText('step 4 of 6: What the package holds');
     await expect(dialog.locator('[data-part="gedcom"]')).not.toBeChecked();
+    await expect(dialog.locator('[data-gk="fan-style-color"]')).toBeChecked();
+    await expect(dialog.locator('[data-gk="cards"]')).toHaveValue('register');
+});
+
+test('step 4 on a phone upright and sideways, a tablet, in German, light and dark: the fan\'s and the cards\' rows fit', async ({ page }) => {
+    await sampleOnDaniel(page);
+    await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+    for (const [w, h] of [[390, 844], [844, 390], [1024, 768]] as const) {
+        for (const theme of ['light', 'dark'] as const) {
+            await page.setViewportSize({ width: w, height: h });
+            await page.evaluate(t => window.Strom.SettingsManager.setTheme(t), theme);
+            await page.evaluate(() => window.Strom.UI.showGiftTree({ personId: 'demo_daniel' as never }));
+            const dialog = page.locator('#gift-modal');
+            await expect(dialog).toHaveClass(/active/);
+            const nav = dialog.locator('#gift-nav');
+            if (await nav.isVisible()) await nav.locator('[data-step="4"]').click();
+            else {
+                await dialog.locator('#gift-sub-btn').click();
+                await page.locator('.gift-steps-sheet #gift-sheet-step-4').click();
+            }
+            const where = `${w}×${h} ${theme}`;
+            await expect(dialog.locator('[data-gk="fan-style-mono"]'), where).toBeVisible();
+            await expect(dialog.locator('[data-gk="cards"]'), where).toBeVisible();
+            const wide = await dialog.locator('.modal').evaluate(m => [m, ...m.querySelectorAll('.gift-pane, .gift-pt-sub, .gift-pt-r, .gift-seg')]
+                .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.className));
+            expect(wide, where).toEqual([]);
+            await dialog.locator('.modal-header .close-btn').click();
+            await expect(dialog).not.toHaveClass(/active/);
+        }
+    }
 });
 
 test('step 5: the template by language and motif, an own message in the live preview, the template inserted again', async ({ page }) => {

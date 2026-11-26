@@ -28,8 +28,8 @@ import type { Person, PersonId, StromData } from './types.js';
 import type { LineageIndex } from './lineage.js';
 import { ancestorGenerations } from './lineage.js';
 import {
-    giftCutIds, giftProtectedData, giftShortensLiving,
-    type GiftLang, type GiftLetter, type GiftParts, type GiftSettings,
+    defaultGiftFan, giftCutIds, giftProtectedData, giftShortensLiving,
+    type GiftCards, type GiftFan, type GiftLang, type GiftLetter, type GiftParts, type GiftSettings,
 } from './gift-tree.js';
 import { getStringsForLang, joinAnd } from './strings.js';
 import { buildGiftCover, giftMessage } from './gift-cover.js';
@@ -41,12 +41,12 @@ import { buildPageSetFilesAsync, pageSetRenderedPages } from './family-pages-htm
 import { buildFamilyBookAsync, defaultBookOptions, type BookOptions } from './book.js';
 import { defaultPagesChoices, type PagesChoices } from './book-memory.js';
 import {
-    buildFanModel, buildFanPosterSvg, fanPosterGeometry, FAN_MAX_GENERATIONS, FAN_MIN_GENERATIONS,
-    type FanModel,
+    buildFanModel, buildFanPosterSvg, fanPosterGeometry, FAN_MAX_DESC_GENERATIONS, FAN_MAX_GENERATIONS, FAN_MIN_DESC_GENERATIONS, FAN_MIN_GENERATIONS,
+    type FanModel, type FanShape,
 } from './fan-chart.js';
 import type { FanPortrait } from './fan-chart.js';
 import { FAN_LOOK_DEFAULT, type FanLook } from './fan-look.js';
-import { fanStyleFont, type FanColorMode } from './fan-colors.js';
+import { fanStyleFont, type FanColorMode, type FanStyle } from './fan-colors.js';
 import { fanMeasureFor } from './fan-labels.js';
 import { escapeXml, type PosterFooterMeta } from './export-image.js';
 import { exportToGedcom } from './ged-exporter.js';
@@ -138,22 +138,43 @@ export interface GiftFileNames {
     /** The family pages' folder (its index.html opens them). */
     pages: string;
     book: string;
-    /** The fans' stems (".svg" / ".png" follow): one per recipient, a couple's with each one's name. */
-    fans: { personId: PersonId; stem: string }[];
+    /**
+     * The fans' stems (".svg" / ".png" follow): one per recipient and variant
+     * (K5.6), a couple's with each one's name, several styles each with its
+     * style's name; `style` null for the fan as in the app.
+     */
+    fans: { personId: PersonId; style: FanStyle | null; stem: string }[];
     gedcom: string;
 }
 
-/** The names of a package's files (§5); `fileName` the guide's own name for the archive (".zip" kept). */
+/** The fan's variants (K5.6): each chosen style, or one as in the app (null). */
+export function giftFanVariants(fan: GiftFan): (FanStyle | null)[] {
+    if (fan.asTree) return [null];
+    return fan.styles.length ? [...fan.styles] : [...defaultGiftFan().styles];
+}
+
+/** A fan style's name in a language ("Antique"): the fan view's own. */
+export function giftFanStyleName(lang: GiftLang, style: FanStyle): string {
+    const S = getStringsForLang(lang).fan;
+    return style === 'color' ? S.styleColor : style === 'pastel' ? S.stylePastel : style === 'antique' ? S.styleAntique : S.styleMono;
+}
+
+/** The names of a package's files (§5); `fileName` the guide's own name for the archive (".zip" kept); `fan` its variants (K5.6). */
 export function giftFileNames(
-    lang: GiftLang, people: readonly { id: PersonId; name: string }[], year: number, fileName?: string,
+    lang: GiftLang, people: readonly { id: PersonId; name: string }[], year: number, fileName?: string, fan: GiftFan = defaultGiftFan(),
 ): GiftFileNames {
     const F = getStringsForLang(lang).giftTree.files;
     const label = giftNamesLabel(lang, people.map(p => p.name));
     const stem = (fileName ?? '').trim().replace(/\.zip$/i, '');
     const zip = `${unicodeFileName(stem || F.zip(label, year).replace(/\.zip$/, ''), 'family-tree')}.zip`;
-    const fans = people.length > 1
-        ? people.map(p => ({ personId: p.id, stem: unicodeFileName(F.fanOf(p.name), F.fan) }))
-        : people.map(p => ({ personId: p.id, stem: unicodeFileName(F.fan, 'fan') }));
+    const variants = giftFanVariants(fan);
+    const fans = people.flatMap(p => {
+        const base = people.length > 1 ? F.fanOf(p.name) : F.fan;
+        return variants.map(style => ({
+            personId: p.id, style,
+            stem: unicodeFileName(style && variants.length > 1 ? `${base} – ${giftFanStyleName(lang, style)}` : base, people.length > 1 ? F.fan : 'fan'),
+        }));
+    });
     return {
         zip,
         folder: unicodeFileName(F.folder(label), 'family-tree'),
@@ -211,19 +232,23 @@ export type GiftCoverBuilder = (data: StromData, info: GiftCoverInfo) => string 
 
 // ==================== One package ====================
 
-/** The fan's own choices: the look, the colours, the depth, the portraits (browser). */
+/** The fan's own choices: the look, the colours, the shape, the depth, the portraits (browser). */
 export interface GiftFanOptions {
     look?: FanLook;
     colorMode?: FanColorMode;
+    /** The shape; default giftFanShape (two-way with descendants in the cut, else a half circle). */
+    shape?: FanShape;
     /** Ancestor rings; default: as deep as the recipient's ancestors go (3–10). */
     generations?: number;
+    /** Descendant rings of the two-way shape; default: as deep as the descendants in the cut go (1–5). */
+    descGenerations?: number;
     portrait?: (person: Person) => FanPortrait | null;
 }
 
 /** What the making needs from the window (all optional where tests can do without). */
 export interface GiftPackageEnv {
-    /** The app with these data embedded, as a Blob (AppExporter.buildFocusAppBlob); required for the app part. */
-    app?: (data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string }) => Promise<Blob>;
+    /** The app with these data embedded, as a Blob (AppExporter.buildFocusAppBlob); required for the app part. `cards` the detail its cards open with (K5.7). */
+    app?: (data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string; cards: GiftCards }) => Promise<Blob>;
     /** An SVG drawn to a PNG (svgToPngBlob); none or null: the fan only as SVG. */
     png?: (svg: string, widthPx: number, heightPx: number) => Promise<Blob | null>;
     /** The cover page; default: buildGiftCover. */
@@ -287,6 +312,40 @@ function fanGenerations(data: StromData, id: PersonId): number {
     return Math.min(FAN_MAX_GENERATIONS, Math.max(FAN_MIN_GENERATIONS, ancestorGenerations(data, id).length));
 }
 
+/** How deep the descendants of `id` reach in `data` (placeholders not counted); 0 without any. */
+function descendantDepth(data: StromData, id: PersonId): number {
+    let depth = 0;
+    let level: PersonId[] = [id];
+    const seen = new Set<PersonId>([id]);
+    while (level.length) {
+        const next: PersonId[] = [];
+        for (const pid of level) {
+            for (const ch of data.persons[pid]?.childIds ?? []) {
+                const c = data.persons[ch];
+                if (!c || c.isPlaceholder || seen.has(ch)) continue;
+                seen.add(ch);
+                next.push(ch);
+            }
+        }
+        if (!next.length) break;
+        depth++;
+        level = next;
+    }
+    return depth;
+}
+
+/**
+ * The fan's shape by default (K5.6): two-way when the recipient has
+ * descendants in the package's data, as deep as they reach (1–5 rings), else
+ * a half circle of ancestors. `descGenerations` is given either way (for a
+ * two-way shape taken from the app).
+ */
+export function giftFanShape(data: StromData, id: PersonId): { shape: 'two' | 'half'; descGenerations: number } {
+    const depth = descendantDepth(data, id);
+    const descGenerations = Math.min(FAN_MAX_DESC_GENERATIONS, Math.max(FAN_MIN_DESC_GENERATIONS, depth));
+    return { shape: depth > 0 ? 'two' : 'half', descGenerations };
+}
+
 /** The fan poster of one recipient: the SVG and its size; null without a fan (not in the data). */
 export function giftFanPoster(
     data: StromData, personId: PersonId, lang: GiftLang, opts: GiftFanOptions & { treeName?: string; dateLabel?: string; fontCss?: string } = {},
@@ -294,7 +353,10 @@ export function giftFanPoster(
     const p = data.persons[personId];
     if (!p) return null;
     const generations = opts.generations ?? fanGenerations(data, personId);
-    const model = buildFanModel(data, personId, { generations, shape: 'half' });
+    const auto = giftFanShape(data, personId);
+    const model = buildFanModel(data, personId, {
+        generations, shape: opts.shape ?? auto.shape, descGenerations: opts.descGenerations ?? auto.descGenerations,
+    });
     if (!model) return null;
     const look = opts.look ?? FAN_LOOK_DEFAULT;
     const colorMode = opts.colorMode ?? 'gender';
@@ -381,7 +443,8 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
         checkAbort(signal);
         const recipients = settings.cut.recipients.filter(id => !!data.persons[id]);
         const people = recipients.map(id => ({ id, name: shownName(data.persons[id]) || shownName(whole.persons[id]) || '?' }));
-        const names = giftFileNames(lang, people, now.getFullYear(), settings.fileName);
+        const fan = settings.fan ?? defaultGiftFan();
+        const names = giftFileNames(lang, people, now.getFullYear(), settings.fileName, fan);
         folder = names.folder;
         const persons = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
         const dateLabel = dateLabelOf(lang, now);
@@ -396,6 +459,7 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
             const signature = (settings.letter.signature ?? '').trim();
             let blob: Blob | null = await env.app(data, {
                 treeName: input.treeName,
+                cards: settings.cards ?? 'detailed',
                 ...(signature ? { senderName: signature } : {}),
                 ...(message ? { senderMessage: message } : {}),
             });
@@ -456,13 +520,27 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
             end();
         }
 
-        // 5. The ancestor fan of each recipient: SVG, and PNG where the window draws one.
+        // 5. The fan of each recipient in each variant (K5.6): SVG, and PNG where the window draws one.
         if (parts.fan) {
             begin('fan');
             for (const f of names.fans) {
                 await hold();
+                // A chosen style: its own look (gender colours, portraits by the fan's and the package's photos), the shape by default;
+                // as in the app: the app's look, colours and shape.
+                const own: GiftFanOptions = f.style
+                    ? {
+                        look: { style: f.style, rodScope: 'all', content: FAN_LOOK_DEFAULT.content, portraits: fan.photos && settings.photos },
+                        colorMode: 'gender',
+                    }
+                    : {
+                        ...(env.fan?.look ? { look: env.fan.look } : {}),
+                        ...(env.fan?.colorMode ? { colorMode: env.fan.colorMode } : {}),
+                        ...(env.fan?.shape ? { shape: env.fan.shape } : {}),
+                    };
                 const poster = giftFanPoster(data, f.personId, lang, {
-                    ...(env.fan ?? {}), treeName: input.treeName, dateLabel,
+                    ...(env.fan?.generations ? { generations: env.fan.generations } : {}),
+                    ...(env.fan?.portrait ? { portrait: env.fan.portrait } : {}),
+                    ...own, treeName: input.treeName, dateLabel,
                     ...(env.fonts?.fan ? { fontCss: env.fonts.fan } : {}),
                 });
                 if (!poster) continue;
@@ -683,7 +761,7 @@ export interface GiftSizeEstimate {
  */
 export function estimateGiftSize(
     source: StromData | LineageIndex, settings: GiftSettings,
-    opts: { appProgramBytes?: number; protectedData?: StromData; now?: Date } = {},
+    opts: { appProgramBytes?: number; protectedData?: StromData; now?: Date; treeFanShape?: FanShape } = {},
 ): GiftSizeEstimate {
     const now = opts.now ?? new Date();
     const data = opts.protectedData
@@ -700,13 +778,19 @@ export function estimateGiftSize(
     let fanText = 0;
     let fanPng = 0;
     if (p.fan) {
+        // Each recipient's poster in the shape the package draws, once per variant (K5.6).
+        const fan = settings.fan ?? defaultGiftFan();
+        const variants = giftFanVariants(fan).length;
         for (const id of settings.cut.recipients) {
             if (!data.persons[id]) continue;
-            const model = buildFanModel(data, id, { generations: fanGenerations(data, id), shape: 'half' });
+            const auto = giftFanShape(data, id);
+            const shape = fan.asTree && opts.treeFanShape ? opts.treeFanShape : auto.shape;
+            const model = buildFanModel(data, id, { generations: fanGenerations(data, id), shape, descGenerations: auto.descGenerations });
             if (!model) continue;
-            fanText += FAN_SVG_BYTES + model.sectors.filter(s => s.person).length * FAN_SECTOR_BYTES;
+            const sectors = model.sectors.filter(s => s.person).length + model.desc.filter(s => s.person).length;
+            fanText += variants * (FAN_SVG_BYTES + sectors * FAN_SECTOR_BYTES);
             const geom = fanPosterGeometry(model, {});
-            fanPng += Math.round(geom.width * geom.height * 4 * FAN_PNG_BYTES_PER_PX);
+            fanPng += variants * Math.round(geom.width * geom.height * 4 * FAN_PNG_BYTES_PER_PX);
         }
     }
 

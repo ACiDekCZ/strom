@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Gender, Partnership, PartnershipId, Person, PersonId, StromData } from '../types.js';
-import { defaultGiftParts, defaultGiftPrivacy, type GiftPrivacy, type GiftSettings } from '../gift-tree.js';
+import { defaultGiftFan, defaultGiftParts, defaultGiftPrivacy, type GiftPrivacy, type GiftSettings } from '../gift-tree.js';
 import { buildGiftPackage, type GiftPackageEnv } from '../gift-package.js';
 import { blobBytes, readZipEntries } from './helpers/zip-read.js';
 
@@ -110,6 +110,8 @@ function settings(privacy: GiftPrivacy): GiftSettings {
         privacy,
         parts: defaultGiftParts(),
         photos: true,
+        fan: defaultGiftFan(),
+        cards: 'detailed',
         letter: { lang: 'en', motif: 'none', salutation: 'Dear Linnea', message: 'For [name].', signature: 'Aunt', date: '2026-12-20' },
     };
 }

@@ -2414,6 +2414,11 @@ export interface EmbeddedDataEnvelope {
     senderName?: string;
     /** exportId of the ORIGINAL export this file replies to (lineage). */
     replyToExportId?: string;
+    /**
+     * The card type the file opens with (a gift package's app, spec 093 K5.7),
+     * taken only when the reader never chose one; `cardFields` with 'custom'.
+     */
+    view?: { cardDensity: CardDensity; cardFields?: import('./card-fields.js').CardFieldSettings };
 }
 
 /** Reference to encrypted data type (actual type in crypto.ts) */

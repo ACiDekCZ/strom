@@ -24,6 +24,7 @@ import {
     type DeceasedDetails, type LivingSensitive, type PrivacyMode,
 } from './privacy.js';
 import { stripMedia } from './attachments.js';
+import type { FanStyle } from './fan-colors.js';
 import { dropDanglingPortraitSources } from './photo.js';
 
 // ==================== Model ====================
@@ -100,12 +101,42 @@ export interface GiftLetter {
     date: string;
 }
 
+/**
+ * The ancestor fan of the package (spec 093 K5.6): one poster per chosen
+ * style (two-way when the recipient has descendants in the cut, else a half
+ * circle; with portraits when `photos`), or `asTree` one poster in the fan's
+ * current look and shape in the app.
+ */
+export interface GiftFan {
+    asTree: boolean;
+    /** At least one; in the order of FAN_STYLES. */
+    styles: FanStyle[];
+    photos: boolean;
+}
+
+/** The detail of the cards in the package's app (spec 093 K5.7); 'tree' = the card type of the app now (a custom set too). */
+export type GiftCards = 'compact' | 'normal' | 'detailed' | 'register' | 'tree';
+
+export const GIFT_CARDS: readonly GiftCards[] = ['compact', 'normal', 'detailed', 'register', 'tree'];
+
+/** The cards by default: Detailed. */
+export const GIFT_DEFAULT_CARDS: GiftCards = 'detailed';
+
+/** The fan by default: Antique with portraits, the shape by the recipient's descendants. */
+export function defaultGiftFan(): GiftFan {
+    return { asTree: false, styles: ['antique'], photos: true };
+}
+
 /** Everything the guide sets for one package. */
 export interface GiftSettings {
     cut: GiftCut;
     privacy: GiftPrivacy;
     parts: GiftParts;
     photos: boolean;
+    /** The fan's variants (K5.6). */
+    fan: GiftFan;
+    /** The app's cards (K5.7). */
+    cards: GiftCards;
     letter: GiftLetter;
     fileName?: string;
 }

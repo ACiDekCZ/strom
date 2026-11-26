@@ -163,6 +163,22 @@ export function normalizeCardDensity(value: unknown): CardDensity {
     return CARD_DENSITIES.includes(value as CardDensity) ? value as CardDensity : 'normal';
 }
 
+/**
+ * The card type a file with embedded data asks for (EmbeddedDataEnvelope.view,
+ * spec 093 K5.7), as it is set: only when the reader never chose a card type
+ * (their own choice is never replaced) and the type is one this version
+ * knows; the fields with Custom (repaired), else none. Null: nothing to set.
+ */
+export function embeddedCardView(view: unknown, readerChose: boolean): { density: CardDensity; fields?: CardFieldSettings } | null {
+    if (readerChose || !view || typeof view !== 'object') return null;
+    const v = view as { cardDensity?: unknown; cardFields?: unknown };
+    if (!CARD_DENSITIES.includes(v.cardDensity as CardDensity)) return null;
+    const density = v.cardDensity as CardDensity;
+    if (density !== 'custom') return { density };
+    const raw = v.cardFields && typeof v.cardFields === 'object' ? v.cardFields as Partial<CardFieldSettings> : undefined;
+    return { density, fields: normalizeCardFields(raw) };
+}
+
 /** The photo sizes and shapes of Settings → Person card → Photo on the card (spec 096). */
 export const CARD_PHOTO_SIZES: readonly CardPhotoSize[] = ['small', 'medium', 'large'];
 export const CARD_PHOTO_SHAPES: readonly CardPhotoShape[] = ['circle', 'rounded'];

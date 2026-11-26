@@ -32785,6 +32785,17 @@
         .gift-pt-r.is-off :is(.gift-pt-t, .gift-pt-s) { color: var(--text-faint); }
         .gift-photos-h { margin-top: 8px; font-size: 13px; }
         .gift-seg-photos { max-width: 420px; }
+        /* A part's own choices under its row (the app's cards, the fan's variants, K5.6–K5.7), faded while the part is left out. */
+        .gift-modal label.gift-pt-r.has-sub { padding-bottom: 8px; border-bottom: 0; }
+        .gift-pt-sub { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 0 0 12px 28px; border-bottom: 1px solid var(--divider); }
+        .gift-pt-sub.is-off > :not(.gift-seg) { opacity: 0.55; }
+        .gift-modal .gift-pt-sub.is-off label.content-check { cursor: default; }
+        .gift-seg-fan-mode { max-width: 420px; }
+        .gift-modal .gift-fan-styles.content-checks { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 420px; }
+        .gift-modal .gift-fan .content-check span { min-width: 0; overflow-wrap: anywhere; }
+        .gift-modal .gift-fan .content-check:has(input:disabled) { cursor: default; }
+        .gift-modal label.gift-fan-photos { align-self: flex-start; }
+        .gift-modal .gift-cards .gift-select { max-width: 280px; }
         .gift-zip-tree { display: flex; flex-direction: column; }
         .gift-zip-r { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: center; min-height: 28px; font-size: 13px; color: var(--text); }
         .gift-zip-r.is-l1 { padding-left: 18px; }
@@ -32805,10 +32816,14 @@
             .gift-modal label.gift-pt-r { grid-template-columns: 20px minmax(0, 1fr) auto; min-height: 48px; }
             .gift-modal .gift-pt-r input[type="checkbox"] { width: 20px; height: 20px; }
             .gift-seg-photos { max-width: none; }
+            .gift-pt-sub { padding-left: 32px; }
+            .gift-seg-fan-mode, .gift-modal .gift-fan-styles.content-checks, .gift-modal .gift-cards .gift-select { max-width: none; }
         }
         @media (pointer: coarse) {
             /* A link inside a sentence keeps the line's height; an invisible target around it is the 44px. */
             .gift-modal :is(.gift-review-dl, .gift-pt-d) .link-button { position: relative; min-height: 0; }
+            .gift-modal .gift-fan label.content-check { min-height: 44px; }
+            .gift-modal .gift-cards .gift-select { min-height: 44px; }
             .gift-modal :is(.gift-review-dl, .gift-pt-d) .link-button::after { content: ''; position: absolute; inset: -13px -8px; }
         }
 

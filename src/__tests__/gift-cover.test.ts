@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getDemoTree } from '../demo-tree.js';
 import type { PersonId, StromData } from '../types.js';
 import {
-    defaultGiftParts, defaultGiftPrivacy, giftProtectedData, giftShortensLiving,
+    defaultGiftFan, defaultGiftParts, defaultGiftPrivacy, giftProtectedData, giftShortensLiving,
     type GiftCut, type GiftLang, type GiftLetter, type GiftParts, type GiftPrivacy,
 } from '../gift-tree.js';
 import { buildGiftPackage, giftMessage, type GiftCoverFile, type GiftCoverInfo } from '../gift-package.js';
@@ -212,7 +212,7 @@ describe('the cover page (§6)', () => {
         const settings = {
             cut: cutOf('daniel'), privacy: defaultGiftPrivacy(),
             parts: { ...defaultGiftParts(), pages: false, book: false, fan: false },
-            photos: false, letter: letterOf('cs', 'xmas', '[oslovení], hezké svátky.'),
+            photos: false, fan: defaultGiftFan(), cards: 'detailed' as const, letter: letterOf('cs', 'xmas', '[oslovení], hezké svátky.'),
         };
         const r = await buildGiftPackage({
             data: sensitiveTree(), settings, treeName: 'Berg',

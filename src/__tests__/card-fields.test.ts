@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     cardLines, cardDate, normalizeCardFields, customCardSize, DEFAULT_CARD_FIELDS, CardFieldSettings,
     CARD_FIELD_KEYS, cardPreset, matchCardPreset, effectiveCardFields, normalizeCardDensity, isFieldCardDensity, CARD_PRESET_KEYS,
-    presetAsCustom, cardTypeForKey, cardLineHtml,
+    presetAsCustom, cardTypeForKey, cardLineHtml, embeddedCardView,
 } from '../card-fields.js';
 import { setLanguage } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
@@ -294,5 +294,29 @@ describe('the row of card types (Settings)', () => {
         expect(cardTypeForKey('register', 'End')).toBe('custom');
         expect(cardTypeForKey('register', 'Enter')).toBeNull();
         expect(cardTypeForKey('register', 'a')).toBeNull();
+    });
+});
+
+describe('the card type a file with embedded data opens with (spec 093 K5.7)', () => {
+    it('is set only when the reader never chose one', () => {
+        expect(embeddedCardView({ cardDensity: 'detailed' }, false)).toEqual({ density: 'detailed' });
+        expect(embeddedCardView({ cardDensity: 'register' }, false)).toEqual({ density: 'register' });
+        expect(embeddedCardView({ cardDensity: 'compact' }, false)).toEqual({ density: 'compact' });
+        // The reader's own choice is never replaced.
+        expect(embeddedCardView({ cardDensity: 'detailed' }, true)).toBeNull();
+        expect(embeddedCardView({ cardDensity: 'custom', cardFields: DEFAULT_CARD_FIELDS }, true)).toBeNull();
+    });
+
+    it('a custom card brings its fields, repaired; nothing for no view or an unknown type', () => {
+        const fields = { ...DEFAULT_CARD_FIELDS, on: ['birth', 'baptism'], fullDate: true, bogus: 1 } as unknown as CardFieldSettings;
+        const v = embeddedCardView({ cardDensity: 'custom', cardFields: fields }, false)!;
+        expect(v.density).toBe('custom');
+        expect(v.fields).toEqual(normalizeCardFields(fields));
+        expect(v.fields!.on).toEqual(['birth', 'baptism']);
+        expect(embeddedCardView({ cardDensity: 'custom' }, false)).toEqual({ density: 'custom', fields: normalizeCardFields(undefined) });
+        expect(embeddedCardView({ cardDensity: 'detailed', cardFields: fields }, false)).toEqual({ density: 'detailed' });
+        expect(embeddedCardView(undefined, false)).toBeNull();
+        expect(embeddedCardView({ cardDensity: 'huge' }, false)).toBeNull();
+        expect(embeddedCardView('detailed', false)).toBeNull();
     });
 });
