@@ -121,14 +121,15 @@ export function imagesSentence(img: ImagesState): string {
 /**
  * The state of an item's images in its detail: the book's frame with a chip
  * per number (saved / missing) and a sentence; a count not known: the
- * sentence and how it is finished; an older research: the sentence alone.
+ * sentence and how it is finished ("All images added" where the bridge takes
+ * an answer: `allImages`); an older research: the sentence alone.
  */
-export function appendImagesDetail(host: HTMLElement, img: ImagesState): void {
+export function appendImagesDetail(host: HTMLElement, img: ImagesState, opts: { allImages?: boolean } = {}): void {
     const T = strings.live.waitingTask;
     const missing = img.missing ?? [];
     if (img.detail === 'unknown') {
         host.appendChild(el('p', 'wait-book__state', T.imagesUnknown(img.have)));
-        host.appendChild(el('p', 'research-overview__waiting-hint wait-book__hint', T.unknownHint));
+        host.appendChild(el('p', 'research-overview__waiting-hint wait-book__hint', opts.allImages ? T.unknownHint : T.unknownHintNoAnswer));
         return;
     }
     const sentence = imagesSentence(img);

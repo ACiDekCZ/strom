@@ -24,7 +24,7 @@ import { WAITING_ROWS_SCOPE } from './waiting-row-notes.js';
 import { el, liveSession, LiveSession, researchSession } from './research-ui.js';
 import { rangesWhole } from './ranges-whole.js';
 import { UploadNumbers, UploadOutcome, WaitingImagesUpload } from './waiting-images-upload.js';
-import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
+import { WaitingAnswerForm, WaitingAnswerMode, allImagesAnswerTexts, answerFormKey, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { bindImagesDrop, imagesShortEl, itemKey } from './waiting-images-ui.js';
 import {
     auditChangeLines, auditExplain, auditFixError, auditLeftLines, type AuditFixError, type AuditPreview, type WaitingAudit,
@@ -740,25 +740,27 @@ export const waitingTaskMethods = uiModule({
      * Send in its head, the task's title, the field filling the rest; with the
      * keyboard up the sheet follows the visible height, the head with Send
      * stays on top. Errors and the draft as in the overview (the error above
-     * the field).
+     * the field). `all-images`: "All images added" in its head, its fixed
+     * answer with an optional note.
      */
-    openWaitingAnswerSheet(s: LiveSession, w: LiveWaiting): void {
+    openWaitingAnswerSheet(s: LiveSession, w: LiveWaiting, mode: WaitingAnswerMode = 'answer'): void {
         const task = researchTaskRef(w.id);
         if (!task || !this.liveWaitingWrites(s).answer) return;
         this.closeWaitingAnswerSheet();
         this.closeWaitingMoreMenu();
         const T = strings.live.waitingTask;
-        const key = itemKey(s, w.id);
+        const key = answerFormKey(itemKey(s, w.id), mode);
         const sheet = el('div', 'modal-overlay active waiting-answer-sheet');
         sheet.id = SHEET_ID;
         sheet.dataset.id = w.id;
+        sheet.dataset.mode = mode;
         sheet.setAttribute('role', 'dialog');
         sheet.setAttribute('aria-modal', 'true');
         sheet.setAttribute('aria-labelledby', `${SHEET_ID}-title`);
         const head = el('div', 'waiting-answer-sheet__head');
         const cancel = el('button', 'waiting-answer-sheet__cancel', T.cancel);
         cancel.type = 'button';
-        const title = el('h2', 'waiting-answer-sheet__title', T.answerTitle);
+        const title = el('h2', 'waiting-answer-sheet__title', mode === 'all-images' ? T.allImages : T.answerTitle);
         title.id = `${SHEET_ID}-title`;
         const send = el('button', 'waiting-answer-sheet__send', T.answerSendShort);
         send.type = 'button';
@@ -773,8 +775,8 @@ export const waitingTaskMethods = uiModule({
         let form = sheetForms.get(key);
         if (!form || form.spent) {
             form = new WaitingAnswerForm({
-                treeId: s.treeId, task, idPrefix: `sheet-answer-${w.id}`, buttons: false,
-                ...this.waitingAnswerTexts(s, w),
+                treeId: s.treeId, task, idPrefix: `sheet-${mode}-${w.id}`, buttons: false,
+                ...(mode === 'all-images' ? allImagesAnswerTexts() : this.waitingAnswerTexts(s, w)),
                 send: async (text) => {
                     const now = s.waiting.find(x => x.id === w.id) ?? w;
                     const outcome = await this.sendWaitingAnswer(s, now, text);
@@ -808,7 +810,7 @@ export const waitingTaskMethods = uiModule({
         body.appendChild(f.root);
         // A device of the home network (spec 094 §4, 4.5): a photo taken now or one of the gallery goes to the task, as a
         // computer's file does.
-        if (inDeviceMode() && this.waitingTakesImages(s, w)) body.appendChild(el('div', 'waiting-answer-sheet__images'));
+        if (mode === 'answer' && inDeviceMode() && this.waitingTakesImages(s, w)) body.appendChild(el('div', 'waiting-answer-sheet__images'));
         sheet.append(head, what, body);
         document.body.appendChild(sheet);
         this.mountSheetImages(s, w);
@@ -839,9 +841,10 @@ export const waitingTaskMethods = uiModule({
         sheetCleanup = null;
         const sheet = document.getElementById(SHEET_ID);
         const id = sheet?.dataset.id;
+        const action = sheet?.dataset.mode === 'all-images' ? 'all-images' : 'answer';
         sheet?.remove();
         if (back && id) {
-            document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(id)}"] [data-action="answer"]`)?.focus();
+            document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(id)}"] [data-action="${action}"]`)?.focus();
         }
     },
 

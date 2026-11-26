@@ -34,6 +34,18 @@ export type WaitingAnswerOutcome =
 
 export type WaitingAnswerError = 'busy' | 'fail';
 
+/** What an answer form writes: an answer of its own, or "All images added" (a fixed answer with an optional note). */
+export type WaitingAnswerMode = 'answer' | 'all-images';
+
+/** The key a kept form goes by: the item's, "All images added" apart from its answer. */
+export const answerFormKey = (key: string, mode: WaitingAnswerMode): string => mode === 'answer' ? key : `${key}|${mode}`;
+
+/** The texts of "All images added" (the fixed answer, its note's heading, example and hint). */
+export function allImagesAnswerTexts(): Pick<WaitingAnswerFormOptions, 'label' | 'hint' | 'placeholder' | 'fixed'> {
+    const T = strings.live.waitingTask;
+    return { label: T.allImagesNote, hint: T.allImagesHint(T.allImagesText), placeholder: T.allImagesPlaceholder, fixed: T.allImagesText };
+}
+
 export interface WaitingAnswerFormOptions {
     treeId: string;
     task: string;
@@ -51,6 +63,13 @@ export interface WaitingAnswerFormOptions {
     /** The field's heading and its hint (default: an answer to the task; images: why they cannot be had, spec 105 U4 §5). */
     label?: string;
     hint?: string;
+    /** The field's example (default: an answer to the task). */
+    placeholder?: string;
+    /**
+     * A fixed answer ("All images are uploaded.", a count of images not
+     * known): the field is an optional note after it, sendable empty, no draft kept.
+     */
+    fixed?: string;
 }
 
 /** Characters from which the counter shows. */
@@ -88,10 +107,11 @@ export class WaitingAnswerForm {
         label.htmlFor = `${id}-text`;
         this.textarea = node('textarea', 'waiting-answer__text');
         this.textarea.id = `${id}-text`;
-        this.textarea.rows = 4;
-        this.textarea.maxLength = WAITING_ANSWER_MAX;
-        this.textarea.placeholder = T.answerPlaceholder;
-        this.textarea.value = readWaitingDraft(opts.treeId, opts.task);
+        this.textarea.rows = opts.fixed ? 2 : 4;
+        this.textarea.maxLength = opts.fixed ? WAITING_ANSWER_MAX - [...opts.fixed].length - 1 : WAITING_ANSWER_MAX;
+        this.textarea.placeholder = opts.placeholder ?? T.answerPlaceholder;
+        this.textarea.value = opts.fixed ? '' : readWaitingDraft(opts.treeId, opts.task);
+        if (opts.fixed) this.root.classList.add('is-fixed');
         this.textarea.setAttribute('aria-describedby', `${id}-hint ${id}-error`);
         const foot = node('div', 'waiting-answer__foot');
         const hint = node('p', 'waiting-answer__hint', opts.hint ?? T.answerHint);
@@ -137,7 +157,10 @@ export class WaitingAnswerForm {
 
     /** The text as it would go (null: empty or too long). */
     get text(): string | null {
-        return waitingAnswerText(this.textarea.value);
+        const fixed = this.opts.fixed;
+        if (!fixed) return waitingAnswerText(this.textarea.value);
+        const note = this.textarea.value.trim();
+        return waitingAnswerText(note ? `${fixed} ${note}` : fixed);
     }
 
     get canSend(): boolean {
@@ -173,7 +196,7 @@ export class WaitingAnswerForm {
     keepDraftNow(): void {
         if (this.timer) clearTimeout(this.timer);
         this.timer = null;
-        if (!this.finished) writeWaitingDraft(this.opts.treeId, this.opts.task, this.textarea.value);
+        if (!this.finished && !this.opts.fixed) writeWaitingDraft(this.opts.treeId, this.opts.task, this.textarea.value);
     }
 
     async submit(): Promise<WaitingAnswerOutcome | null> {
@@ -192,7 +215,7 @@ export class WaitingAnswerForm {
         if (outcome === 'saved' || outcome === 'gone') {
             this.finished = true;
             this.err = null;
-            clearWaitingDraft(this.opts.treeId, this.opts.task);
+            if (!this.opts.fixed) clearWaitingDraft(this.opts.treeId, this.opts.task);
         } else {
             this.err = outcome === 'busy' || outcome === 'fail' ? outcome : null;
         }
@@ -220,7 +243,7 @@ export class WaitingAnswerForm {
             this.sendBtn.textContent = this.err ? T.retry : T.answerSend;
             this.sendBtn.setAttribute('aria-disabled', String(!this.canSend));
         }
-        if (this.draftLine) this.draftLine.hidden = !(this.err && this.textarea.value.trim());
+        if (this.draftLine) this.draftLine.hidden = !(this.err && !this.opts.fixed && this.textarea.value.trim());
         this.opts.onChange?.(this);
     }
 }

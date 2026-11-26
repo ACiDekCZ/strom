@@ -385,6 +385,106 @@ test.describe('a research that takes answers and images (waiting.answer, accepts
     });
 });
 
+/** A task of images that does not know how many it wants (K044): its inbox has no count, three images saved. */
+function withUnknownCount(b: Bridge): void {
+    b.waiting.push({
+        id: 'T0005', what: 'Uložit snímky zápisů z roku 1863 v oddací matrice', kind: 'images', section: 'images', group: ARCHIVE, order: 4,
+        at: new Date(Date.now() - 2 * 86_400_000).toISOString(), person: 'P0001',
+        inbox: { dir: 'inbox/T0005', have: 3, book: 'Oddací matrika N 1860–1875' },
+        actions: ['images', 'answer', 'chat', 'folder'],
+    });
+}
+
+test.describe('a count of images not known: All images added (through the bridge, no mark)', () => {
+    test('the button beside the link, its fixed answer with an optional note; a known count has none', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, withUnknownCount);
+        await openOverview(page);
+        // A known count comes back by itself: no such button there.
+        const known = await openItem(page, 'T0001');
+        await expect(known.locator('[data-action="all-images"]')).toHaveCount(0);
+
+        let item = await openItem(page, 'T0005');
+        await expect(item.locator('.wait-book__state')).toHaveText('3 images saved');
+        await expect(item.locator('.wait-book__hint')).toHaveText('The task does not know how many images there are. Once all are in, “All images added” sends it back to the queue.');
+        const row = item.locator('.waiting-actions');
+        const all = row.locator('[data-action="all-images"]');
+        await expect(all).toHaveText('All images added');
+        await expect(all).toHaveClass(/waiting-action--secondary/);
+        // Through the bridge, no terminal: no mark of the research, no AI badge.
+        await expect(all.locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
+        // "Images can't be obtained…" stays as it was, after it.
+        const cannot = row.locator('[data-action="answer"]');
+        await expect(cannot).toHaveText('Images can’t be obtained…');
+        await expect(cannot).toHaveClass(/link-button/);
+        expect(await row.evaluate((r) => [...r.children].map(c => (c as HTMLElement).dataset.action ?? c.className))).toEqual(['all-images', 'answer', 'waiting-more']);
+
+        // The form: the note is optional (Send without it), its hint says what is saved.
+        await all.click();
+        const form = item.locator('.waiting-answer');
+        await expect(form.locator('label')).toHaveText('Note (optional)');
+        await expect(form.locator('.waiting-answer__hint')).toHaveText('The answer “All images are uploaded.” is saved with the task, with the note if there is one, and the task goes back to the queue.');
+        await expect(form.locator('textarea')).toBeFocused();
+        await expect(form.locator('.waiting-answer__send')).toHaveAttribute('aria-disabled', 'false');
+        // Cancel: the button has the focus back.
+        await form.locator('.waiting-answer__cancel').click();
+        await expect(item.locator('.waiting-answer')).toHaveCount(0);
+        await expect(all).toBeFocused();
+
+        await all.click();
+        await form.locator('textarea').fill('Kniha končí snímkem 212.');
+        await form.locator('.waiting-answer__send').click();
+        await expect(page.locator('.toast[data-kind="waiting-answered"]')).toHaveText('Answer saved, the task is back in the queue.');
+        item = page.locator('#research-overview .research-overview__waiting-item[data-id="T0005"]');
+        await expect(item).toHaveCount(0);
+        expect(bridge.writes).toEqual([{ path: 'T0005', body: { do: 'answer', text: 'All images are uploaded. Kniha končí snímkem 212.', expect: bridge.writes[0].body.expect } }]);
+        expect(bridge.writes[0].body.expect).toBeTruthy();
+        // The note keeps no draft of its own; the answer's draft is untouched.
+        expect(await draftOf(page, 'T0005')).toBeNull();
+    });
+
+    test.describe('Czech on a phone', () => {
+        test.use({ locale: 'cs-CZ' });
+        test('the sheet sends the fixed answer alone', async ({ page }) => {
+            const bridge = await follow(page, { width: 390, height: 844 }, withUnknownCount);
+            await page.locator('#live-panel .live-panel-toggle').click();
+            const ov = page.locator('#research-overview');
+            await expect(ov).toHaveClass(/research-overview--sheet/);
+            const head = archiveHead(page).locator('.research-overview__waiting-group');
+            if (await head.getAttribute('aria-expanded') === 'false') await head.click();
+            const item = ov.locator('.research-overview__waiting-item[data-id="T0005"]');
+            await item.locator('.research-overview__waiting-row').click();
+            await expect(item.locator('.wait-book__hint')).toHaveText('Počet snímků úkol nezná. Když jsou všechny, „Mám všechny snímky“ ho vrátí do fronty.');
+            const all = item.locator('.waiting-actions [data-action="all-images"]');
+            await expect(all).toHaveText('Mám všechny snímky');
+            await expect(item.locator('.waiting-actions [data-action="answer"]')).toHaveText('Snímky nejde získat…');
+            await all.click();
+            const sheet = page.locator('#waiting-answer-sheet');
+            await expect(sheet.locator('.waiting-answer-sheet__title')).toHaveText('Mám všechny snímky');
+            // The note is optional: its heading is shown (an answer's is only read out), the field short.
+            await expect(sheet.locator('label')).toHaveText('Poznámka (nepovinná)');
+            await expect(sheet.locator('label')).toBeVisible();
+            expect((await sheet.locator('textarea').boundingBox())!.height).toBeLessThan(300);
+            const send = sheet.locator('.waiting-answer-sheet__send');
+            await expect(send).toHaveAttribute('aria-disabled', 'false');
+            await send.click();
+            await expect(sheet).toHaveCount(0);
+            await expect(item).toHaveCount(0);
+            expect(bridge.writes.map(w => [w.path, w.body.text])).toEqual([['T0005', 'Snímky jsou nahrané všechny.']]);
+        });
+    });
+
+    test('without answers through the bridge: no button, the hint does not promise one', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            withUnknownCount(b);
+            b.features = ['waiting.groups'];
+        });
+        await openOverview(page);
+        const item = await openItem(page, 'T0005');
+        await expect(item.locator('.wait-book__hint')).toHaveText('The task does not know how many images there are.');
+        await expect(item.locator('[data-action="all-images"]')).toHaveCount(0);
+    });
+});
+
 test.describe('an older research (no waiting.answer, no images through the bridge)', () => {
     test('no new buttons that would fail: Answer goes to the terminal with its hint; the state as before', async ({ page }) => {
         await follow(page, { width: 1440, height: 900 }, (b) => {

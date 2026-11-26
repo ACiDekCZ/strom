@@ -12,7 +12,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { LiveWaiting, sanitizeAccepts, sanitizeWaiting, sanitizeWaitingInbox, researchLinkMark } from '../research-link.js';
 import {
     IMAGES_ORDER, WaitActionView, assignImages, imageNumberOfName, readImageNumbers, imageRanges, imageSlotOptions, imagesArrived, imagesState, inboxNumbers,
-    parseImageRanges, splitWaitingActions, taskImageProblem, waitingActions, waitingGroupMissing, waitingTaskActions,
+    parseImageRanges, splitWaitingActions, taskImageProblem, waitingActions, waitingAllImagesOffered, waitingGroupMissing, waitingTaskActions,
 } from '../research-waiting.js';
 import {
     NO_WAITING_WRITES, WAITING_ANSWER_FEATURE, WaitingWrites, answerWaiting, clearWaitingDraft, readWaitingDraft, taskImageMime, taskImageReply,
@@ -180,6 +180,44 @@ describe('the state of the images (§4)', () => {
         const list = items([imagesItem(), imagesItem({ id: 'T0415', inbox: { have: 0, want: 1, missing: [112] } }), webItem()]);
         expect(waitingGroupMissing(list)).toBe(2);
         expect(waitingGroupMissing(items([imagesItem({ inbox: { have: 1, want: 2 } })]))).toBeNull();
+    });
+});
+
+describe('"All images added" (a count of images not known)', () => {
+    afterEach(() => setLanguage('en'));
+    const unknown = () => items([imagesItem({ inbox: { dir: '/x/inbox/T0412', have: 3, book: 'Matrika N Dolní Vzorov 1890–1905' } })])[0];
+
+    it('offered only for a count not known with the answer through the bridge (a phone too)', () => {
+        const w = unknown();
+        expect(waitingAllImagesOffered(w, waitingActions(w, ctx())!)).toBe(true);
+        expect(waitingAllImagesOffered(w, waitingActions(w, ctx({ phone: true }))!)).toBe(true);
+        // A known count comes back by itself once all are there.
+        const known = items([imagesItem()])[0];
+        expect(waitingAllImagesOffered(known, waitingActions(known, ctx())!)).toBe(false);
+        // An older research answers in the terminal (or not at all here).
+        expect(waitingAllImagesOffered(w, waitingActions(w, ctx({ writes: { ...NO_WAITING_WRITES, images: true } }))!)).toBe(false);
+        expect(waitingAllImagesOffered(w, [])).toBe(false);
+        // Not images of a book.
+        const web = items([webItem()])[0];
+        expect(waitingAllImagesOffered(web, waitingActions(web, ctx())!)).toBe(false);
+    });
+
+    it('its fixed answer in every language, impersonal, a sendable answer', () => {
+        const fixed: Record<Language, string> = {
+            en: 'All images are uploaded.', cs: 'Snímky jsou nahrané všechny.', de: 'Alle Bilder sind hochgeladen.', pl: 'Wszystkie skany są przesłane.',
+        };
+        for (const lang of Object.keys(fixed) as Language[]) {
+            setLanguage(lang);
+            const T = strings.live.waitingTask;
+            expect(T.allImagesText).toBe(fixed[lang]);
+            expect(waitingAnswerText(T.allImagesText)).toBe(T.allImagesText);
+            // The hint names the answer, the count's hint names the button.
+            expect(T.allImagesHint(T.allImagesText)).toContain(T.allImagesText);
+            expect(T.unknownHint).toContain(T.allImages);
+            for (const text of [T.allImages, T.allImagesNote, T.allImagesPlaceholder, T.allImagesHint(T.allImagesText), T.unknownHint, T.unknownHintNoAnswer]) {
+                expect(text).not.toMatch(/\b([Yy]ou|[Yy]our|Sie|Ihr|Ihnen|du|vy|váš|vaše|ty)\b/);
+            }
+        }
     });
 });
 

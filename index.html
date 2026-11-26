@@ -26791,9 +26791,15 @@
             position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
         }
         .waiting-answer-sheet .waiting-answer__error { order: -1; }
+        /* "All images added" (a count of images not known): the note is optional, its heading shown, the field short. */
+        .waiting-answer-sheet .waiting-answer.is-fixed { flex: none; }
+        .waiting-answer-sheet .waiting-answer.is-fixed .waiting-answer__label {
+            position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; font-size: 14px;
+        }
         .waiting-answer-sheet .waiting-answer__text {
             flex: 1; min-height: 96px; resize: none; border: 2px solid var(--primary); font-size: 16px;
         }
+        .waiting-answer-sheet .waiting-answer.is-fixed .waiting-answer__text { flex: none; }
         .waiting-phone-note { margin: 4px 0 0; }
         @media (pointer: coarse) {
             .waiting-upload__remove { width: 44px; height: 44px; }
@@ -26816,6 +26822,8 @@
             .waiting-answer-sheet__task { -webkit-line-clamp: 1; padding-top: 4px; }
             .waiting-answer-sheet .waiting-answer__hint { display: none; }
             .waiting-answer-sheet .waiting-answer__text { min-height: 48px; }
+            /* What "All images added" saves stays said: the field is short there. */
+            .waiting-answer-sheet .waiting-answer.is-fixed .waiting-answer__hint { display: block; }
         }
         @media (prefers-reduced-motion: reduce) {
             .waiting-upload__drop { transition: none; }

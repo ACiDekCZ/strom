@@ -668,6 +668,15 @@ export function imagesState(w: LiveWaiting): ImagesState | null {
     };
 }
 
+/**
+ * "All images added" (K044): an item waiting for images whose count it does
+ * not know, its answer taken through the bridge — said as a fixed answer, the
+ * task goes back to the queue (a known count comes back by itself).
+ */
+export function waitingAllImagesOffered(w: LiveWaiting, views: readonly WaitActionView[]): boolean {
+    return imagesState(w)?.detail === 'unknown' && views.some(v => v.key === 'answer' && v.via === 'bridge');
+}
+
 // ==================== DELIVERING IMAGES (spec 105 U4 §5) ====================
 
 /** The texts of an item's actions (`strings.live.waitingTask` of a language). */

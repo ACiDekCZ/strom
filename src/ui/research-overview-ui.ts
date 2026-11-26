@@ -35,11 +35,11 @@ import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnse
 import {
     FLAT_GROUP, PLACES_GROUP, WaitingFilter, WaitingGroupOpts, WaitingGroupRows, WaitingOrder, WaitingPhase, isSortedOrder, isTimeOrder, listedBook, sortWaiting, waitingOrdersFor, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
-    WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupBandLines, waitingGroupMissing, waitingPhaseLines, textWithLinks,
+    WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingAllImagesOffered, waitingForImages, waitingGroupBandLines, waitingGroupMissing, waitingPhaseLines, textWithLinks,
     waitingRetryCount, waitingRetryLimitText, waitingRetryMain, waitingRetryReason,
     WaitingGroupRetry, groupRetryAria, groupRetryConfirmText, groupRetryCountText, groupRetryLaterText, waitingGroupRetry, waitingGroupRetryReason,
 } from '../research-waiting.js';
-import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
+import { WaitingAnswerForm, WaitingAnswerMode, allImagesAnswerTexts, answerFormKey, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
 import { clearOverviewImages, foldOverviewImages, overviewImagesResult, auditFixedRowDrawn, waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
 import { formatLiveClock } from '../live-time.js';
@@ -303,9 +303,14 @@ interface ItemAction {
     disabled?: boolean;
 }
 
+/** The action "All images added" of an item whose count of images is not known (its `data-action`). */
+const ALL_IMAGES = 'all-images';
+
 /** Answer forms by tree and item: the open one (one at a time) and those kept over a redraw. */
 const answerForms = new Map<string, WaitingAnswerForm>();
 let answeringKey: string | null = null;
+/** What the open form writes: an answer, or "All images added" (a count of images not known). */
+let answeringMode: WaitingAnswerMode = 'answer';
 /** Items whose answer met a task that waits for something else now (409 changed): the ochre note at the top. */
 const answerChanged = new Set<string>();
 /** The "More actions" menu open (the item's id) and how it is let go. */
@@ -345,9 +350,10 @@ function keepKeyFocus(): () => void {
 /** The open answer form closes (its draft stays). */
 function closeAnswerForm(): void {
     if (!answeringKey) return;
-    answerForms.get(answeringKey)?.keepDraftNow();
+    answerForms.get(answerFormKey(answeringKey, answeringMode))?.keepDraftNow();
     answerChanged.delete(answeringKey);
     answeringKey = null;
+    answeringMode = 'answer';
 }
 
 /**
@@ -2451,7 +2457,7 @@ export const researchOverviewMethods = uiModule({
             detail.appendChild(line);
         }
         const img = views ? imagesState(w) : null;
-        if (img) appendImagesDetail(detail, img);
+        if (img) appendImagesDetail(detail, img, { allImages: !!views && waitingAllImagesOffered(w, views) });
         // An archive only the agent's browser reaches (spec 048 §11.2): under the book, unless its group's heading says it.
         // An item that can go back to the agent says why it waits in its Now line instead (spec 089 §2).
         const bNote = views && !w.retry && !browserNotedInHead.has(key) ? browserNote(s.browser, w, s.waiting, this.overviewBrowserContext(mode)) : null;
@@ -2625,7 +2631,7 @@ export const researchOverviewMethods = uiModule({
         }
         // The answer written in the detail (a phone: its own sheet).
         if (!phone && answeringKey === key && task && views.some(v => v.key === 'answer' && v.via === 'bridge')) {
-            detail.appendChild(this.overviewAnswerForm(s, w, task).root);
+            detail.appendChild(this.overviewAnswerForm(s, w, task, answeringMode).root);
             return;
         }
         if (answeringKey === key) closeAnswerForm();
@@ -2645,6 +2651,10 @@ export const researchOverviewMethods = uiModule({
             } else if (v.key === 'images') {
                 list.push({ key: 'images', label: T.haveImages, run: () => this.openWaitingImages(s, w) });
             } else if (v.key === 'answer' && v.via === 'bridge') {
+                // A count of images not known: "All images added" first, the same answer through the bridge with its fixed text.
+                if (waitingAllImagesOffered(w, views)) {
+                    list.push({ key: ALL_IMAGES, label: T.allImages, run: () => phone ? this.openWaitingAnswerSheet(s, w, 'all-images') : this.openOverviewAnswer(s, w, 'all-images') });
+                }
                 list.push({ key: 'answer', label: T.answer, run: () => phone ? this.openWaitingAnswerSheet(s, w) : this.openOverviewAnswer(s, w) });
             } else if (task) {
                 const taskDo = v.key === 'answer' ? undefined : v.key;
@@ -2692,10 +2702,13 @@ export const researchOverviewMethods = uiModule({
             // the answer is "Images can't be obtained…" as a link, the rest under ⋯ (none on a phone).
             const rest = list.filter(a => a.key !== 'images' && a.key !== 'web' && a.key !== 'folder');
             const answer = rest.find(a => a.key === 'answer') ?? null;
-            shown = answer ? [answer] : [];
-            more = phone ? [] : rest.filter(a => a !== answer);
-            if (answer || more.length > 0) {
+            // A count of images not known: "All images added" outlined before the link (spec 105 U4 §5 + K044).
+            const all = rest.find(a => a.key === ALL_IMAGES) ?? null;
+            shown = [all, answer].filter((a): a is ItemAction => !!a);
+            more = phone ? [] : rest.filter(a => a !== answer && a !== all);
+            if (shown.length > 0 || more.length > 0) {
                 const row = el('div', 'research-overview__waiting-actions waiting-actions is-deliver');
+                if (all) row.appendChild(waitingActionEl(all, 'secondary'));
                 if (answer) {
                     const link = el('button', 'link-button waiting-cannot-get');
                     link.type = 'button';
@@ -2740,29 +2753,35 @@ export const researchOverviewMethods = uiModule({
         closeAnswerForm();
     },
 
-    /** "Answer" through the bridge: the answer opens in the item's detail, the field focused (its draft back). */
-    openOverviewAnswer(s: LiveSession, w: LiveWaiting): void {
+    /**
+     * "Answer" through the bridge: the answer opens in the item's detail, the
+     * field focused (its draft back); `all-images`: "All images added", its
+     * fixed answer with an optional note.
+     */
+    openOverviewAnswer(s: LiveSession, w: LiveWaiting, mode: WaitingAnswerMode = 'answer'): void {
         closeAnswerForm();
         answeringKey = itemKey(s, w.id);
+        answeringMode = mode;
         this.closeWaitingMoreMenu();
         this.renderResearchOverview();
-        const form = answerForms.get(answeringKey);
+        const form = answerForms.get(answerFormKey(answeringKey, mode));
         if (form?.root.isConnected) form.focus();
     },
 
     /** The item's answer form, the same node over every redraw (what is written, the caret, an error). */
-    overviewAnswerForm(s: LiveSession, w: LiveWaiting, task: string): WaitingAnswerForm {
+    overviewAnswerForm(s: LiveSession, w: LiveWaiting, task: string, mode: WaitingAnswerMode = 'answer'): WaitingAnswerForm {
         const key = itemKey(s, w.id);
-        let form = answerForms.get(key);
+        const formKey = answerFormKey(key, mode);
+        let form = answerForms.get(formKey);
         if (form && !form.spent) return form;
         const focusAnswer = (): void => {
             this.renderResearchOverview();
             const li = document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(w.id)}"]`);
-            li?.querySelector<HTMLElement>('[data-action="answer"]')?.focus();
+            li?.querySelector<HTMLElement>(`[data-action="${mode === 'answer' ? 'answer' : ALL_IMAGES}"]`)?.focus();
         };
         form = new WaitingAnswerForm({
-            treeId: s.treeId, task, idPrefix: `ov-answer-${w.id}`,
-            ...this.waitingAnswerTexts(s, w),
+            treeId: s.treeId, task, idPrefix: `ov-${mode}-${w.id}`,
+            ...(mode === 'all-images' ? allImagesAnswerTexts() : this.waitingAnswerTexts(s, w)),
             send: async (text) => {
                 // The item as the research says it now (its wording may have changed meanwhile).
                 const now = s.waiting.find(x => x.id === w.id) ?? w;
@@ -2780,13 +2799,13 @@ export const researchOverviewMethods = uiModule({
                 focusAnswer();
             },
             done: () => {
-                answerForms.delete(key);
-                if (answeringKey === key) answeringKey = null;
+                answerForms.delete(formKey);
+                if (answeringKey === key) closeAnswerForm();
                 answerChanged.delete(key);
                 this.renderResearchOverview();
             },
         });
-        answerForms.set(key, form);
+        answerForms.set(formKey, form);
         return form;
     },
 
