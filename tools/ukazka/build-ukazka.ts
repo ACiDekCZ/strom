@@ -10,7 +10,8 @@
 //      no path or setting of the computer that built it), the header put first;
 //   4. the file checked (size, header, the research's id, nothing of the bridge or the computer, no time after the
 //      moment) — any failure ends the build with exit 1;
-//   5. the research packed for `strom demo` (strom pack).
+//   5. the research checked by strom (strom check: an error ends the build) and packed for `strom demo` (strom pack);
+//      the package must not name the computer that built it (no /Users/…, no build folder, in its files or history).
 //
 // <outdir>/<lang>/strom-ukazka-<lang>.json         the file the app opens (served at /demo/<lang>/ on the web)
 // <outdir>/<lang>/strom-ukazka-<lang>.json.sha256  its SHA-256 (hex, one line)
@@ -29,6 +30,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { SAMPLE_AS_OF, SAMPLE_LANGS, sampleExportId, sampleTreeId, type SampleLang } from "./sample.ts";
+import { checkThenPack } from "./sample-clock.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..", "..");
@@ -132,9 +134,10 @@ function cleanStatus(status: J): J {
 const MONTHS: Record<string, number> = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
 /**
  * Hosts a public file may name: the invented archives (example.org, the reserved .example), the project's own pages,
- * the agent's browser extension and the public map layers the research offers for houses (status.houses.layers).
+ * the agent's browser extension and the public map layers the research offers for houses (status.houses.layers:
+ * ČÚZK, the 1950s aerial images of CENIA).
  */
-const HOSTS = /^(?:[a-z0-9-]+\.)*(?:example\.org|example|stromapp\.info|chromewebstore\.google\.com|github\.com|cuzk\.gov\.cz)$/i;
+const HOSTS = /^(?:[a-z0-9-]+\.)*(?:example\.org|example|stromapp\.info|chromewebstore\.google\.com|github\.com|cuzk\.gov\.cz|cenia\.cz)$/i;
 
 /** What fails in a built file (format §5); empty when it is fine. */
 function check(lang: SampleLang, text: string, secrets: string[], asOf: string): { failed: string[]; notes: string[] } {
@@ -205,6 +208,34 @@ function check(lang: SampleLang, text: string, secrets: string[], asOf: string):
   for (const k of kinds.keys()) if (!/^image\/(jpeg|png|webp)$/.test(k)) failed.push(`data URL of ${k}`);
   notes.push(`${times} times, hosts: ${[...hosts].sort().join(", ") || "none"}, images: ${[...kinds].map(([k, n]) => `${n}× ${k}`).join(", ") || "none"}`);
   return { failed: [...new Set(failed)], notes };
+}
+
+/** Where a package (strom pack, a ZIP) names a folder of a computer: its files outside .git, and its history. */
+function machinePaths(pack: string, folders: string[]): string[] {
+  const marks = [...new Set([...folders, "/Users/", "C:\\Users\\", "C:/Users/"])];
+  const x = fs.mkdtempSync(path.join(os.tmpdir(), "ukazka-pack-"));
+  try {
+    run("unzip", "unzip", ["-q", pack, "-d", x]);
+    const found: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (e.name === ".git") {
+            const log = run(`git log -p ${path.relative(x, dir)}`, "git", ["log", "-p", "--all", "--format=%H %an %ae%n%B"], { cwd: dir, env: { ...process.env, GIT_DIR: p } });
+            for (const m of marks) if (log.includes(m)) found.push(`history of ${path.relative(x, dir) || "."}: ${m}`);
+          } else walk(p);
+        } else if (e.isFile()) {
+          const text = fs.readFileSync(p, "latin1");
+          for (const m of marks) if (text.includes(m)) found.push(`${path.relative(x, p)}: ${m}`);
+        }
+      }
+    };
+    walk(x);
+    return found;
+  } finally {
+    fs.rmSync(x, { recursive: true, force: true });
+  }
 }
 
 /** The sizes of everything built (sizes.json). */
@@ -314,19 +345,15 @@ async function build(lang: SampleLang): Promise<void> {
   // 5. the research packed for strom demo (the same research: the same id)
   const zip = path.join(work, `pack-${lang}.zip`);
   fs.rmSync(zip, { force: true });
-  strom("pack", "--out", zip);
+  checkThenPack(strom, zip);
   if (git("rev-parse", "HEAD") !== head || git("status", "--porcelain")) throw new Error("strom pack changed the research");
   const pack = path.join(dest, `strom-ukazka-${lang}-${sampleVersion}.strom`);
   fs.renameSync(zip, pack);
   const packBytes = fs.readFileSync(pack);
-  // the package carries the agents' files of the tree as strom wrote them, with this build's folder in them (strom
-  // unpack writes them again for its computer): said, not failed — the package is no public file of the web
-  const listed = spawnSync("unzip", ["-Z1", pack], { encoding: "utf8" }).stdout ?? "";
-  const withPath = listed.split("\n").filter((n) => n && !n.endsWith("/") && !n.includes("/.git/")).filter((n) => {
-    const r = spawnSync("unzip", ["-p", pack, n], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-    return (r.stdout ?? "").includes(work);
-  });
-  if (withPath.length) console.log(`${lang}: note: the package names the build's folder in ${withPath.length} files (${withPath.map((n) => n.split("/").slice(1).join("/")).join(", ")})`);
+  // nothing of the computer that built it (strom pack since research 1.37 leaves the agents' files out): its files and
+  // its history (git log -p) without a home folder or the build's folder
+  const named = machinePaths(pack, [work, os.homedir()]);
+  if (named.length) throw new Error(`${lang}: the package names the computer that built it:\n  ${named.slice(0, 20).join("\n  ")}`);
   fs.writeFileSync(`${pack}.sha256`, `${sha256(packBytes)}\n`);
   sizes[lang] = { file: Buffer.byteLength(text), pack: packBytes.length };
   console.log(`${lang}: ${path.relative(out, file)} ${(Buffer.byteLength(text) / 1e6).toFixed(2)} MB, ${path.relative(out, pack)} ${(packBytes.length / 1e6).toFixed(2)} MB, research ${treeId} (${Math.round((Date.now() - t0) / 1000)} s)`);

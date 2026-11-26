@@ -32,6 +32,7 @@ import { fileURLToPath } from "node:url";
 import { addPlaces } from "./demo-places.ts";
 import { add323, prepare323 } from "./demo-323.ts";
 import { SAMPLE, fixedMoment, sampleTreeId } from "./sample.ts";
+import { SampleClock } from "./sample-clock.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const lang = (process.argv[2] ?? "cs") as "cs" | "en" | "de" | "pl";
@@ -79,6 +80,9 @@ fs.writeFileSync(path.join(dir, "env.json"), JSON.stringify(env));
 const NOW = AS_OF ? Date.parse(AS_OF) : Date.now();
 let clock = 4400;
 const at = (minutesAgo: number) => { clock = minutesAgo; };
+// The sample: no command dated before the end of the one before it (sample-clock.ts) — strom checks a research by its
+// operations in the order of their time, and `strom demo` unpacks only a research that checks out.
+const sampleClock = SAMPLE ? new SampleClock(NOW) : undefined;
 let cwd = dir;
 /** The environment of the next strom command only (the sample's `init`: its fixed id). */
 let once: Record<string, string> = {};
@@ -88,13 +92,16 @@ function strom(...args: string[]): J {
 }
 /** strom as the agent runs it (never asking: STROM_NONINTERACTIVE), expected to end with `exit`. */
 function stromExit(exit: number, ...args: string[]): J {
-  const when = new Date(NOW - clock * 60_000).toISOString();
+  const moment = sampleClock ? sampleClock.next(clock) : NOW - clock * 60_000;
+  const when = new Date(moment).toISOString();
+  const started = Date.now();
   const r = spawnSync(process.execPath, [cli, ...args, "--json"], {
     cwd,
     env: { ...env, STROM_NONINTERACTIVE: "1", GIT_AUTHOR_DATE: when, GIT_COMMITTER_DATE: when, ...(AS_OF ? { STROM_SAMPLE_CLOCK: when } : {}), ...once },
     encoding: "utf8",
   });
   once = {};
+  sampleClock?.ran(moment, Date.now() - started);
   if (r.status !== exit) throw new Error(`strom ${args.join(" ")} → ${r.status} (expected ${exit})\n${r.stdout}\n${r.stderr}`);
   clock = Math.max(clock - 1.5, 0);
   try {
@@ -523,5 +530,6 @@ if (AS_OF) {
   const inbox = path.join(home, "Documents", "Strom", "shared", "inbox");
   if (fs.existsSync(inbox)) settle(inbox);
 }
+if (sampleClock?.moved) console.error(`build-demo: ${sampleClock.moved} commands later than their moment (the one before still running at it)`);
 if (AS_OF) fs.writeFileSync(path.join(dir, "sample.json"), JSON.stringify({ asOf: new Date(NOW).toISOString(), lang, sample: SAMPLE, ...(TREE_ID ? { treeId: TREE_ID } : {}) }) + "\n");
 console.log(JSON.stringify({ tree: cwd, research: { main: G1, husband: G2, question: G3, descendants: G4, review: G5 }, people: P }));

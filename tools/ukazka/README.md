@@ -38,6 +38,10 @@ and drawn by these scripts (no real records, no photographs, no generated images
   writes nothing. `sample.json` beside `env.json` names the moment.
   `node check-sample.ts <outdir>` checks it: every time at or before the moment, nobody at work, every session
   closed, no `costUsd`, git status clean.
+  Time never runs back in a sample (`SampleClock`, `sample-clock.ts`): a command comes at its moment of the demo, but
+  never before the end of the command before it — strom checks a research by its operations in the order of their time,
+  and an operation dated before one already written reads as a record "edited outside strom" (`strom demo` refuses the
+  package). A command moved later is said on stderr. Test: `node --test tools/ukazka/sample-clock.test.ts`.
 
 A bridge on a sample (`strom live start` with the build's `env.json`) runs at the moment when `STROM_SAMPLE_CLOCK`
 names it too (`fixed-clock.cjs` is in its `NODE_OPTIONS`).
@@ -60,9 +64,10 @@ one research. build-demo.ts checks the tree got it.
    `costUsd` or `metrics`, the demo's HOME as `~`; the header first, with its own size;
 4. the checks: at most 20 MB, the header, the research's id (`_STROM_TREE`, the fixed id), no `127.0.0.1`,
    `localhost`, secret or port of the bridge, no path of the computer, no time after the moment, hosts only of the
-   invented archives (`example.org`, `.example`) and the project's pages, images only JPEG/PNG/WebP; a failure ends
-   the build (the file is kept as `.failed` to look at);
-5. `strom pack` of the research.
+   invented archives (`example.org`, `.example`), the project's pages and the public map layers (ČÚZK, CENIA),
+   images only JPEG/PNG/WebP; a failure ends the build (the file is kept as `.failed` to look at);
+5. `strom check` of the research (an error ends the build), then `strom pack`; the package must not name the computer
+   that built it: no `/Users/…`, home or build folder in its files or its history (`git log -p`).
 
 ```text
 <outdir>/<lang>/strom-ukazka-<lang>.json            the file (the web serves it at /demo/<lang>/)
@@ -73,9 +78,9 @@ one research. build-demo.ts checks the tree got it.
 <outdir>/sizes.json                                 the sizes
 ```
 
-The research's package carries the agents' files of the tree (`.claude/settings.json`, `.codex/hooks.json`, …) with the
-build's folder in them, as strom pack writes them; the build says so. The file for the web never does (the bridge
-does not give them).
+The research's package needs strom-research 1.37 or newer: its `strom pack` leaves out the agents' files that name a
+folder of the computer (`.claude/settings.json`, `.codex/hooks.json`, …; `strom unpack` writes them for its own). Try a package as a person would, with
+the packages of `<outdir>` as the web: `STROM_DEMO_BASE=file://<outdir> strom demo <lang>` (isolated).
 
 `SHOWCASE_NOW` alone fixes the moment of a screenshot build (the inbox's images as in the sample) and changes nothing else. `build-family.ts` takes
 the day of `SHOWCASE_NOW` (or of the sample) when no date is given.
