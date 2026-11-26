@@ -32131,7 +32131,9 @@
         .gift-modal .modal-header h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .gift-modal #gift-back.is-first { display: none; }
         .gift-modal .gift-sub-btn { display: none; }
-        .gift-layout { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
+        /* The body wrapper (modal-skeleton) holds the layout; the side and the pane scroll on their own. */
+        .modal.gift-modal > .modal-content { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+        .gift-layout { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 208px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
         .gift-nav { display: flex; flex-direction: column; min-height: 0; padding: 8px 0; overflow-y: auto; border-right: 1px solid var(--divider); }
         .gift-nav .gift-k { flex: none; width: 16px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
         .gift-nav .gift-tab-l { flex: 1 1 auto; min-width: 0; }
@@ -32142,7 +32144,10 @@
             display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; line-height: 1.4; color: var(--text-light);
         }
         .gift-sum b { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-        .gift-sum-name { font: 600 15px/1.3 var(--font-serif); color: var(--text); overflow-wrap: anywhere; }
+        .gift-sum-name {
+            font: 600 15px/1.3 var(--font-serif); color: var(--text); overflow-wrap: anywhere;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
         .gift-pane { display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; padding: 18px 24px; overflow-y: auto; }
         .gift-cols { display: grid; gap: 28px; align-items: start; }
         .gift-cols.is-s1 { grid-template-columns: minmax(0, 560px) minmax(260px, 1fr); }
@@ -32168,6 +32173,7 @@
         .gift-change { flex: none; }
         .gift-last { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         .gift-last b { font-weight: 600; color: var(--text); }
+        .gift-modal :is(.gift-last, .gift-phone-fast) .link-button { padding: 0; margin: 0; font-size: inherit; }
         .gift-field { display: flex; flex-direction: column; gap: 4px; }
         .gift-modal :is(.gift-input, .gift-select) {
             min-height: 36px; padding: 6px 10px; box-sizing: border-box; width: 100%;
@@ -32195,7 +32201,12 @@
         .gift-lv-note { padding: 6px 0 6px 26px; border-bottom: 1px solid var(--divider); }
         .gift-nomatch { margin: 6px 0; }
         .gift-mode-desc { margin: -4px 0 0; line-height: 1.45; }
-        .gift-protect .content-check { font-size: 13.5px; }
+        /* The dialog's own labels (".modal label" is a block caption over a field). */
+        .gift-modal label.gift-field { display: flex; margin: 0; font-size: inherit; font-weight: inherit; color: inherit; }
+        .gift-modal label.gift-lv-label { display: grid; margin: 0; font-size: inherit; font-weight: inherit; color: inherit; }
+        .gift-modal label.content-check { display: flex; margin: 0; font-size: 13.5px; font-weight: 400; color: var(--text); }
+        .gift-modal input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
+        .gift-modal .gift-field:not(.gift-others) .gift-input { max-width: 420px; }
         .gift-sens-h, .gift-dead-h { margin-top: 6px; }
         .gift-foot-sum { display: none; }
         @media (hover: hover) {
@@ -32213,6 +32224,8 @@
         }
         @media (pointer: coarse) {
             .gift-modal .link-button { min-height: 44px; }
+            /* The links under a sentence: a line of their own, the whole height a target. */
+            .gift-modal :is(.gift-last, .gift-phone-fast) .link-button { display: flex; align-items: center; }
         }
         /* A phone, and a phone held sideways: the whole screen; ‹ always (from step 1 it closes), the subtitle a
            button with the list of steps; one column, the footer's buttons full width with the summary under them. */
@@ -32234,7 +32247,7 @@
             .gift-layout { grid-template-columns: minmax(0, 1fr); }
             .gift-nav { display: none; }
             .gift-pane { padding: 14px 16px; gap: 12px; }
-            .gift-cols.is-s1, .gift-cols.is-s3 { display: flex; flex-direction: column; gap: 16px; }
+            .gift-cols.is-s1, .gift-cols.is-s3 { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
             .gift-defaults :is(.gift-h3, .gift-dl, .gift-defaults-note, .gift-fast) { display: none; }
             .gift-modal .gift-phone-fast { display: block; font-size: 12.5px; color: var(--text-light); }
             /* Step 3 in the design's order: numbers, the other living, the list, the checks. */
@@ -32250,12 +32263,17 @@
             .gift-stats .gift-stat-phone { display: block; }
             .gift-lv-r { grid-template-columns: minmax(0, 1fr) auto; min-height: 52px; }
             .gift-lv-label { grid-template-columns: 20px minmax(0, 1fr); }
-            .gift-lv-label input { width: 20px; height: 20px; }
+            .gift-modal .gift-lv-label input[type="checkbox"] { width: 20px; height: 20px; }
+            .gift-modal .gift-field:not(.gift-others) .gift-input { max-width: none; }
             .gift-lv-note { padding-left: 30px; }
             .gift-protect .content-check { min-height: 48px; }
             .gift-modal .buttons.gift-foot { flex-direction: column-reverse; align-items: stretch; gap: 8px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
             .gift-modal .gift-foot button { min-height: 48px; font-size: 15px; }
             .gift-foot-sum { display: block; text-align: center; font-size: 12.5px; color: var(--text-light); }
+            /* Top to bottom (a reversed column): the summary, the primary, Back; Cancel last (order -1). */
+            .gift-modal .gift-foot > .gift-foot-sum { order: 3; }
+            .gift-modal .gift-foot > #gift-next { order: 2; }
+            .gift-modal .gift-foot > #gift-prev { order: 1; }
             .gift-foot-sum b { font-weight: 600; color: var(--text); }
             .gift-foot-sum:empty { display: none; }
         }
@@ -32264,7 +32282,7 @@
             .gift-pane { padding: 10px 16px; }
             .gift-modal .buttons.gift-foot { flex-direction: row; align-items: center; padding: 6px 16px calc(6px + env(safe-area-inset-bottom)); }
             .gift-modal .gift-foot button { min-height: 44px; }
-            .gift-foot-sum { flex: 1 1 auto; text-align: left; }
+            .gift-modal .gift-foot > .gift-foot-sum { order: -2; flex: 1 1 auto; text-align: left; }
         }
 
         /* "Save as HTML" (§5.1): a small dialog, a bottom sheet on a phone. */
