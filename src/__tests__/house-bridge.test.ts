@@ -8,9 +8,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     batchDoneHouse, clearHouseCaches, confirmHouse, fetchHouse, fetchHouses, houseCache, houseFeature, houseMaterialBody, houseStatus,
-    houseWriteReply, sanitizeHouseResearch, sanitizeHouseRow, sendHouseMaterial,
+    houseRequestWith, houseWriteReply, moveHouseToTop, requestHouse, sanitizeHouseResearch, sanitizeHouseRow, sendHouseMaterial, setHousesAuto,
 } from '../house-bridge.js';
-import { sanitizeLiveHouses, sanitizeLiveStatus } from '../research-link.js';
+import { houseSearchLink, researchLinkActionOf, researchUrlMark, sanitizeLiveHouses, sanitizeLiveStatus } from '../research-link.js';
 
 const BASE = 'http://127.0.0.1:4711/t0k3n';
 const REV = 'f247ecdcdd1b5980';
@@ -85,7 +85,9 @@ afterEach(() => vi.unstubAllGlobals());
 describe('state', () => {
     it('reads /status.houses only with the feature', () => {
         const raw = { on: false, rev: REV, counts: { done: 1, running: 0, queued: 1, waiting: 0, held: 0 }, auto: { houses: 0 } };
-        expect(sanitizeLiveHouses(raw)).toEqual({ on: false, rev: REV, counts: { done: 1, running: 0, queued: 1, waiting: 0, held: 0 } });
+        expect(sanitizeLiveHouses(raw)).toEqual({
+            on: false, rev: REV, counts: { done: 1, running: 0, queued: 1, waiting: 0, held: 0 }, auto: { houses: 0, towns: 0 },
+        });
         expect(sanitizeLiveHouses({ on: 'yes', rev: REV })).toBeNull();
         const status = sanitizeLiveStatus({ researchId: 'r1', features: ['house', 'house.material'], houses: raw });
         expect(houseStatus(status)?.rev).toBe(REV);
@@ -223,5 +225,198 @@ describe('writes', () => {
         expect(batchDoneHouse('belokamen|16', ['house', 'house.material'])).toEqual({ house: 'belokamen|16' });
         expect(batchDoneHouse('belokamen|16', ['house'])).toEqual({});
         expect(batchDoneHouse(undefined, ['house.material'])).toEqual({});
+    });
+});
+
+// ==================== PART 2 (§4.5): the setting, a request, layers ====================
+
+const TREE = '5f0c8a3e-1d2b-4c6a-9e7f-0a1b2c3d4e5f';
+const HEAD = '42e1c19b019afbcc0c2028b2967c0885883e60b3';
+const PARENT = '8504262900d7b214dd09b7462c9100002e585917';
+const F2 = ['house', 'house.material', 'house.confirm', 'house.import', 'house.auto', 'house.request'];
+const ORTHO = {
+    id: 'cz-ortho', kind: 'ortho', label: 'Ortofoto (dnes)', type: 'wms', url: 'https://example.org/ortofoto/wms', layers: '0',
+    format: 'image/jpeg', attribution: '© Zeměměřický úřad (smyšlený)', license: 'CC BY 4.0', bbox: [11.885448, 48.196887, 19.164528, 51.393486],
+};
+const ORTHO_1950 = {
+    id: 'cz-ortho-1950', kind: 'ortho-1950', label: 'Letecké snímky 50. let', type: 'wms', url: 'https://example.org/historicka/wms',
+    layers: 'orto', format: 'image/jpeg', crs: 'EPSG:5514', attribution: '© Agentura (smyšlená)', license: 'CC BY 4.0',
+    bbox: [12.09, 48.55, 18.86, 51.06],
+};
+const STATUS_HOUSES = {
+    on: false, rev: REV, counts: { done: 2, running: 1, queued: 4, waiting: 0, held: 3 },
+    auto: { houses: 7, towns: 3 },
+    estimate: { houses: 7, towns: 3, minutes: 270, usd: 11.2, measured: true, perHouse: { minutes: 30, usd: 1.2 }, perTown: { minutes: 20, usd: 0.9 } },
+    layers: [ORTHO, ORTHO_1950, { ...ORTHO, id: 'bad', url: 'http://example.org/wms' }, { ...ORTHO, id: 'no-license', license: '' }],
+};
+
+describe('part 2: /status.houses', () => {
+    it('reads auto, the estimate and the layers (S-JTSK kept as crs), drops a layer it cannot show', () => {
+        const h = sanitizeLiveHouses(STATUS_HOUSES)!;
+        expect(h.auto).toEqual({ houses: 7, towns: 3 });
+        expect(h.estimate).toEqual(STATUS_HOUSES.estimate);
+        expect(h.layers!.map(l => l.id)).toEqual(['cz-ortho', 'cz-ortho-1950']);
+        expect(h.layers![1]).toMatchObject({ crs: 'EPSG:5514', attribution: '© Agentura (smyšlená)', license: 'CC BY 4.0' });
+        expect(h.layers![0]!.crs).toBeUndefined();
+        expect(h.counts.held).toBe(3);
+    });
+
+    it('keeps no price before it is measured: time alone', () => {
+        const h = sanitizeLiveHouses({
+            ...STATUS_HOUSES,
+            estimate: { houses: 1, towns: 1, minutes: 50, usd: 3, measured: false, perHouse: { minutes: 30, usd: 1 }, perTown: { minutes: 20 } },
+        })!;
+        expect(h.estimate).toEqual({ houses: 1, towns: 1, minutes: 50, measured: false, perHouse: { minutes: 30 }, perTown: { minutes: 20 } });
+    });
+
+    it('an archive or a research waiting for its agent: exactly on, rev and counts — nothing more', () => {
+        const h = sanitizeLiveHouses({ on: false, rev: REV, counts: { done: 0, running: 0, queued: 0, waiting: 0, held: 0 } })!;
+        expect(h).toEqual({ on: false, rev: REV, counts: { done: 0, running: 0, queued: 0, waiting: 0, held: 0 } });
+    });
+
+    it('an older bridge without house.* says nothing of houses, and no error', () => {
+        expect(houseStatus(sanitizeLiveStatus({ researchId: 'r1', features: ['census'], houses: STATUS_HOUSES }))).toBeNull();
+        expect(houseFeature(['house', 'house.material'], 'house.auto')).toBe(false);
+        expect(houseFeature(['house', 'house.material'], 'house.request')).toBe(false);
+        expect(houseFeature(F2, 'house.auto')).toBe(true);
+    });
+});
+
+describe('part 2: the setting (POST /houses {on})', () => {
+    it('switches on at once and gives the state the research keeps now', async () => {
+        replies.push({ status: 200, body: { houses: { ...STATUS_HOUSES, on: true, counts: { ...STATUS_HOUSES.counts, held: 0 } }, head: HEAD, parent: PARENT } });
+        const r = await setHousesAuto(BASE, true, F2);
+        expect(calls[0]!.url.startsWith(`${BASE}/houses`)).toBe(true);
+        expect(calls[0]!.url.startsWith(`${BASE}/houses/`)).toBe(false);
+        expect(calls[0]!.init!.method).toBe('POST');
+        expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({ on: true });
+        expect(r).toMatchObject({ ok: true, head: HEAD, parent: PARENT });
+        expect(r.ok && r.houses?.on).toBe(true);
+    });
+
+    it('refuses like census records: archive, locked, busy, full, failed with its sentence', async () => {
+        const cases: [number, unknown, string][] = [
+            [409, { error: 'house.archive', code: 'house.archive' }, 'archive'],
+            [423, { error: 'locked', code: 'locked' }, 'locked'],
+            [503, { error: 'research.busy', code: 'research.busy' }, 'busy'],
+            [507, { error: 'disk.full', code: 'disk.full' }, 'full'],
+            [400, { error: 'house.body', code: 'house.body' }, 'invalid'],
+            [500, { error: 'house.failed', code: 'house.failed', text: 'Zápis se nepovedl.' }, 'unknown'],
+        ];
+        for (const [status, body, code] of cases) {
+            replies.push({ status, body });
+            expect(await setHousesAuto(BASE, false, F2)).toMatchObject({ ok: false, code });
+        }
+        replies.push({ status: 500, body: { error: 'house.failed', code: 'house.failed', text: 'Zápis se nepovedl.' } });
+        expect(await setHousesAuto(BASE, false, F2)).toMatchObject({ reason: 'Zápis se nepovedl.' });
+        expect(await setHousesAuto(BASE, true, F2)).toMatchObject({ ok: false, code: 'network' });
+    });
+});
+
+describe('part 2: a request of a house', () => {
+    const CHECK = { tree: TREE };
+
+    it('builds the terminal link with the house and at most two more (AI + terminal mark)', () => {
+        const link = houseSearchLink(TREE, 'belokamen|16', ['belokamen|4', 'belokamen|9'])!;
+        expect(link).toBe(`strom-research://house?tree=${TREE}&house=belokamen%7C16&do=search&with=belokamen%7C4,belokamen%7C9`);
+        expect(researchUrlMark(link)).toBe('agent');
+        expect(researchLinkActionOf(link)).toEqual({
+            link: 'house', params: { house: 'belokamen|16', houseDo: 'search', houseWith: ['belokamen|4', 'belokamen|9'] },
+        });
+        expect(houseSearchLink(TREE, 'zálesí u brodku|3')).toBe(`strom-research://house?tree=${TREE}&house=z%C3%A1les%C3%AD%20u%20brodku%7C3&do=search`);
+        expect(houseSearchLink(TREE, 'belokamen|16', ['belokamen|4', 'belokamen|9', 'belokamen|2'])).toBeNull();
+        expect(houseSearchLink(TREE, 'belokamen|16', ['belokamen|16'])).toBeNull();
+        expect(houseSearchLink(TREE, 'belokamen')).toBeNull();
+        expect(houseSearchLink(TREE, 'belokamen|16,17')).toBeNull();
+        expect(houseSearchLink('not a tree', 'belokamen|16')).toBeNull();
+    });
+
+    it('sends with at most two more houses, without the house itself or a repeat', async () => {
+        expect(houseRequestWith('belokamen|16', ['belokamen|16', 'belokamen|4', 'belokamen|4', 'nonsense', 'belokamen|9', 'belokamen|2']))
+            .toEqual(['belokamen|4', 'belokamen|9']);
+        replies.push({ status: 403, body: { error: 'house.link', code: 'house.link', text: 'Potvrzení v terminálu.' } });
+        await requestHouse(BASE, 'belokamen|16', ['belokamen|4', 'belokamen|9', 'belokamen|2'], F2, CHECK);
+        expect(calls[0]!.url.startsWith(`${BASE}/houses/request`)).toBe(true);
+        expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({ house: 'belokamen|16', with: ['belokamen|4', 'belokamen|9'] });
+    });
+
+    it('the setting off: 403 house.link gives the link and this request\'s estimate; no task', async () => {
+        const own = houseSearchLink(TREE, 'belokamen|16', ['belokamen|4'])!;
+        replies.push({
+            status: 403,
+            body: {
+                error: 'house.link', code: 'house.link', text: 'Odhad a potvrzení v terminálu výzkumu.', link: own,
+                estimate: { minutes: 80, measured: false, perHouse: { minutes: 30 }, perTown: { minutes: 20 } },
+            },
+        });
+        const r = await requestHouse(BASE, 'belokamen|16', ['belokamen|4'], F2, CHECK);
+        expect(r).toEqual({
+            ok: false, code: 'link', status: 403, reason: 'Odhad a potvrzení v terminálu výzkumu.', bridgeCode: 'house.link', link: own,
+            estimate: { minutes: 80, measured: false, perHouse: { minutes: 30 }, perTown: { minutes: 20 } },
+        });
+        // A link the app would not build is replaced by its own.
+        replies.push({ status: 403, body: { error: 'house.link', code: 'house.link', link: 'https://example.org/elsewhere' } });
+        const other = await requestHouse(BASE, 'belokamen|16', ['belokamen|4'], F2, CHECK);
+        expect(other.ok === false && other.code === 'link' && other.link).toBe(own);
+        expect(other.ok === false && other.code === 'link' && other.estimate).toBeNull();
+    });
+
+    it('the setting on: 200 queued with the house row, its task and the town\'s frame task', async () => {
+        replies.push({
+            status: 200,
+            body: {
+                house: { ...QUEUED_ROW, key: 'belokamen|16', place: { key: 'belokamen', id: 'L0001', name: 'Bělokamen' }, house: '16' },
+                task: 'T0002', state: 'queued', town: 'T0001', head: HEAD, parent: PARENT,
+            },
+        });
+        const r = await requestHouse(BASE, 'belokamen|16', [], F2, CHECK);
+        expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({ house: 'belokamen|16' });
+        expect(r).toMatchObject({ ok: true, state: 'queued', task: 'T0002', town: 'T0001', head: HEAD, parent: PARENT });
+        expect(r.ok && r.house?.key).toBe('belokamen|16');
+    });
+
+    it('moves a waiting house to the top as a request of the house alone', async () => {
+        replies.push({ status: 200, body: { house: QUEUED_ROW, task: 'T0004', state: 'queued', head: HEAD, parent: PARENT } });
+        const r = await moveHouseToTop(BASE, 'brodek|5', F2, CHECK);
+        expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({ house: 'brodek|5' });
+        expect(r).toMatchObject({ ok: true, task: 'T0004' });
+    });
+
+    it('refusals: another town 400, unknown house 404, archive 409, busy 503; a bad key is not sent', async () => {
+        replies.push({ status: 400, body: { error: 'house.body', code: 'house.body' } });
+        expect(await requestHouse(BASE, 'belokamen|16', ['brodek|5'], F2, CHECK)).toMatchObject({ ok: false, code: 'invalid' });
+        replies.push({ status: 404, body: { error: 'house.unknown', code: 'house.unknown' } });
+        expect(await requestHouse(BASE, 'belokamen|99', [], F2, CHECK)).toMatchObject({ ok: false, code: 'unknown-house' });
+        replies.push({ status: 409, body: { error: 'house.archive', code: 'house.archive' } });
+        expect(await requestHouse(BASE, 'belokamen|16', [], F2, CHECK)).toMatchObject({ ok: false, code: 'archive' });
+        replies.push({ status: 503, body: { error: 'research.busy', code: 'research.busy' } });
+        expect(await requestHouse(BASE, 'belokamen|16', [], F2, CHECK)).toMatchObject({ ok: false, code: 'busy' });
+        const sent = calls.length;
+        expect(await requestHouse(BASE, 'no key', [], F2, CHECK)).toMatchObject({ ok: false, code: 'invalid', status: 0 });
+        expect(calls.length).toBe(sent);
+    });
+});
+
+describe('part 2: a house\'s result', () => {
+    it('reads the town\'s frame with its place and the day it was done, a map on a layer, the houses joined as the same', () => {
+        const h = sanitizeHouseResearch({
+            house: {
+                ...MILL,
+                maps: [
+                    { id: 'm1', kind: 'cadastre', manual: true, sheet: 'list 2', url: 'https://example.org/stabilni-katastr/belokamen' },
+                    { id: 'm2', kind: 'ortho', layer: 'cz-ortho', origin: 'research' },
+                ],
+                town: {
+                    id: 'A0002', place: { id: 'L0001', name: 'Bělokamen' }, text: 'Fara Brodek, katastrální území Bělokamen.',
+                    passed: [], manual: [], archiveOnly: [], maps: [], unknown: [], done: '2026-11-26', task: 'T0001', state: 'done',
+                },
+                same: [{ id: 'A0009', key: 'belokamen|9' }, { id: 'x y', key: 'belokamen|8' }],
+            },
+        })!;
+        expect(h.maps[1]).toEqual({ id: 'm2', kind: 'ortho', layer: 'cz-ortho', origin: 'research' });
+        expect(h.town).toMatchObject({ id: 'A0002', place: { id: 'L0001', name: 'Bělokamen' }, done: '2026-11-26', task: 'T0001', state: 'done' });
+        expect(h.same).toEqual([{ id: 'A0009', key: 'belokamen|9' }]);
+        // The sample of the research: a town's frame without a place.
+        expect(sanitizeHouseResearch({ house: MILL })!.town).toMatchObject({ id: 'A0002' });
     });
 });

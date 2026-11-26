@@ -12,7 +12,8 @@
 
 import type { HouseId } from './types.js';
 import {
-    cleanText, isResearchHead, sanitizeLiveHouses, withAppVersion, type HouseFeature, type LiveHouses,
+    cleanText, houseSearchLink, HOUSE_REQUEST_WITH_MAX, isResearchHead, sanitizeHouseEstimate, sanitizeLiveHouses, withAppVersion,
+    type HouseFeature, type LiveHouseEstimate, type LiveHouses,
 } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import type { ResearchHouseNumber } from './houses.js';
@@ -232,15 +233,18 @@ export interface HouseLook {
 
 /** The frame of the house's town (its record in the research), when there is one. */
 export interface HouseTown {
-    id: string;
-    place?: string;
+    /** The town's record in the research (A…); a frame still asked for may come without one. */
+    id?: string;
+    /** The research's place of the town. */
+    place?: { id: string; name?: string };
     text: string;
     passed: HousePassed[];
     manual: HouseManual[];
     archiveOnly: HouseArchiveOnly[];
     maps: HouseMap[];
     unknown: HouseUnknown[];
-    done?: boolean;
+    /** When the town's frame task was done (a date; true from an older bridge that only said so). */
+    done?: string | true;
     task?: string;
     state?: HouseState;
 }
@@ -462,13 +466,20 @@ function look(v: unknown): HouseLook | undefined {
 
 function town(v: unknown): HouseTown | undefined {
     const r = asRecord(v);
-    const id = idOf(r?.id);
-    if (!r || !id) return undefined;
+    if (!r) return undefined;
+    const id = idOf(r.id);
+    const pr = asRecord(r.place);
+    const placeId = idOf(pr ? pr.id : r.place);
+    const townPlace = placeId ? { id: placeId, ...opt('name', text(pr?.name, 200)) } : undefined;
+    const task = idOf(r.task);
+    // A record (A…), its place or its task: something to show; anything else is not a town's frame.
+    if (!id && !townPlace && !task) return undefined;
+    const done = isoDay(r.done) ?? (r.done === true ? true : undefined);
     return {
-        id, ...opt('place', idOf(r.place)), text: text(r.text, 4000) ?? '',
+        ...opt('id', id), ...opt('place', townPlace), text: text(r.text, 4000) ?? '',
         passed: list(r.passed, passed), manual: list(r.manual, manual), archiveOnly: list(r.archiveOnly, archiveOnly),
         maps: list(r.maps, mapItem), unknown: list(r.unknown, unknownItem),
-        ...opt('done', typeof r.done === 'boolean' ? r.done : undefined), ...opt('task', idOf(r.task)), ...opt('state', oneOf(r.state, STATES)),
+        ...opt('done', done), ...opt('task', task), ...opt('state', oneOf(r.state, STATES)),
     };
 }
 
@@ -815,4 +826,112 @@ export async function confirmHouse(base: string, body: HouseConfirmBody, feature
 export function batchDoneHouse(house: string | undefined, features: readonly string[] | null | undefined): { house?: HouseId } {
     const key = keyOf(house);
     return key && houseFeature(features, 'house.material') ? { house: key } : {};
+}
+
+// ==================== THE SETTING AND A REQUEST (part 2, §4.5) ====================
+
+/** Why `POST /houses {on}` did not go: as `HouseWriteError` (400 house.body `invalid`, 500 house.failed `unknown`). */
+export type HousesAutoResult =
+    | { ok: true; houses: LiveHouses | null; head: string; parent: string }
+    | { ok: false; code: HouseWriteError; status: number; reason: string; bridgeCode: string; held?: ResearchWriteHeld };
+
+/** The reply to `POST /houses {on}`, typed: the state the research keeps now (as `/status.houses`) and its commit. */
+export function housesAutoReply(status: number, body: unknown, features: readonly string[] | null | undefined): HousesAutoResult {
+    const r = asRecord(body) ?? {};
+    if (status >= 200 && status < 300) {
+        return { ok: true, houses: sanitizeLiveHouses(r.houses), head: isResearchHead(r.head) ?? '', parent: isResearchHead(r.parent) ?? '' };
+    }
+    const refused = houseWriteReply(status, body, features);
+    return refused.ok ? { ok: false, code: 'unknown', status, reason: '', bridgeCode: '' } : refused;
+}
+
+/**
+ * House histories on or off for this tree (`POST <token>/houses {"on": bool}`, feature `house.auto`), written at
+ * once, no terminal, both ways (§4.5, like census records): switching off sets the waiting house tasks aside.
+ */
+export async function setHousesAuto(base: string, on: boolean, features: readonly string[] | null | undefined): Promise<HousesAutoResult> {
+    const res = await request(`${base}/houses`, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: JSON.stringify({ on }),
+    }, HOUSE_WRITE_TIMEOUT_MS);
+    if (!res) return { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+    if (res.text === TIMED_OUT) return { ok: false, code: 'timeout', status: 0, reason: '', bridgeCode: '' };
+    return housesAutoReply(res.status, jsonOf(res.text), features);
+}
+
+/**
+ * What a request of a house gave: `queued` (the setting on: the house's task is on top of the queue, with the
+ * task of its town's frame when the town has none yet), or `link` (the setting off, 403 house.link: the research's
+ * terminal says the estimate and asks — no task is made until its yes), or a refusal as any house write.
+ */
+export type HouseRequestResult =
+    | { ok: true; state: 'queued'; house: HouseListRow | null; task: string; town?: string; head: string; parent: string }
+    | { ok: false; code: 'link'; status: number; reason: string; bridgeCode: string; link: string; estimate: LiveHouseEstimate | null }
+    | { ok: false; code: HouseWriteError; status: number; reason: string; bridgeCode: string; held?: ResearchWriteHeld };
+
+/** Who a request's link is for: the tree and the research's scheme. */
+export interface HouseLinkCheck {
+    tree: string;
+    scheme?: string;
+}
+
+/** The houses a request takes besides the house: keys, without the house itself or a repeat, at most two. */
+export function houseRequestWith(house: string, more: readonly string[]): HouseId[] {
+    const out: HouseId[] = [];
+    for (const k of more) {
+        const key = keyOf(k);
+        if (key && key !== house && !out.includes(key)) out.push(key);
+        if (out.length === HOUSE_REQUEST_WITH_MAX) break;
+    }
+    return out;
+}
+
+/** The reply to `POST /houses/request`, typed; `link` is the research's own only when it is the one the app would build. */
+export function houseRequestReply(status: number, body: unknown, features: readonly string[] | null | undefined,
+    sent: { house: HouseId; with: HouseId[] }, check: HouseLinkCheck): HouseRequestResult {
+    const r = asRecord(body) ?? {};
+    if (status >= 200 && status < 300) {
+        const task = idOf(r.task) ?? '';
+        return {
+            ok: true, state: 'queued', house: sanitizeHouseRow(r.house), task, ...opt('town', idOf(r.town)),
+            head: isResearchHead(r.head) ?? '', parent: isResearchHead(r.parent) ?? '',
+        };
+    }
+    const code = typeof r.code === 'string' && /^[a-z0-9.-]{1,40}$/.test(r.code) ? r.code : '';
+    if (status === 403 && code === 'house.link') {
+        const own = houseSearchLink(check.tree, sent.house, sent.with, check.scheme);
+        const said = typeof r.link === 'string' ? r.link : '';
+        const link = own && said === own ? said : own ?? '';
+        const reason = cleanText(typeof r.text === 'string' && r.text ? r.text : r.error, 400);
+        return { ok: false, code: 'link', status, reason, bridgeCode: code, link, estimate: sanitizeHouseEstimate(r.estimate) };
+    }
+    const refused = houseWriteReply(status, body, features);
+    return refused.ok ? { ok: false, code: 'unknown', status, reason: '', bridgeCode: code } : refused;
+}
+
+/**
+ * Ask the research for a house's history (`POST <token>/houses/request {house, with?}`, feature `house.request`):
+ * `with` at most two more houses of the family in the same town (another town's house is refused by the research).
+ * With the setting off the answer is the terminal's link (`code: 'link'`); never throws.
+ */
+export async function requestHouse(base: string, house: string, more: readonly string[], features: readonly string[] | null | undefined,
+    check: HouseLinkCheck): Promise<HouseRequestResult> {
+    const key = keyOf(house);
+    if (!key) return { ok: false, code: 'invalid', status: 0, reason: '', bridgeCode: '' };
+    const withKeys = houseRequestWith(key, more);
+    const res = await request(`${base}/houses/request`, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        body: JSON.stringify({ house: key, ...(withKeys.length ? { with: withKeys } : {}) }),
+    }, HOUSE_WRITE_TIMEOUT_MS);
+    if (!res) return { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+    if (res.text === TIMED_OUT) return { ok: false, code: 'timeout', status: 0, reason: '', bridgeCode: '' };
+    return houseRequestReply(res.status, jsonOf(res.text), features, { house: key, with: withKeys }, check);
+}
+
+/**
+ * "Move to the top" (§2, the setting on): the bridge has no route of its own for it — a request of a house whose
+ * task waits moves that task on top of the queue (§2.6), so it is a request of the house alone.
+ */
+export function moveHouseToTop(base: string, house: string, features: readonly string[] | null | undefined,
+    check: HouseLinkCheck): Promise<HouseRequestResult> {
+    return requestHouse(base, house, [], features, check);
 }

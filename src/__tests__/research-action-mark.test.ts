@@ -10,7 +10,7 @@ import {
     RESEARCH_LINK_ACTIONS, RESEARCH_LINK_MARKS, RESEARCH_ACTION_MARKS, researchLinkMark, researchUrlMark, researchSchemeUrl,
     RESEARCH_BRIDGE_ACTIONS, RESEARCH_BRIDGE_MARKS, researchBridgeMark, setResearchDeviceState, researchDeviceAllows,
     researchDeviceMark, deviceAllows, deviceActionOfBridgeWrite, noteResearchDeviceRefused, researchDeviceLinkAllows,
-    researchDeviceAgentLink, DEVICE_AGENT_START, DEVICE_AGENT_BRIDGE, houseImportLink,
+    researchDeviceAgentLink, DEVICE_AGENT_START, DEVICE_AGENT_BRIDGE, houseImportLink, houseSearchLink,
 } from '../research-link.js';
 import { researchActionLabel, researchBridgeActionLabel, researchBridgeAgentLabel, researchLinkFlags } from '../ui/research-open-mark.js';
 import { syncActionMark } from '../ui/research-sync-ui.js';
@@ -64,6 +64,13 @@ describe('the map of research actions to their marks', () => {
         expect(houseImportLink(TREE, 'strom-research-beta')).toBe(`strom-research-beta://house?tree=${TREE}&do=import`);
         expect(houseImportLink('not a tree')).toBeNull();
         expect(researchSchemeUrl('house', { tree: TREE })).toBeNull();
+        // Part 2 (§4.5): a house asked for — the terminal says the estimate, the agent works on a yes.
+        const search = houseSearchLink(TREE, 'belokamen|16', ['belokamen|4'])!;
+        expect(search).toBe(`strom-research://house?tree=${TREE}&house=belokamen%7C16&do=search&with=belokamen%7C4`);
+        expect(researchUrlMark(search)).toBe('agent');
+        expect(researchLinkFlags(search)).toEqual({ research: true, ai: true });
+        expect(researchSchemeUrl('house', { tree: TREE, houseDo: 'search' })).toBeNull();
+        expect(researchSchemeUrl('house', { tree: TREE, houseDo: 'import', house: 'belokamen|16' })).toBeNull();
     });
 
     it('marks the state block\'s actions by the link they launch', () => {

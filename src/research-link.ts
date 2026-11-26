@@ -602,8 +602,15 @@ export interface ResearchLinkParams {
     place?: string;
     /** `history`: search the place's history (the research's terminal says the estimate and asks). */
     historyDo?: 'search';
-    /** `house`: take one's own research of houses over (spec 030 §2.8; the terminal asks for the files). */
-    houseDo?: 'import';
+    /**
+     * `house`: take one's own research of houses over (`import`, spec 030 §2.8; the terminal asks for the files) or
+     * search a house's history (`search` with `house`, part 2 §4.5: the terminal says the estimate, the agent works on a yes).
+     */
+    houseDo?: 'import' | 'search';
+    /** `house` with `do=search`: the house by its key ("belokamen|16"). */
+    house?: string;
+    /** `house` with `do=search`: at most two more houses of the family in the same town, processed together. */
+    houseWith?: string[];
     /** `fixes`: one tree fix by its id ("street-places"); without it the list of fixes. */
     fix?: string;
     /** `fixes`: ask to undo what the fix fixed (only with `fix`); the research asks in its terminal. */
@@ -856,9 +863,19 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             const place = typeof p.place === 'string' && /^L\d{1,7}$/.test(p.place) ? p.place : null;
             return place && p.historyDo === 'search' ? `${base}&place=${place}&do=search` : null;
         }
-        case 'house':
-            // spec 030 §2.8: only the fixed `do=import` in part 1 (the request of a house comes with part 2).
-            return p.houseDo === 'import' ? `${base}&do=import` : null;
+        case 'house': {
+            // spec 030 §2.8: the fixed `do=import`; part 2 (§4.5): `do=search` for one house by its key, with at most
+            // two more houses (`with`) — keys only, never a name.
+            if (p.houseDo === 'import') return p.house === undefined && p.houseWith === undefined ? `${base}&do=import` : null;
+            if (p.houseDo !== 'search') return null;
+            const house = houseLinkKey(p.house);
+            const more = p.houseWith ?? [];
+            if (!house || more.length > HOUSE_REQUEST_WITH_MAX) return null;
+            const keys = more.map(houseLinkKey);
+            if (keys.some(k => !k || k === house) || new Set(keys).size !== keys.length) return null;
+            const withPart = keys.length ? `&with=${keys.map(k => encodeURIComponent(k!)).join(',')}` : '';
+            return `${base}&house=${encodeURIComponent(house)}&do=search${withPart}`;
+        }
         case 'history-kinds': {
             // spec 035: a fixed scope and kinds from the fixed list (or inherit) — nothing else.
             if (p.kindsScope !== 'tree' && p.kindsScope !== 'default') return null;
@@ -984,6 +1001,28 @@ export function houseImportLink(tree: string, scheme: string = DEFAULT_RESEARCH_
     return researchSchemeUrl('house', { tree, houseDo: 'import' }, scheme);
 }
 
+/** The most houses a request takes besides the house itself (`with`, spec 030 K6.3: at most 3 together). */
+export const HOUSE_REQUEST_WITH_MAX = 2;
+
+/** A house key fit for a link: "town|number", no comma (the list separator), no control characters. */
+function houseLinkKey(v: unknown): string | null {
+    if (typeof v !== 'string' || v.length > 400 || v !== v.trim()) return null;
+    const bar = v.indexOf('|');
+    if (bar <= 0 || bar === v.length - 1 || v.includes(',') || /[\u0000-\u001f\u007f]/.test(v)) return null;
+    return v;
+}
+
+/**
+ * The link that asks the research for a house's history (spec 030 §4.5,
+ * `strom-research://house?tree=…&house=<key>&do=search[&with=k1,k2]`): the
+ * research's terminal says the estimate, on a yes puts the house's task (and
+ * its town's frame) on top of the queue and the agent works at once (AI +
+ * terminal mark). Null without a valid tree, key or with more than two more houses.
+ */
+export function houseSearchLink(tree: string, house: string, more: readonly string[] = [], scheme: string = DEFAULT_RESEARCH_SCHEME): string | null {
+    return researchSchemeUrl('house', { tree, house, houseDo: 'search', ...(more.length ? { houseWith: [...more] } : {}) }, scheme);
+}
+
 /** Each action's query words and the parameter of `researchSchemeUrl` each one comes from (`tree` aside). */
 const LINK_QUERY_PARAMS: Partial<Record<ResearchLinkAction, Readonly<Record<string, keyof ResearchLinkParams>>>> = {
     live: { do: 'liveDo' },
@@ -994,7 +1033,7 @@ const LINK_QUERY_PARAMS: Partial<Record<ResearchLinkAction, Readonly<Record<stri
     archive: { host: 'host' },
     experiment: { name: 'experiment', do: 'experimentDo' },
     history: { place: 'place', do: 'historyDo' },
-    house: { do: 'houseDo' },
+    house: { house: 'house', do: 'houseDo', with: 'houseWith' },
     'history-kinds': { scope: 'kindsScope', kinds: 'kinds', inherit: 'inherit' },
     hypothesis: { id: 'hypothesis', do: 'hypothesisDo', variant: 'variant' },
     hypotheses: { do: 'hypothesesDo', ids: 'ids', decide: 'decide' },
@@ -1013,7 +1052,7 @@ const LINK_QUERY_PARAMS: Partial<Record<ResearchLinkAction, Readonly<Record<stri
 };
 
 /** Parameters given as a comma-separated list in the link. */
-const LINK_LIST_PARAMS: ReadonlySet<string> = new Set(['ids', 'workTasks']);
+const LINK_LIST_PARAMS: ReadonlySet<string> = new Set(['ids', 'workTasks', 'houseWith']);
 
 /** A link's query as a set of words (order aside); null when a word comes twice. */
 function linkQueryOf(u: URL): Map<string, string> | null {
@@ -3580,9 +3619,12 @@ export const CENSUS_FEATURE = 'census';
  * `/status.features` of the house histories (spec 030): `house` the houses' reads and `/status.houses`,
  * `house.material` material and memories to a house (and `house` in `batch/<id>/done`), `house.confirm` a person's
  * word on a renumbering, a point or "not the same house", `house.import` taking over one's own research in the
- * research's terminal (a research with an agent, never an archive).
+ * research's terminal (a research with an agent, never an archive); part 2 (§4.5): `house.auto` the tree's setting
+ * of house histories (`POST /houses {on}`, `/status.houses.auto`/`estimate`), `house.request` a house asked for
+ * (`POST /houses/request`; a research with an agent). `house.request.direct` is never said: with the setting off a
+ * request always goes through the research's terminal.
  */
-export const HOUSE_FEATURES = ['house', 'house.material', 'house.confirm', 'house.import'] as const;
+export const HOUSE_FEATURES = ['house', 'house.material', 'house.confirm', 'house.import', 'house.auto', 'house.request'] as const;
 export type HouseFeature = typeof HOUSE_FEATURES[number];
 /** `/status.features`: the houses' reads, `/status.houses` and the task kind `house` (`kind=house`, `known=house`). */
 export const HOUSE_FEATURE: HouseFeature = 'house';
@@ -3596,12 +3638,122 @@ export interface LiveHouseCounts {
     held: number;
 }
 
+/** Minutes and, once measured, the price in USD of one unit of house work. */
+export interface LiveHouseCost {
+    minutes: number;
+    usd?: number;
+}
+
+/**
+ * What the agent's work on houses takes (`/status.houses.estimate`, or the `estimate` of a 403 `house.link`):
+ * `usd` only when the price is measured (`measured`, at least three house tasks), else the time alone.
+ */
+export interface LiveHouseEstimate {
+    /** The houses and towns counted (the setting's estimate; absent in a request's estimate). */
+    houses?: number;
+    towns?: number;
+    minutes: number;
+    usd?: number;
+    measured: boolean;
+    perHouse: LiveHouseCost;
+    perTown: LiveHouseCost;
+}
+
+/**
+ * A map layer of the houses (`/status.houses.layers`, §4.5): a WMS service; `crs` only for a service that draws in
+ * one system alone (`EPSG:5514`: S-JTSK), absent = it draws in Web Mercator and WGS 84. `label` is in the research's
+ * language; the attribution and the license are always shown whole.
+ */
+export interface LiveHouseLayer {
+    id: string;
+    kind?: string;
+    label: string;
+    type: 'wms';
+    url: string;
+    layers: string;
+    format?: string;
+    crs?: string;
+    attribution: string;
+    license: string;
+    minZoom?: number;
+    /** [west, south, east, north] in degrees. */
+    bbox: [number, number, number, number];
+}
+
 /** `/status.houses`: house histories on for the tree, the revision of every house and its task, the counts. */
 export interface LiveHouses {
     on: boolean;
     /** Changes with any house or its task: the list (`GET /houses`) is read again only on a new one. */
     rev: string;
+    /** Task counts; `held` = house tasks set aside by switching the setting off (not houses). */
     counts: LiveHouseCounts;
+    /** The houses and towns the setting gives to the agent (part 2); absent when the tree's data give no house. */
+    auto?: { houses: number; towns: number };
+    estimate?: LiveHouseEstimate;
+    /** Map layers whose bbox holds a town of the tree's houses (part 2). */
+    layers?: LiveHouseLayer[];
+}
+
+const houseCount = (v: unknown): number => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10_000_000 ? v : 0);
+const houseNumberOrUndef = (v: unknown, max: number): number | undefined =>
+    (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? v : undefined);
+
+function houseCost(v: unknown, measured: boolean): LiveHouseCost | null {
+    const r = asRecord(v);
+    const minutes = houseNumberOrUndef(r?.minutes, 100_000);
+    if (minutes === undefined) return null;
+    const usd = measured ? houseNumberOrUndef(r?.usd, 1_000_000) : undefined;
+    return { minutes, ...(usd !== undefined ? { usd } : {}) };
+}
+
+/** An estimate of house work, checked: minutes and both units, else null; `usd` kept only when measured. */
+export function sanitizeHouseEstimate(value: unknown): LiveHouseEstimate | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const measured = r.measured === true;
+    const minutes = houseNumberOrUndef(r.minutes, 10_000_000);
+    const perHouse = houseCost(r.perHouse, measured);
+    const perTown = houseCost(r.perTown, measured);
+    if (minutes === undefined || !perHouse || !perTown) return null;
+    const usd = measured ? houseNumberOrUndef(r.usd, 100_000_000) : undefined;
+    return {
+        ...(r.houses !== undefined ? { houses: houseCount(r.houses) } : {}),
+        ...(r.towns !== undefined ? { towns: houseCount(r.towns) } : {}),
+        minutes, ...(usd !== undefined ? { usd } : {}), measured, perHouse, perTown,
+    };
+}
+
+const LAYER_TEXT = (v: unknown, max: number): string | undefined => {
+    const t = cleanText(v, max);
+    return t ? t : undefined;
+};
+
+/** A map layer, checked: a WMS service on https with its attribution and license and a valid bbox, else null. */
+export function sanitizeHouseLayer(value: unknown): LiveHouseLayer | null {
+    const r = asRecord(value);
+    if (!r || r.type !== 'wms') return null;
+    const id = typeof r.id === 'string' && /^[a-z0-9][a-z0-9._-]{0,39}$/.test(r.id) ? r.id : undefined;
+    let url: string | undefined;
+    try {
+        const u = typeof r.url === 'string' && r.url.length <= 2000 ? new URL(r.url) : null;
+        url = u && u.protocol === 'https:' && !u.username && !u.password ? u.href : undefined;
+    } catch { url = undefined; }
+    const label = LAYER_TEXT(r.label, 200);
+    const layers = typeof r.layers === 'string' && /^[A-Za-z0-9_.:,-]{1,200}$/.test(r.layers) ? r.layers : undefined;
+    const attribution = LAYER_TEXT(r.attribution, 400);
+    const license = LAYER_TEXT(r.license, 200);
+    const b = Array.isArray(r.bbox) && r.bbox.length === 4 && r.bbox.every(x => typeof x === 'number' && Number.isFinite(x))
+        ? r.bbox as number[] : null;
+    const bboxOk = b && Math.abs(b[0]) <= 180 && Math.abs(b[2]) <= 180 && Math.abs(b[1]) <= 90 && Math.abs(b[3]) <= 90 && b[0] < b[2] && b[1] < b[3];
+    if (!id || !url || !label || !layers || !attribution || !license || !b || !bboxOk) return null;
+    const format = typeof r.format === 'string' && /^image\/[a-z0-9.+-]{1,40}$/.test(r.format) ? r.format : undefined;
+    const crs = typeof r.crs === 'string' && /^EPSG:\d{3,6}$/.test(r.crs) ? r.crs : undefined;
+    const kind = typeof r.kind === 'string' && /^[a-z0-9][a-z0-9._-]{0,39}$/.test(r.kind) ? r.kind : undefined;
+    const minZoom = typeof r.minZoom === 'number' && Number.isInteger(r.minZoom) && r.minZoom >= 0 && r.minZoom <= 22 ? r.minZoom : undefined;
+    return {
+        id, ...(kind ? { kind } : {}), label, type: 'wms', url, layers, ...(format ? { format } : {}), ...(crs ? { crs } : {}),
+        attribution, license, ...(minZoom !== undefined ? { minZoom } : {}), bbox: [b[0], b[1], b[2], b[3]],
+    };
 }
 
 /** `/status.houses`, checked: `on` a boolean and a revision, else null (not known); counts not said are 0. */
@@ -3609,8 +3761,16 @@ export function sanitizeLiveHouses(value: unknown): LiveHouses | null {
     const r = asRecord(value);
     if (!r || typeof r.on !== 'boolean' || typeof r.rev !== 'string' || !/^[A-Za-z0-9._-]{1,80}$/.test(r.rev)) return null;
     const c = asRecord(r.counts) ?? {};
-    const n = (v: unknown): number => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10_000_000 ? v : 0);
-    return { on: r.on, rev: r.rev, counts: { done: n(c.done), running: n(c.running), queued: n(c.queued), waiting: n(c.waiting), held: n(c.held) } };
+    const n = houseCount;
+    const autoRec = asRecord(r.auto);
+    const auto = autoRec ? { houses: n(autoRec.houses), towns: n(autoRec.towns) } : undefined;
+    const estimate = r.estimate !== undefined ? sanitizeHouseEstimate(r.estimate) : null;
+    const layers = Array.isArray(r.layers)
+        ? r.layers.slice(0, 50).map(sanitizeHouseLayer).filter((l): l is LiveHouseLayer => !!l) : undefined;
+    return {
+        on: r.on, rev: r.rev, counts: { done: n(c.done), running: n(c.running), queued: n(c.queued), waiting: n(c.waiting), held: n(c.held) },
+        ...(auto ? { auto } : {}), ...(estimate ? { estimate } : {}), ...(layers?.length ? { layers } : {}),
+    };
 }
 
 /** `/status.census`: census records on for this research, and the census tasks set aside (null: not known). */
