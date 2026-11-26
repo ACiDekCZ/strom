@@ -195,6 +195,8 @@ let titlesCatchingUp = false;
 
 /** Researches that said nothing of what they take, asked once in this page whether they do now. */
 const olderAsked = new Set<string>();
+/** The state block's actions that send the tree (greyed in the showcase). */
+const BLOCK_SEND_ACTIONS = new Set(['send', 'sendThenLoad', 'retry', 'sendAgain', 'startAndSend']);
 /** Researches whose write answers said their `parent` (researchHeadBeforeWrite asks no /status for them). */
 const parentSaid = new Set<string>();
 /** Researches whose write answers said their new head (they commit the app's writes). */
@@ -3648,15 +3650,18 @@ export const researchSyncMethods = uiModule({
             : a.action === 'startResearch' ? s.startShort
             : a.label;
         const button = (a: ResearchSyncBlockAction, main: boolean): string => {
-            const describe = main ? ' aria-describedby="research-sync-status"' : '';
+            // A send in the showcase: in sight greyed with its own mark, a click says why (as the bar's Send).
+            const off = BLOCK_SEND_ACTIONS.has(a.action)
+                ? showcaseOffAttrs('send', a.label, main ? 'research-sync-status' : '', this.researchSyncActionMark(a.action)) : '';
+            const describe = main && !off ? ' aria-describedby="research-sync-status"' : '';
             const busy = sendingNow && !a.asLink && ['send', 'sendThenLoad', 'retry', 'sendAgain'].includes(a.action);
             const cls = main ? ' research-sync-main' : '';
             const label = main ? short(a) : a.label;
             // The short label is spoken whole ("Send changes"): it starts the same, so voice control finds it.
             const named = label !== a.label && !busy ? ` aria-label="${esc(a.label)}"` : '';
             return a.asLink
-                ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${this.researchSyncActionLabel(a.action, label)}</button>`
-                : `<button type="button" class="primary btn-sm research-sync-btn${cls}" role="menuitem" data-action="${a.action}"${named}${describe}${busy ? ' disabled aria-busy="true"' : ''}`
+                ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe}${off} onclick="${call('researchSyncAction', `'${a.action}'`)}">${this.researchSyncActionLabel(a.action, label)}</button>`
+                : `<button type="button" class="primary btn-sm research-sync-btn${cls}" role="menuitem" data-action="${a.action}"${named}${describe}${off}${busy ? ' disabled aria-busy="true"' : ''}`
                     + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<i class="busy-spin s12" aria-hidden="true"></i>${esc(s.sending)}` : this.researchSyncActionLabel(a.action, label)}</button>`;
         };
         const note = b.note ? ` title="${esc(b.note)}" aria-description="${esc(b.note)}"` : '';

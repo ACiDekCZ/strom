@@ -102,6 +102,12 @@ test.describe('the showcase with research', () => {
         await expect(send).toBeVisible();
         await expectOff(page, send, 'none', 'Send to research');
         await clickSaysWhy(page, send, 'In full research: Send to research');
+        // What will be sent: read, its Send greyed too.
+        await page.locator('#research-sync-send-more').click();
+        const go = page.locator('#research-changes-panel [data-act="send"]');
+        await expectOff(page, go, 'none', 'Send');
+        await clickSaysWhy(page, go, 'In full research: Send');
+        await expect(page.locator('#research-changes-panel')).toBeVisible();
         expect(writes).toEqual([]);
     });
 
@@ -278,6 +284,30 @@ test.describe('the showcase with research', () => {
 
 test.describe('the showcase on a phone', () => {
     test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+
+    test('the research sheet\'s state block: Send greyed, a tap says why, nothing opens or goes', async ({ page }) => {
+        const writes = writesOut(page);
+        await openShowcase(page, { accepts: true });
+        const anna = await personId(page, 'Anna');
+        await page.evaluate((id) => {
+            const tm = window.Strom.TreeManager;
+            tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: 'manual' });
+            window.Strom.DataManager.updatePerson(id, { birthPlace: 'Praha' });
+        }, anna);
+        await openResearchMenu(page);
+        const send = page.locator('#research-sync-block [data-action="send"]');
+        await expect(send).toBeVisible();
+        await expect(send).toHaveAttribute('data-showcase-off', 'none');
+        await expect(send).toHaveAttribute('data-showcase-label', 'Send changes');
+        await expect(send).toHaveAttribute('aria-disabled', 'true');
+        await expect(send).toHaveAttribute('aria-describedby', 'sample-why research-sync-status');
+        await send.tap({ force: true });
+        await expect(why(page)).toBeVisible();
+        await expect(why(page).locator('.what')).toHaveText('In full research: Send changes');
+        await expect(page.locator('#research-changes-panel')).toHaveCount(0);
+        expect(await launched(page)).toEqual([]);
+        expect(writes).toEqual([]);
+    });
 
     test('the bottom sheet: Research › greyed, a tap says why, Escape closes', async ({ page }) => {
         await openShowcase(page);

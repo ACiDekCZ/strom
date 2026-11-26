@@ -22,7 +22,8 @@ import {
     splitPersonAppOnly, personAppOnly, sendCounts, type SendCounts,
 } from '../research-changes.js';
 import { lifeEventLabel } from '../person-sources.js';
-import { researchKeepsAppMedia, MATERIAL_LINKS_FEATURE, type SyncMediaWritten } from '../research-link.js';
+import { researchKeepsAppMedia, researchMarkNone, MATERIAL_LINKS_FEATURE, type SyncMediaWritten } from '../research-link.js';
+import { showcaseOffAttrs } from './sample-why.js';
 import { deletedSourcesToSend, sourceRestoreOffered } from '../source-retract.js';
 import { gedcomTagEventType } from '../ged-parser.js';
 import { foreignSendCheck, researchRefsOf } from '../research-foreign-send.js';
@@ -1025,15 +1026,15 @@ export const researchChangesMethods = uiModule({
             foot = nothing
                 ? `<button type="button" class="secondary btn-sm" data-act="close">${esc(strings.buttons.close)}</button>`
                 : auto && !opts.confirm
-                ? `<button type="button" class="research-sync-link" data-act="send">${esc(s.sendNow)}</button>`
+                ? `<button type="button" class="research-sync-link" data-act="send"${showcaseOffAttrs('send', s.sendNow, '', researchMarkNone())}>${esc(s.sendNow)}</button>`
                 : opts.merge
                 // After a merge (spec 134 11a): keep it in the app for now, or send it.
                 ? `<button type="button" class="secondary btn-sm" data-act="close">${esc(opts.merge.keep)}</button>`
-                    + `<button type="button" class="primary btn-sm" data-act="send">${esc(opts.merge.go)}</button>`
+                    + `<button type="button" class="primary btn-sm" data-act="send"${showcaseOffAttrs('send', opts.merge.go, '', researchMarkNone())}>${esc(opts.merge.go)}</button>`
                 : (opts.confirm && !ctx.link.previewDue
                     ? `<label class="research-changes-skip"><input type="checkbox" id="research-changes-skip"> ${esc(c.skipPreview)}</label>` : '')
                     + `<button type="button" class="secondary btn-sm" data-act="close">${esc(strings.buttons.close)}</button>`
-                    + `<button type="button" class="primary btn-sm" data-act="send">${esc(s.barSend)}</button>`;
+                    + `<button type="button" class="primary btn-sm" data-act="send"${showcaseOffAttrs('send', s.barSend, '', researchMarkNone())}>${esc(s.barSend)}</button>`;
             if (opts.merge && !nothing) {
                 footPair = true;
                 // The same numbers as the sections' heads (134 V-N5).
