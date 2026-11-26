@@ -562,7 +562,7 @@ export const placesManagerMethods = uiModule({
                 return;
             }
             const url = this.activeResearchLink('fixes');
-            if (url) this.launchResearchLink(url);
+            if (url) this.launchPlacesLink(url);
         };
     },
 
@@ -659,13 +659,14 @@ export const placesManagerMethods = uiModule({
 
     /** "Fix in the research": the research's terminal at its street-places fix. */
     openStreetPlacesFix(): void {
-        if (this.researchFixesNow()?.reply.fixes.some(f => f.id === STREET_PLACES_FIX)) {
+        // A satellite: the main window opens it (its research's list of fixes is the main window's).
+        if (!this.placesResearchContext().viaMain && this.researchFixesNow()?.reply.fixes.some(f => f.id === STREET_PLACES_FIX)) {
             this.runResearchFix(STREET_PLACES_FIX, 'open');
             return;
         }
         const extra = this.streetPlacesFixNow().fix?.paid ? { fixPaid: true } : {};
         const url = this.activeResearchLink('fixes', { fix: STREET_PLACES_FIX }, extra);
-        if (url) this.launchResearchLink(url, 'terminal', null, extra);
+        if (url) this.launchPlacesLink(url, null, extra);
     },
 
     /** On a device whose gateway starts the agent: the street-places fix's link when the fix is paid (K3.15), else null. */

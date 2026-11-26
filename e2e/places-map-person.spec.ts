@@ -268,6 +268,28 @@ test.describe('places on the map with the research here', () => {
         await sat.close();
     });
 
+    test('a map in a window of its own: Check in the research in a bubble is written through the main window\'s bridge and said in the window', async ({ page, context }) => {
+        await stubMap(page);
+        const b = await research(page);
+        const treeId = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId()!);
+        const sat = await context.newPage();
+        await stubMap(sat);
+        await sat.setViewportSize({ width: 1440, height: 900 });
+        await sat.goto(`/strom.html?okno=map&tree=${encodeURIComponent(treeId)}&w=pm2`);
+        await expect(sat.locator('html')).not.toHaveClass(/app-loading/);
+        await expect(sat.locator('#map-container')).toBeVisible();
+        await setGeos(sat);
+        await mapOn(sat, 'Jinov');
+        const checkres = popup(sat).locator('.map-popup-check .map-popup-checkres');
+        await expect(checkres).toHaveText('Check in the research');
+        await clearToasts(sat);
+        await checkres.click();
+        await expect.poll(() => b.places!.identify.length).toBe(1);
+        expect(b.places!.identify[0]).toMatchObject({ do: 'queue', forms: ['Jinov'], check: true });
+        await expect(sat.locator('.toast')).toContainText('1 location queued for a check.');
+        await sat.close();
+    });
+
     test('a point to check: "!" with its reason; Keep in its bubble takes the mark away, the location stays', async ({ page }) => {
         await stubMap(page);
         await research(page);

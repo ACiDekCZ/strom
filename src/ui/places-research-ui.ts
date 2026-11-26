@@ -13,6 +13,9 @@ import { isPhoneBar } from '../breakpoints.js';
 import { parseLiveBridge } from '../research-link.js';
 import { announcedResearchScheme, isBridgelessWindow, storedResearchBridge } from '../research-device.js';
 import { placesResearchAccess, type PlacesLinkCheck, type PlacesResearchAccess } from '../places-bridge.js';
+import { relayedPlacesLink, satResearchForward } from '../windows/window-sat-research.js';
+import { openResearchBusy } from './research-open-busy.js';
+import type { ResearchLinkMarkParams } from '../research-link.js';
 import { uiModule } from './module.js';
 
 export interface PlacesResearchContext {
@@ -30,8 +33,8 @@ export interface PlacesResearchContext {
     viaMain: boolean;
     /**
      * The access of the place steps that write to the bridge from this window (Look up, Check, Select,
-     * Run now, Remove from the queue): the access, except in a satellite, where they do not go from
-     * here yet (as before: where they go instead).
+     * Run now, Remove from the queue): the access; in a satellite they go through the main window, so
+     * with the main window closed they do not go from here (where they go instead).
      */
     stepAccess: PlacesResearchAccess;
     /** The research's place steps go from here (stepAccess 'ok'). */
@@ -59,7 +62,7 @@ export const placesResearchMethods = uiModule({
         const access = placesResearchAccess({
             hasResearch: !!researchId, bridgeLocal: up && (viaMain || !!base), features, phoneLayout: isPhoneBar(),
         });
-        const stepAccess: PlacesResearchAccess = viaMain && access === 'ok' ? 'elsewhere' : access;
+        const stepAccess: PlacesResearchAccess = viaMain && access === 'ok' && !satResearchForward()?.mainOpen() ? 'elsewhere' : access;
         return {
             researchId, base, features, access, viaMain, stepAccess, canResearch: stepAccess === 'ok',
             linkCheck: researchId ? { tree: researchId, scheme: announcedResearchScheme() } : null,
@@ -79,6 +82,26 @@ export const placesResearchMethods = uiModule({
             case 'old': return strings.places.research.oldResearch;
             default: return '';
         }
+    },
+
+    /**
+     * Open a research link of the places (Run now, Fix in the research). In a satellite the main window hands it
+     * over for its tree (its bridge proves it, not this window's: no false "did not open" here), the element's
+     * state a moment as for any relayed link; elsewhere as any research link.
+     */
+    launchPlacesLink(url: string, el: HTMLElement | null = null, launch: Pick<ResearchLinkMarkParams, 'fixPaid'> = {}): void {
+        const main = this.placesResearchContext().viaMain ? satResearchForward() : null;
+        const relayed = main?.mainOpen() ? relayedPlacesLink(url) : null;
+        if (main && relayed) {
+            void openResearchBusy(el, url, { agent: false, relayed: true }, {
+                handOver: () => main.run('research-link', relayed, false),
+                ask: async () => null,
+                statusNow: () => null,
+                bridgeDown: () => false,
+            });
+            return;
+        }
+        void this.launchResearchLink(url, 'terminal', el, launch);
     },
 
     /** The research terminal's link that runs the place queue (one place with `place`); null when links do not go. */

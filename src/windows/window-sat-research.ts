@@ -14,6 +14,8 @@
  * The actions themselves are registered by src/ui/sat-research-main.ts.
  */
 
+import type { PlaceCheckFlag, PlacesIdentifyBody } from '../places-bridge.js';
+
 /** What a satellite's UI needs from its client to have an action run in the main window. */
 export interface SatResearchForward {
     /** The main window is open and answers. */
@@ -105,4 +107,123 @@ export function readPlacesOpenArgs(raw: unknown): PlacesOpenArgs | null {
     if (typeof a.unplaced !== 'boolean') return null;
     if (a.bulk !== undefined && a.bulk !== 'look' && a.bulk !== 'check') return null;
     return { scope: a.scope, unplaced: a.unplaced, ...(a.bulk ? { bulk: a.bulk } : {}) };
+}
+
+/** The places' steps of a satellite (Look up, Check, Remove from the queue): written through the main window's bridge. */
+export const PLACES_QUEUE_ACTION = 'places-queue';
+/** The research's places read through the main window's bridge (their states on a satellite's map, Places, person card). */
+export const PLACES_LIVE_ACTION = 'places-live';
+/** Houses opened in the main window (a satellite's "Houses of the town ›" with the research's part there). */
+export const HOUSES_OPEN_ACTION = 'houses-open';
+
+/** `places-queue`: the step as the satellite would have written it to the bridge. */
+export interface PlacesQueueArgs {
+    body: PlacesIdentifyBody;
+}
+
+const PLACE_CHECK_FLAGS: readonly PlaceCheckFlag[] = ['far', 'district', 'label', 'choices'];
+/** At most this many texts in one step (the research takes 5000), each this long at most. */
+const MAX_ITEMS = 5000;
+const MAX_TEXT = 500;
+
+/** A list of texts as a step names them (null: not one). */
+function texts(v: unknown): string[] | null {
+    if (!Array.isArray(v) || v.length > MAX_ITEMS) return null;
+    return v.every(x => typeof x === 'string' && x.length > 0 && x.length <= MAX_TEXT) ? [...v as string[]] : null;
+}
+
+/** `places-queue`'s arguments as they came (null: malformed; the bridge's own reading checks the items again). */
+export function readPlacesQueueArgs(raw: unknown): PlacesQueueArgs | null {
+    const a = argsObject(raw);
+    if (!a || Object.keys(a).some(k => k !== 'body')) return null;
+    const b = argsObject(a.body);
+    if (!b) return null;
+    const queue = b.do === 'queue';
+    if (!queue && b.do !== 'cancel') return null;
+    const keys = queue ? ['do', 'forms', 'places', 'all', 'check', 'flags'] : ['do', 'forms', 'places', 'all'];
+    if (Object.keys(b).some(k => !keys.includes(k))) return null;
+    const forms = b.forms === undefined ? undefined : texts(b.forms);
+    const places = b.places === undefined ? undefined : texts(b.places);
+    if (forms === null || places === null) return null;
+    if (b.all !== undefined && (queue ? b.all !== 'offmap' && b.all !== 'placed' : b.all !== 'queued')) return null;
+    if (!forms?.length && !places?.length && b.all === undefined) return null;
+    const lists = { ...(forms ? { forms } : {}), ...(places ? { places } : {}) };
+    if (!queue) return { body: { do: 'cancel', ...lists, ...(b.all === 'queued' ? { all: 'queued' as const } : {}) } };
+    if (b.check !== undefined && typeof b.check !== 'boolean') return null;
+    let flags: Record<string, PlaceCheckFlag> | undefined;
+    if (b.flags !== undefined) {
+        const f = argsObject(b.flags);
+        if (!f || Object.keys(f).length > MAX_ITEMS) return null;
+        flags = {};
+        for (const [form, flag] of Object.entries(f)) {
+            if (form.length > MAX_TEXT || !PLACE_CHECK_FLAGS.includes(flag as PlaceCheckFlag)) return null;
+            flags[form] = flag as PlaceCheckFlag;
+        }
+    }
+    return {
+        body: {
+            do: 'queue', ...lists,
+            ...(b.all === 'offmap' || b.all === 'placed' ? { all: b.all } : {}),
+            ...(b.check ? { check: true } : {}),
+            ...(flags ? { flags } : {}),
+        },
+    };
+}
+
+/** `places-live`: the state the satellite read last (`rev`), so an unchanged reply stays small. */
+export interface PlacesLiveArgs {
+    rev?: string;
+}
+
+/** `places-live`'s arguments as they came (null: malformed). */
+export function readPlacesLiveArgs(raw: unknown): PlacesLiveArgs | null {
+    const a = argsObject(raw);
+    if (!a || Object.keys(a).some(k => k !== 'rev')) return null;
+    if (a.rev !== undefined && (typeof a.rev !== 'string' || a.rev.length > 200)) return null;
+    return typeof a.rev === 'string' && a.rev ? { rev: a.rev } : {};
+}
+
+/** `houses-open`: the town the window shows (its key or its name), a house's row open. */
+export interface HousesOpenArgs {
+    town: string;
+    house?: string;
+}
+
+/** `houses-open`'s arguments as they came (null: malformed). */
+export function readHousesOpenArgs(raw: unknown): HousesOpenArgs | null {
+    const a = argsObject(raw);
+    if (!a || Object.keys(a).some(k => k !== 'town' && k !== 'house')) return null;
+    if (typeof a.town !== 'string' || !a.town.trim() || a.town.length > MAX_TEXT) return null;
+    if (a.house !== undefined && (typeof a.house !== 'string' || !a.house || a.house.length > MAX_TEXT)) return null;
+    return { town: a.town, ...(typeof a.house === 'string' ? { house: a.house } : {}) };
+}
+
+/** A research link the main window can build again for its tree (`research-link`): what the satellite's link asks. */
+export interface RelayedResearchLink {
+    link: 'places' | 'fixes';
+    params: Record<string, string>;
+}
+
+/**
+ * The places' links of a satellite (Run now, Fix in the research) as the main window's `research-link` takes
+ * them: the action and its parameters, never the address itself (null: not one of these links).
+ */
+export function relayedPlacesLink(url: string): RelayedResearchLink | null {
+    let u: URL;
+    try { u = new URL(url); } catch { return null; }
+    const q = u.searchParams;
+    const one = (k: string): string | null => q.getAll(k).length === 1 ? q.get(k) : null;
+    if (u.host === 'places') {
+        if (one('do') !== 'run') return null;
+        const place = one('place');
+        if (q.has('place') && !place) return null;
+        return { link: 'places', params: { placesDo: 'run', ...(place ? { place } : {}) } };
+    }
+    if (u.host === 'fixes') {
+        const fix = one('id');
+        if (q.has('id') && !fix) return null;
+        if (q.has('do') && (!fix || one('do') !== 'undo')) return null;
+        return { link: 'fixes', params: { ...(fix ? { fix } : {}), ...(q.has('do') ? { fixDo: 'undo' } : {}) } };
+    }
+    return null;
 }

@@ -100,7 +100,7 @@ describe('place research actions in a satellite window', () => {
     };
 
     describe('placesResearchContext', () => {
-        it('a satellite with the main window\'s bridge up: access ok through the main window, its steps not from here yet', () => {
+        it('a satellite with the main window\'s bridge up but no way to the main window: access ok, its steps not from here', () => {
             satellite(true);
             const ctx = ui().placesResearchContext();
             expect(ctx.access).toBe('ok');
@@ -196,7 +196,7 @@ describe('place research actions in a satellite window', () => {
 
     describe('the main window runs places-open', () => {
         it('with valid arguments only', () => {
-            const fake = { showPlacesManager: vi.fn(), openPlacesBulk: vi.fn() };
+            const fake = { showPlacesManager: vi.fn(), openPlacesBulk: vi.fn(), placesIdentifyHere: vi.fn(), placesLiveHere: vi.fn(), showHousesWindow: vi.fn() };
             registerSatelliteResearchActions(fake);
             expect(runMainResearchAction(PLACES_OPEN_ACTION, { scope: 'tree', unplaced: true, bulk: 'look' })).toEqual({ handled: true, result: true });
             expect(fake.showPlacesManager).toHaveBeenCalledWith(undefined, undefined, 'tree', { unplaced: true });
@@ -211,7 +211,7 @@ describe('place research actions in a satellite window', () => {
         });
 
         it('an id it does not know is left to the other handlers', () => {
-            registerSatelliteResearchActions({ showPlacesManager: vi.fn(), openPlacesBulk: vi.fn() });
+            registerSatelliteResearchActions({ showPlacesManager: vi.fn(), openPlacesBulk: vi.fn(), placesIdentifyHere: vi.fn(), placesLiveHere: vi.fn(), showHousesWindow: vi.fn() });
             expect(runMainResearchAction('waiting-places', {})).toEqual({ handled: false });
             expect(runMainResearchAction(7, {})).toEqual({ handled: false });
         });

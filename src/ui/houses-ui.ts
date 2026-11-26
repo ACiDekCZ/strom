@@ -30,6 +30,7 @@ import { shownName } from '../person-name.js';
 import { coupleEventLabel } from '../events.js';
 import { eventTypeLabel } from './person-events.js';
 import { uiModule } from './module.js';
+import { HOUSES_OPEN_ACTION, satResearchForward, type HousesOpenArgs } from '../windows/window-sat-research.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { helpMark } from './help-mark.js';
 
@@ -936,8 +937,19 @@ export const housesMethods = uiModule({
         return true;
     },
 
-    /** "Houses of the town ›" (Places dialog, the map's town bubble): the window on that town. */
+    /**
+     * "Houses of the town ›" (Places dialog, the map's town bubble): the window on that town. A satellite whose
+     * tree has a research with the main window's bridge answering: the main window opens it (with the research's
+     * part, which goes through its bridge) and comes forward; without a research, here as before.
+     */
     showTownHouses(town: string, parent?: string): void {
+        const ctx = this.placesResearchContext();
+        const main = ctx.viaMain && ctx.researchId && this.researchBridgeUp(ctx.researchId) ? satResearchForward() : null;
+        if (main?.mainOpen()) {
+            const args: HousesOpenArgs = { town };
+            main.run(HOUSES_OPEN_ACTION, args, true);
+            return;
+        }
         this.showHousesWindow({ town, ...(parent ? { parent } : {}) });
     },
 });

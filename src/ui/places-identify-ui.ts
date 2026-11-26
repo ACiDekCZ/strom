@@ -18,8 +18,12 @@ import {
 } from '../place-identity.js';
 import {
     fetchBridgePlaces, postPlacesIdentify, placeCheckFlag, withBridgePlace, PLACES_IDENTIFY_FEATURE,
-    type BridgePlace, type BridgePlaces, type PlacesIdentifyBody, type PlacesIdentifyOk, type PlacesWriteRefusal, type PlaceCheckFlag,
+    PLACES_READ_TIMEOUT_MS, PLACES_WRITE_TIMEOUT_MS,
+    type BridgePlace, type BridgePlaces, type PlacesIdentifyBody, type PlacesIdentifyOk, type PlacesIdentifyResult,
+    type PlacesReadResult, type PlacesWriteRefusal, type PlaceCheckFlag,
 } from '../places-bridge.js';
+import { PLACES_LIVE_ACTION, PLACES_QUEUE_ACTION, satResearchForward } from '../windows/window-sat-research.js';
+import type { PlacesResearchContext } from './places-research-ui.js';
 import { checkPlacesCached } from '../place-check.js';
 import { placeGeoHash } from '../place-records.js';
 import { patchResearchAutoState, researchAutoState, storedResearchWaiting } from '../research-device.js';
@@ -48,6 +52,32 @@ let offerBusy = false;
 function dialogOpen(): boolean {
     return !!document.querySelector('.modal-overlay.active');
 }
+/** A satellite waits this long for the main window's bridge to answer a step or a read (the bridge's own limit and a little). */
+const RELAY_WRITE_MS = PLACES_WRITE_TIMEOUT_MS + 3000;
+const RELAY_READ_MS = PLACES_READ_TIMEOUT_MS + 3000;
+
+const asObject = (v: unknown): Record<string, unknown> | null =>
+    v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null;
+
+/** No answer from the bridge (or from the main window that writes to it). */
+const NO_ANSWER: PlacesWriteRefusal = { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '', retryAfter: null };
+
+/** A step's reply as the main window passed it on (anything else: no answer). */
+function relayedIdentify(v: unknown): PlacesIdentifyResult {
+    const r = asObject(v);
+    if (r?.ok === true && typeof r.queued === 'number' && Array.isArray(r.skipped)) return r as unknown as PlacesIdentifyOk;
+    if (r?.ok === false && typeof r.code === 'string' && typeof r.reason === 'string') return r as unknown as PlacesWriteRefusal;
+    return NO_ANSWER;
+}
+
+/** The research's places as the main window read them (anything else: no answer). */
+function relayedRead(v: unknown): PlacesReadResult {
+    const r = asObject(v);
+    const p = r?.ok === true ? asObject(r.payload) : null;
+    if (p && typeof p.rev === 'string' && asObject(p.places) && asObject(p.forms) && asObject(p.formsByKey)) return r as unknown as PlacesReadResult;
+    return { ok: false, code: 'network', status: 0, retryAfter: null };
+}
+
 /** A press this long on a row (touch) starts the selection. */
 const LONG_PRESS_MS = 500;
 
@@ -139,7 +169,9 @@ export const placesIdentifyMethods = uiModule({
         if (liveLoading) return fresh ? liveLoading.then(() => this.loadPlacesLive(0, true)) : liveLoading;
         const ctx = this.placesResearchContext();
         const { researchId, base } = ctx;
-        if (!researchId || !base || !ctx.features.includes(PLACES_IDENTIFY_FEATURE)) return Promise.resolve(false);
+        // A satellite (no bridge address) reads them through the main window's bridge.
+        const main = ctx.viaMain ? satResearchForward() : null;
+        if (!researchId || !base && !main || !ctx.features.includes(PLACES_IDENTIFY_FEATURE)) return Promise.resolve(false);
         if (maxAgeMs > 0 && liveReadAt && liveReadAt.researchId === researchId && Date.now() - liveReadAt.at < maxAgeMs) {
             return Promise.resolve(false);
         }
@@ -147,7 +179,9 @@ export const placesIdentifyMethods = uiModule({
             const prev = placesView.live?.researchId === researchId ? placesView.live.payload : null;
             // Only what was queued before this read asked is in its answer: a place queued meanwhile stays queued here.
             const queuedBefore = [...placesView.queuedLocal];
-            const res = await fetchBridgePlaces(base, { rev: prev?.rev });
+            const res = main
+                ? relayedRead(await main.ask(PLACES_LIVE_ACTION, prev?.rev ? { rev: prev.rev } : {}, RELAY_READ_MS))
+                : await fetchBridgePlaces(base!, { rev: prev?.rev });
             if (!res.ok) return false;
             liveReadAt = { researchId, at: Date.now() };
             const hadLocal = queuedBefore.some(k => placesView.queuedLocal.has(k));
@@ -442,7 +476,7 @@ export const placesIdentifyMethods = uiModule({
             if (kind === 'check') { this.openPlacesBulk('check'); return; }
             if (kind === 'queue') {
                 const url = this.placesRunLink();
-                if (url) this.launchResearchLink(url);
+                if (url) this.launchPlacesLink(url);
             }
         };
         const go = top.querySelector<HTMLButtonElement>('.places-bulk-go');
@@ -541,8 +575,8 @@ export const placesIdentifyMethods = uiModule({
      */
     async sendPlacesIdentify(body: PlacesIdentifyBody, keys: readonly string[], check: boolean, ctl?: BusyCtl): Promise<boolean> {
         const ctx = this.placesResearchContext();
-        if (!ctx.canResearch || !ctx.base) return false;
-        const res = await postPlacesIdentify(ctx.base, body, ctx.features, ctx.linkCheck ?? undefined);
+        if (!ctx.canResearch || !ctx.base && !ctx.viaMain) return false;
+        const res = await this.placesIdentifyWrite(ctx, body);
         if (!res.ok) {
             if (ctl) ctl.end(this.placesRefusalEnd(res, () => void this.sendPlacesIdentify(body, keys, check)));
             else this.showPlacesRefusal(res);
@@ -573,6 +607,37 @@ export const placesIdentifyMethods = uiModule({
         return true;
     },
 
+    /**
+     * A step written to the research's bridge: this window's own, or in a satellite (no bridge address) through
+     * the main window's bridge, its reply as the bridge gave it (no answer in time: as a bridge that did not answer).
+     */
+    async placesIdentifyWrite(ctx: PlacesResearchContext, body: PlacesIdentifyBody): Promise<PlacesIdentifyResult> {
+        if (ctx.viaMain) {
+            const main = satResearchForward();
+            return main ? relayedIdentify(await main.ask(PLACES_QUEUE_ACTION, { body }, RELAY_WRITE_MS)) : NO_ANSWER;
+        }
+        return ctx.base ? postPlacesIdentify(ctx.base, body, ctx.features, ctx.linkCheck ?? undefined) : NO_ANSWER;
+    },
+
+    /**
+     * A satellite's step written through this (the main) window's bridge: the bridge's reply goes back to it; this
+     * window's map, Places and person card read the new states. Null: no bridge here (the satellite hears no answer).
+     */
+    async placesIdentifyHere(body: PlacesIdentifyBody): Promise<PlacesIdentifyResult | null> {
+        const ctx = this.placesResearchContext();
+        if (ctx.viaMain || !ctx.canResearch || !ctx.base) return null;
+        const res = await postPlacesIdentify(ctx.base, body, ctx.features, ctx.linkCheck ?? undefined);
+        if (res.ok) void this.refreshPlacesLive(0, true);
+        return res;
+    },
+
+    /** The research's places read through this (the main) window's bridge for a satellite (null: no bridge here). */
+    async placesLiveHere(rev?: string): Promise<PlacesReadResult | null> {
+        const ctx = this.placesResearchContext();
+        if (ctx.viaMain || !ctx.base || !ctx.features.includes(PLACES_IDENTIFY_FEATURE)) return null;
+        return fetchBridgePlaces(ctx.base, rev ? { rev } : {});
+    },
+
     /** The skipped places of a reply, in one line ('' none). */
     placesSkippedText(res: PlacesIdentifyOk): string {
         const r = strings.places.research;
@@ -592,7 +657,7 @@ export const placesIdentifyMethods = uiModule({
         const r = strings.places.research;
         const text = this.placesRefusalText(res);
         const link = res.code === 'link' ? res.link : undefined;
-        this.showToast(text, TOAST_MS, link ? { action: { label: r.runNow, run: () => this.launchResearchLink(link), ...researchLinkFlags(link) } } : {});
+        this.showToast(text, TOAST_MS, link ? { action: { label: r.runNow, run: () => this.launchPlacesLink(link), ...researchLinkFlags(link) } } : {});
     },
 
     /** Why a step did not go, as the end of its element's working state (§4): the sentence, Try again where it helps. */
@@ -604,7 +669,7 @@ export const placesIdentifyMethods = uiModule({
         return {
             ok: false, kind: res.code === 'busy' ? 'busy' : res.code === 'network' ? 'offline' : 'error', text,
             ...(again ? { retry } : {}),
-            ...(link ? { alt: { label: r.runNow, run: () => this.launchResearchLink(link), ...researchLinkFlags(link) } } : {}),
+            ...(link ? { alt: { label: r.runNow, run: () => this.launchPlacesLink(link), ...researchLinkFlags(link) } } : {}),
         };
     },
 
@@ -631,8 +696,8 @@ export const placesIdentifyMethods = uiModule({
     async unqueuePlaceForms(forms: readonly string[], keys: readonly string[],
         opts: { ctl?: BusyCtl; inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
         const ctx = this.placesResearchContext();
-        if (!ctx.canResearch || !ctx.base || !forms.length) return undefined;
-        const res = await postPlacesIdentify(ctx.base, { do: 'cancel', forms }, ctx.features, ctx.linkCheck ?? undefined);
+        if (!ctx.canResearch || !ctx.base && !ctx.viaMain || !forms.length) return undefined;
+        const res = await this.placesIdentifyWrite(ctx, { do: 'cancel', forms });
         if (!res.ok) {
             if (opts.inToast) return { ok: false, text: this.placesRefusalText(res), retry: res.code !== 'link' && res.code !== 'archive' };
             if (opts.ctl) opts.ctl.end(this.placesRefusalEnd(res, () => void this.unqueuePlaceForms(forms, keys)));
