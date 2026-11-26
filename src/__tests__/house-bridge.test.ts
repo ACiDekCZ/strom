@@ -44,7 +44,7 @@ const MILL = {
         { id: 'e9', kind: 'transfer', date: '1951', origin: 'import', material: 'M3', text: 'Převod na družstvo', sources: [] },
         { id: 'e10', kind: 'meteor', text: 'Neznámý druh', sources: [] },
     ],
-    holders: [{ id: 'h1', name: 'Ignác Kvitelka', person: 'P0002', from: '1858', to: '1890', how: 'marriage', certainty: 'high', sources: ['S0043'], origin: 'research', at: '2026-11-26' }],
+    holders: [{ id: 'h1', name: 'Dobromil Kvitelka', person: 'P0002', from: '1858', to: '1890', how: 'marriage', certainty: 'high', sources: ['S0043'], origin: 'research', at: '2026-11-26' }],
     residents: [{ id: 'r1', name: 'Radegunda Prouzalová', from: '1862', to: '1865', role: 'servant', sources: [{ page: 'fol. 12', source: 'S0002' }], origin: 'research' }],
     maps: [
         { id: 'm1', kind: 'cadastre', manual: true, sheet: 'list 2', url: 'https://example.org/stabilni-katastr/belokamen', origin: 'research' },
@@ -58,7 +58,7 @@ const MILL = {
     manual: [{ id: 'o1', what: 'Indikační skica', url: 'https://archiv.example.org/skica/123', why: 'Web nedovoluje čtení agentem' }],
     unknown: [{ id: 'u1', text: 'Kdo držel dům 1856–1858?', question: null }, { id: 'u2', text: 'Je čp. 9 tentýž dům?', question: 'T0005' }],
     archiveOnly: [{ id: 'a1', archive: 'Okresní archiv Bělokamen (smyšlený)', fond: 'Okresní soud', signature: 'kn. 12', what: 'pozemková kniha' }],
-    materials: [{ id: 'I0007', kind: 'memory', text: 'Babička vyprávěla o studni za stodolou.', witness: 'Zdislava Kvitelková', at: '2026-11-26' }],
+    materials: [{ id: 'I0007', kind: 'memory', text: 'Babička vyprávěla o studni za stodolou.', witness: 'Dobroslava Kvitelková', at: '2026-11-26' }],
     sensitive: ['e9', 'e99'],
     recent: { people: true, events: ['e9'] },
     town: { id: 'A0002', text: 'Fara Hvozdnice, katastrální území Bělokamen.', passed: [], manual: [], archiveOnly: [], maps: [], unknown: [] },
@@ -127,7 +127,7 @@ describe('reads', () => {
         expect(h.maps.map(m => m.id)).toEqual(['m1', 'm2']);
         expect(h.manual).toEqual([{ id: 'o1', what: 'Indikační skica', url: 'https://archiv.example.org/skica/123', why: 'Web nedovoluje čtení agentem' }]);
         expect(h.unknown[1]).toEqual({ id: 'u2', text: 'Je čp. 9 tentýž dům?', question: 'T0005' });
-        expect(h.materials[0]).toMatchObject({ id: 'I0007', kind: 'memory', witness: 'Zdislava Kvitelková' });
+        expect(h.materials[0]).toMatchObject({ id: 'I0007', kind: 'memory', witness: 'Dobroslava Kvitelková' });
         expect(h.passed[1]!.found).toBeUndefined();
         expect(h.sensitive).toEqual(['e9']);
         expect('recent' in h).toBe(false);
@@ -165,13 +165,13 @@ describe('reads', () => {
 
 describe('writes', () => {
     it('sends a memory with its witness only with consent, and keeps the house of the reply', async () => {
-        expect(houseMaterialBody({ house: 'belokamen|16', memory: { text: ' Studna za stodolou ', witness: 'Zdislava', witnessConsent: false } }))
+        expect(houseMaterialBody({ house: 'belokamen|16', memory: { text: ' Studna za stodolou ', witness: 'Dobroslava', witnessConsent: false } }))
             .toEqual({ house: 'belokamen|16', memory: { text: 'Studna za stodolou', witnessConsent: false } });
         expect(houseMaterialBody({ house: 'belokamen|16' })).toBeNull();
         replies.push({ status: 200, body: { house: MILL, materials: [{ id: 'I0007', kind: 'memory' }], head: 'a'.repeat(40), parent: 'b'.repeat(40) } });
-        const res = await sendHouseMaterial(BASE, { house: 'belokamen|16', memory: { text: 'Studna', witness: 'Zdislava', witnessConsent: true }, name: 'U Prouzalů' }, ['house', 'house.material']);
+        const res = await sendHouseMaterial(BASE, { house: 'belokamen|16', memory: { text: 'Studna', witness: 'Dobroslava', witnessConsent: true }, name: 'U Prouzalů' }, ['house', 'house.material']);
         expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({
-            house: 'belokamen|16', memory: { text: 'Studna', witness: 'Zdislava', witnessConsent: true }, name: 'U Prouzalů',
+            house: 'belokamen|16', memory: { text: 'Studna', witness: 'Dobroslava', witnessConsent: true }, name: 'U Prouzalů',
         });
         expect(calls[0]!.url.startsWith(`${BASE}/houses/material`)).toBe(true);
         expect(res.ok && res.materials).toEqual(['I0007']);

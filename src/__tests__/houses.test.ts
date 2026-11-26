@@ -49,47 +49,47 @@ function union(id: string, a: string, b: string, o: Partial<Partnership> = {}): 
  * Bělokamen čp. 9 → čp. 16 (renumbered about 1860), the Prouzals:
  *   Svatobor Prouzal (1820, čp. 9) ∞ 1845 Radegunda (from Mlýnkovice, † 1890 čp. 16)
  *     ├ Hostivít Prouzal (1848 čp. 9, † 1910 čp. 16)
- *     └ Zdislava Prouzalová (1850 čp. 9) ∞ 1872 Ignác Kvitelka (from Mlýnkovice, † 1915 čp. 16)
+ *     └ Dobroslava Prouzalová (1850 čp. 9) ∞ 1872 Dobromil Kvitelka (from Mlýnkovice, † 1915 čp. 16)
  *         └ Radhost Kvitelka (1875 čp. 16)
- * Hroznata Ostružný: Bělokamen čp. 40 from 1900 to 1910 (one generation, 10 years).
- * Kapradin Ostružný: Hvozdnice, Kopřivná 12 (a street with a number), and
+ * Hroznata Trnovec: Bělokamen čp. 40 from 1900 to 1910 (one generation, 10 years).
+ * Kapradin Trnovec: Hvozdnice, Kopřivná 12 (a street with a number), and
  * Bělokamen-Podhradí (a part of the town, no number), a mill without a number.
  */
 function village(houses?: StromData['houses']): StromData {
     const persons = [
         person('svatobor', 'Svatobor', 'Prouzal', 'male', {
             birthPlace: 'Bělokamen', birthAddress: 'čp. 9', birthDate: '1820-03-02',
-            partnerships: ['u1' as PartnershipId], childIds: ['hostivit', 'zdislava'] as PersonId[],
+            partnerships: ['u1' as PartnershipId], childIds: ['hostivit', 'dobroslava'] as PersonId[],
         }),
         person('radegunda', 'Radegunda', 'Prouzalová', 'female', {
             birthPlace: 'Mlýnkovice', birthDate: '1824',
             deathPlace: 'Bělokamen', deathAddress: 'čp. 16', deathDate: '1890-11-01',
-            partnerships: ['u1' as PartnershipId], childIds: ['hostivit', 'zdislava'] as PersonId[],
+            partnerships: ['u1' as PartnershipId], childIds: ['hostivit', 'dobroslava'] as PersonId[],
         }),
         person('hostivit', 'Hostivít', 'Prouzal', 'male', {
             birthPlace: 'Bělokamen', birthAddress: 'č. p. 9', birthDate: '1848',
             deathPlace: 'Bělokamen čp. 16', deathDate: '1910',
             parentIds: ['svatobor', 'radegunda'] as PersonId[],
         }),
-        person('zdislava', 'Zdislava', 'Prouzalová', 'female', {
+        person('dobroslava', 'Dobroslava', 'Prouzalová', 'female', {
             birthPlace: 'Bělokamen', birthAddress: 'čp. 9', birthDate: '1850',
             parentIds: ['svatobor', 'radegunda'] as PersonId[], partnerships: ['u2' as PartnershipId],
             childIds: ['radhost'] as PersonId[],
         }),
-        person('ignac', 'Ignác', 'Kvitelka', 'male', {
+        person('dobromil', 'Dobromil', 'Kvitelka', 'male', {
             birthPlace: 'Mlýnkovice', birthDate: '1847',
             deathPlace: 'Bělokamen', deathAddress: 'čp. 16', deathDate: '1915',
             partnerships: ['u2' as PartnershipId], childIds: ['radhost'] as PersonId[],
         }),
         person('radhost', 'Radhost', 'Kvitelka', 'male', {
             birthPlace: 'Bělokamen', birthAddress: 'čp. 16', birthDate: '1875',
-            parentIds: ['zdislava', 'ignac'] as PersonId[],
+            parentIds: ['dobroslava', 'dobromil'] as PersonId[],
         }),
-        person('hroznata', 'Hroznata', 'Ostružný', 'male', {
+        person('hroznata', 'Hroznata', 'Trnovec', 'male', {
             birthPlace: 'Bělokamen', birthAddress: 'čp. 40', birthDate: '1900',
             events: [{ id: 'e-hroznata-res', type: 'residence', place: 'Bělokamen', address: 'čp. 40', date: '1910' }],
         }),
-        person('kapradin', 'Kapradin', 'Ostružný', 'male', {
+        person('kapradin', 'Kapradin', 'Trnovec', 'male', {
             birthPlace: 'Bělokamen-Podhradí', birthDate: '1902',
             events: [
                 { id: 'e-kapradin-res', type: 'residence', place: 'Hvozdnice', address: 'Kopřivná 12', date: '1930' },
@@ -100,8 +100,8 @@ function village(houses?: StromData['houses']): StromData {
     return {
         persons: Object.fromEntries(persons.map(p => [p.id, p])) as StromData['persons'],
         partnerships: {
-            u1: union('u1', 'svatobor', 'radegunda', { startDate: '1845', startPlace: 'Mlýnkovice', childIds: ['hostivit', 'zdislava'] as PersonId[] }),
-            u2: union('u2', 'ignac', 'zdislava', { startDate: '1872-05-04', startPlace: 'Bělokamen', address: 'čp. 16', childIds: ['radhost'] as PersonId[] }),
+            u1: union('u1', 'svatobor', 'radegunda', { startDate: '1845', startPlace: 'Mlýnkovice', childIds: ['hostivit', 'dobroslava'] as PersonId[] }),
+            u2: union('u2', 'dobromil', 'dobroslava', { startDate: '1872-05-04', startPlace: 'Bělokamen', address: 'čp. 16', childIds: ['radhost'] as PersonId[] }),
         } as StromData['partnerships'],
         ...(houses ? { houses } : {}),
     };
@@ -146,7 +146,7 @@ describe('collectHouses', () => {
         expect(h.surnames).toEqual(['Prouzal', 'Kvitelka']);
         expect(h.marriedIn).toEqual([
             { personId: 'radegunda', year: 1845, sex: 'f' },
-            { personId: 'ignac', year: 1872, sex: 'm' },
+            { personId: 'dobromil', year: 1872, sex: 'm' },
         ]);
         expect(h.familyYears).toBe(95);
         expect(h.overThreshold).toBe(true);
@@ -158,10 +158,10 @@ describe('collectHouses', () => {
     });
 
     it('marks nobody who married in without the joined number, nor a person of unknown sex', () => {
-        // At čp. 16 alone nobody was born before Ignác and Radegunda came.
+        // At čp. 16 alone nobody was born before Dobromil and Radegunda came.
         expect(collectHouses(village()).find(x => x.id === 'belokamen|16')!.marriedIn).toEqual([]);
         const data = village(PROUZALS);
-        data.persons['ignac' as PersonId]!.gender = 'unknown';
+        data.persons['dobromil' as PersonId]!.gender = 'unknown';
         expect(collectHouses(data)[0]!.marriedIn.map(m => m.personId)).toEqual(['radegunda']);
     });
 
@@ -193,8 +193,8 @@ describe('collectHouses', () => {
         const h = collectHouses(village(PROUZALS))[0]!;
         const rows = houseFacts(h);
         expect(rows[0]).toEqual({ personId: 'svatobor', year: 1820, kind: 'birth', factRef: 'birth:svatobor' });
-        expect(rows.filter(r => r.factRef === 'wedding:u2').map(r => r.personId).sort()).toEqual(['ignac', 'zdislava']);
-        expect(rows[rows.length - 1]).toEqual({ personId: 'ignac', year: 1915, kind: 'death', factRef: 'death:ignac' });
+        expect(rows.filter(r => r.factRef === 'wedding:u2').map(r => r.personId).sort()).toEqual(['dobromil', 'dobroslava']);
+        expect(rows[rows.length - 1]).toEqual({ personId: 'dobromil', year: 1915, kind: 'death', factRef: 'death:dobromil' });
         expect(houseFacts(h, 2)).toHaveLength(2);
     });
 });
@@ -204,7 +204,7 @@ describe('hasNumberedHouse', () => {
         expect(hasNumberedHouse(village())).toBe(true);
         const bare: StromData = {
             persons: {
-                a: person('a', 'Kapradin', 'Ostružný', 'male', {
+                a: person('a', 'Kapradin', 'Trnovec', 'male', {
                     birthPlace: 'Bělokamen-Podhradí',
                     events: [{ id: 'e1', type: 'occupation', place: 'Bělokamen', address: 'mlýn' }],
                 }),
@@ -256,7 +256,7 @@ describe('stored house data', () => {
         const part = village();
         delete part.persons['svatobor' as PersonId];
         delete part.persons['hostivit' as PersonId];
-        delete part.persons['zdislava' as PersonId];
+        delete part.persons['dobroslava' as PersonId];
         expect(housesFor(part, { ...PROUZALS, 'belokamen|40': { name: 'Na Výsluní' } })).toEqual({
             'belokamen|16': PROUZALS['belokamen|16'], 'belokamen|40': { name: 'Na Výsluní' },
         });
