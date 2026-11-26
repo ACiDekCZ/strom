@@ -202,6 +202,8 @@ export interface GiftCoverFile {
     part: GiftPartKey;
     path: string;
     bytes: number;
+    /** A fan's file: two-way, with the recipient's descendants in it too (the cover says so). */
+    descendants?: boolean;
 }
 
 /** What the cover page knows besides the protected data. */
@@ -545,6 +547,7 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
                 });
                 if (!poster) continue;
                 await put(`${f.stem}.svg`, poster.svg, 'fan');
+                if (poster.model.desc.some(s => s.person)) cover[cover.length - 1].descendants = true;
                 if (env.png) {
                     await hold();
                     const png = await env.png(poster.svg, poster.widthPx, poster.heightPx);

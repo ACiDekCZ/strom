@@ -466,7 +466,7 @@ export function buildGiftCover(data: StromData, info: GiftCoverInfo): string {
         const preview = f.part === 'fan' ? fanPreview(data, info.recipients[fanIndex++]) : '';
         return `<a class="sp-card gl-card${f.part === 'app' ? ' gl-main' : ''}" href="${esc(hrefOf(f.path))}">`
             + `<span class="sp-card-t">${esc(t)}</span>${preview}`
-            + `<span class="sp-card-f">${esc(part.f)}</span>`
+            + `<span class="sp-card-f">${esc(f.descendants ? C.parts.fan.fTwo : part.f)}</span>`
             + `<span class="sp-card-m">${esc(meta)}</span>`
             + `<span class="sp-card-go">${esc(f.part === 'gedcom' ? C.showFile : C.open)}</span></a>`;
     }).join('');
@@ -510,7 +510,8 @@ export function buildGiftCover(data: StromData, info: GiftCoverInfo): string {
     const tocRows = [`<div class="sp-toc-row"><span>${esc(C.parts.start.t)}</span><span>${esc(C.parts.start.p)} <span class="gl-fn">${esc(S.files.start)}</span></span></div>`]
         .concat(files.map(f => {
             const t = f.part === 'fan' ? stemOf(f.path) : C.parts[f.part].t;
-            return `<div class="sp-toc-row"><span>${esc(t)}</span><span>${esc(C.parts[f.part].p)} <span class="gl-fn">${esc(f.path)}</span></span></div>`;
+            const p = f.descendants ? C.parts.fan.pTwo : C.parts[f.part].p;
+            return `<div class="sp-toc-row"><span>${esc(t)}</span><span>${esc(p)} <span class="gl-fn">${esc(f.path)}</span></span></div>`;
         })).join('');
     const printed = `<section class="gl-sec gl-print gl-page2"><h2 class="sp-h2">${esc(C.whatH)}</h2>`
         + `<p class="sp-sub gl-lead">${esc(C.printLead(info.folder))}</p>${tocRows}`

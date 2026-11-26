@@ -79,7 +79,11 @@ export const plPart13: Pick<StringsType, 'giftTree'> = {
                     f: 'Rozdziały według rodzin z indeksem, gotowe do druku. PDF: w przeglądarce Drukuj › Zapisz jako PDF.',
                     p: 'Rozdziały według rodzin do druku. PDF: w przeglądarce Drukuj › Zapisz jako PDF.',
                 },
-                fan: { t: 'Wachlarz przodków', f: 'Wszyscy bezpośredni przodkowie na jednym obrazie, do druku albo jako plakat.', p: 'Bezpośredni przodkowie na jednym obrazie.' },
+                fan: {
+                    t: 'Wachlarz przodków', f: 'Wszyscy bezpośredni przodkowie na jednym obrazie, do druku albo jako plakat.', p: 'Bezpośredni przodkowie na jednym obrazie.',
+                    fTwo: 'Wszyscy bezpośredni przodkowie i potomkowie na jednym obrazie, do druku albo jako plakat.',
+                    pTwo: 'Bezpośredni przodkowie i potomkowie na jednym obrazie.',
+                },
                 gedcom: { t: 'Dla innych programów', f: 'Rodowód w formacie GEDCOM dla innych programów genealogicznych.', p: 'GEDCOM dla innych programów genealogicznych.' },
             },
             open: 'Otwórz ›',

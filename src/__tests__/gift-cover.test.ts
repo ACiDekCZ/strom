@@ -18,6 +18,7 @@ import {
 import { buildGiftPackage, giftMessage, type GiftCoverFile, type GiftCoverInfo } from '../gift-package.js';
 import { buildGiftCover, giftDefaultSalutation, giftFacts, giftLetterTemplate } from '../gift-cover.js';
 import { getStringsForLang } from '../strings.js';
+import { giftCoverPreviewHtml } from '../gift-guide.js';
 import { blobBytes, zipFiles } from './helpers/zip-read.js';
 
 const P = (key: string) => `demo_${key}` as PersonId;
@@ -206,6 +207,44 @@ describe('the cover page (§6)', () => {
         expect(buildGiftCover(withPhotos, { ...base, photos: true })).toContain('<img class="gl-av"');
         const without = giftProtectedData(source, cut, defaultGiftPrivacy(), { photos: false, currentYear: 2026 });
         expect(buildGiftCover(without, { ...base, photos: false })).not.toContain('<img');
+    });
+
+    it('a two-way fan\'s card and printed row name the descendants too; an ancestors-only fan\'s do not', () => {
+        for (const lang of LANGS) {
+            const C = getStringsForLang(lang).giftTree.cover.parts.fan;
+            const source = sensitiveTree();
+            const cut = cutOf('daniel');
+            const data = giftProtectedData(source, cut, defaultGiftPrivacy(), { photos: true, currentYear: 2026 });
+            const files = (two: boolean): GiftCoverFile[] => FILES[lang].map(f => (f.part === 'fan' && two ? { ...f, descendants: true } : f));
+            const info = (two: boolean): GiftCoverInfo => ({
+                lang, recipients: cut.recipients, names: ['Daniel Berg'], parts: defaultGiftParts(), files: files(two),
+                letter: letterOf(lang), treeName: 'Berg', persons: 0, photos: true, folder: 'Berg', now: NOW,
+            });
+            const two = buildGiftCover(data, info(true));
+            expect(two).toContain(C.fTwo);
+            expect(two).toContain(C.pTwo);
+            expect(two).not.toContain(C.f);
+            const half = buildGiftCover(data, info(false));
+            expect(half).toContain(C.f);
+            expect(half).toContain(C.p);
+            expect(half).not.toContain(C.fTwo);
+        }
+    });
+
+    it('the package and the cover\'s preview mark a fan two-way when the recipient\'s descendants are in it', async () => {
+        const C = getStringsForLang('en').giftTree.cover.parts.fan;
+        const settings = {
+            cut: cutOf('daniel'), privacy: defaultGiftPrivacy(),
+            parts: { ...defaultGiftParts(), app: false, pages: false, book: false, gedcom: false },
+            photos: false, fan: defaultGiftFan(), cards: 'detailed' as const, letter: letterOf('en'),
+        };
+        const r = await buildGiftPackage({ data: sensitiveTree(), settings, treeName: 'Berg', env: { now: NOW, app: async () => new Blob(['']) } });
+        const start = new TextDecoder().decode(zipFiles(await blobBytes(r.blob)).get(`${r.folder}/Start here.html`)!);
+        expect(start).toContain(C.fTwo);
+        expect(giftCoverPreviewHtml(sensitiveTree(), settings, { treeName: 'Berg', now: NOW })).toContain(C.fTwo);
+        // As in the tree with a half circle there: ancestors only.
+        const asTree = { ...settings, fan: { ...settings.fan, asTree: true } };
+        expect(giftCoverPreviewHtml(sensitiveTree(), asTree, { treeName: 'Berg', now: NOW, treeFanShape: 'half' })).not.toContain(C.fTwo);
     });
 
     it('the package holds the real cover page as its last entry', async () => {

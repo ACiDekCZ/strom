@@ -15,7 +15,7 @@ import {
 } from './gift-tree.js';
 import { defaultGiftSettings, giftPersonKey, loadGiftMemory, saveGiftMemory } from './gift-memory.js';
 import { buildGiftCover, giftDefaultSalutation, giftLetterTemplate } from './gift-cover.js';
-import { estimateGiftSize, giftFileNames, type GiftCoverFile, type GiftPartKey } from './gift-package.js';
+import { estimateGiftSize, giftFanShape, giftFileNames, type GiftCoverFile, type GiftPartKey } from './gift-package.js';
 import type { FanShape } from './fan-chart.js';
 import { shownName } from './person-name.js';
 import { computeFamilyStats } from './stats.js';
@@ -358,7 +358,15 @@ export function giftCoverPreviewHtml(
     if (p.app) add('app', names.app, est.parts.app);
     if (p.pages) add('pages', `${names.pages}/index.html`, est.parts.pages);
     if (p.book) add('book', names.book, est.parts.book);
-    if (p.fan) for (const f of names.fans) add('fan', `${f.stem}.svg`, Math.round(est.parts.fan / Math.max(1, names.fans.length)));
+    if (p.fan) {
+        for (const f of names.fans) {
+            add('fan', `${f.stem}.svg`, Math.round(est.parts.fan / Math.max(1, names.fans.length)));
+            // Two-way (as the package draws it): the recipient's descendants in the cut, the shape by default or the tree's two-way one.
+            const auto = giftFanShape(data, f.personId).shape;
+            const shape = settings.fan.asTree && o.treeFanShape ? o.treeFanShape : auto;
+            if (shape === 'two' && auto === 'two') files[files.length - 1].descendants = true;
+        }
+    }
     if (p.gedcom) add('gedcom', names.gedcom, est.parts.gedcom);
     const persons = Object.values(data.persons).filter(x => !x.isPlaceholder).length;
     return buildGiftCover(data, {
