@@ -757,9 +757,11 @@ export const readDocumentMethods = uiModule({
     refreshReadSurfaces(): void {
         const running = this.readRunningNow();
         const unopened = this.readUnopenedNow();
-        const key = [running?.id ?? '', running?.state ?? '', running?.done ?? '', unopened?.id ?? '', unopened?.state ?? '',
+        const parts = [running?.id ?? '', running?.state ?? '', running?.done ?? '', unopened?.id ?? '', unopened?.state ?? '',
             unopened ? docLabel(results.get(unopened.id)) : '', this.readDocumentAccepts()?.ready ?? '',
-            this.readOtherAgents(running), this.readOtherAgents(unopened)].join('|');
+            this.readOtherAgents(running), this.readOtherAgents(unopened)];
+        // Nothing of the readings to show is what was drawn before any status came: no redraw for it.
+        const key = parts.some(x => x !== '') ? parts.join('|') : '';
         if (key === drawnKey) return;
         drawnKey = key;
         setTimeout(() => {
