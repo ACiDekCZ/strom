@@ -123,7 +123,7 @@ describe('the gift guide (spec 093 §2, §4, §9)', () => {
         expect(giftCanProceed(start('single', [null]), data)).toBe(false);
     });
 
-    it('"in full": the household always, an exception added and taken back, everyone under full', () => {
+    it('"in full": the household always, an exception added and taken back; under full the tick still picks the set (K6.5)', () => {
         const g = start('single', [P('daniel')]);
         const s = g.settings;
         const model = giftLivingModel(data, s, 'en', NOW.getFullYear(), p => `${p.firstName} ${p.lastName}`);
@@ -141,8 +141,12 @@ describe('the gift guide (spec 093 §2, §4, §9)', () => {
         // The household's box is locked: taking it off changes nothing.
         giftToggleFull(s, P('julia'), false);
         expect(giftFullSet(model, s).has(P('julia'))).toBe(true);
+        // Under 'full' the others are named but keep the other living's set: only the household and the ticked are "in full".
         s.privacy = { ...s.privacy, others: 'full' };
-        expect(giftFullSet(model, s).size).toBe(model.rows.length);
+        expect(giftFullSet(model, s)).toEqual(new Set(household));
+        giftToggleFull(s, other!.id, true);
+        expect(giftFullSet(model, s).has(other!.id)).toBe(true);
+        expect(giftFullSet(model, s).size).toBe(household.length + 1);
     });
 
     it('resolves an empty message to the template and previews the cover page without making the package', () => {

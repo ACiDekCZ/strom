@@ -4,7 +4,7 @@ import type { Gender, Partnership, PartnershipId, Person, PersonId, StromData } 
 import { buildLineages } from '../lineage.js';
 import {
     GIFT_DEPTHS, defaultGiftPrivacy, giftBranchCandidates, giftCutData, giftCutIds, giftDepthCounts, giftHouseholdIds,
-    giftProtectedData, type GiftCut, type GiftDepth,
+    giftProtectedData, giftShortensLiving, type GiftCut, type GiftDepth,
 } from '../gift-tree.js';
 import { decomposeIntoFamilies } from '../split-families.js';
 import { syntheticBigFamily } from './helpers/synthetic-big-family.js';
@@ -350,6 +350,32 @@ describe('giftProtectedData (D4, K6)', () => {
         expect(full.persons[P('eva')].firstName).toBe('Eva');
         expect(full.persons[P('eva')].emails).toBeUndefined();
         expect(json(full)).not.toContain(EMAIL);
+    });
+
+    it('K6.5 others full: the other living by their own set (birth dates and photos only), the household by its set', () => {
+        const privacy = { ...defaultGiftPrivacy(), others: 'full' as const };
+        const out = giftProtectedData(sensitiveTree(), cutOf(['daniel']), privacy, { photos: true, currentYear: YEAR });
+        const eva = out.persons[P('eva')];
+        expect([eva.firstName, eva.birthDate, eva.photo]).toEqual(['Eva', '1946-12-01', PHOTO]);
+        expect([eva.birthAddress, eva.notes, eva.emails]).toEqual([undefined, undefined, undefined]);
+        expect(json(out)).not.toContain('Elm Street');
+        expect(json(out)).not.toContain('Visits every summer');
+        const daniel = out.persons[P('daniel')];
+        expect(daniel.birthAddress).toBe('Harbour Road 7');
+        expect(daniel.events?.some(e => e.type === 'religion')).toBe(true);
+        // Eva ticked: her set is the one of those shown in full.
+        const ticked = giftProtectedData(sensitiveTree(), cutOf(['daniel']), { ...privacy, fullIds: [P('eva')] }, { photos: true, currentYear: YEAR });
+        expect(ticked.persons[P('eva')].birthAddress).toBe('Elm Street 12');
+    });
+
+    it('K6.5 giftShortensLiving: under full the other living count by their own set', () => {
+        const all = { birthDates: true, addresses: true, contacts: true, photos: true, notes: true, religion: true, sources: true };
+        const full = { ...defaultGiftPrivacy(), others: 'full' as const, sensitive: all };
+        expect(giftShortensLiving(sensitiveTree(), cutOf(['daniel']), full, YEAR)).toBe(true);
+        expect(giftShortensLiving(sensitiveTree(), cutOf(['daniel']), { ...full, othersSensitive: all }, YEAR)).toBe(false);
+        expect(giftShortensLiving(sensitiveTree(), cutOf(['daniel']), { ...full, othersSensitive: all, sensitive: { ...all, notes: false } }, YEAR)).toBe(true);
+        // Under the other modes the others' set has no say.
+        expect(giftShortensLiving(sensitiveTree(), cutOf(['daniel']), { ...full, others: 'initials', othersSensitive: all }, YEAR)).toBe(true);
     });
 
     it('the research\'s workshop and the tree outside the cut never come along', () => {

@@ -73,6 +73,23 @@ describe('giving a family tree to each person of a list (spec 093 §7 [53, 54])'
         expect(c.letter.motif).toBe('none');
     });
 
+    it('K6.5: a row\'s own set of the other living is kept and merged; the common one carries both sets', () => {
+        const c = common();
+        expect(c.privacy.othersSensitive).toEqual({ birthDates: true, photos: true, addresses: false, contacts: false, notes: false, religion: false, sources: false });
+        const edited = giftMergeOwn(c, undefined, [P('emma')], 'Dear Emma');
+        edited.privacy = { ...edited.privacy, others: 'full', othersSensitive: { ...edited.privacy.othersSensitive, sources: true } };
+        const own = giftOwnDiff(c, edited)!;
+        expect(own).toEqual({ privacy: { others: 'full', othersSensitive: { ...c.privacy.othersSensitive, sources: true } } });
+        expect(giftOwnParts(own)).toEqual(['privacy']);
+        const merged = giftMergeOwn(c, own, [P('emma')], 'Dear Emma');
+        expect(merged.privacy.othersSensitive.sources).toBe(true);
+        expect(merged.privacy.sensitive).toEqual(c.privacy.sensitive);
+        // The common one keeps its own sets.
+        const otherCommon = { ...c, privacy: { ...c.privacy, othersSensitive: { ...c.privacy.othersSensitive, photos: false } } };
+        expect(giftMergeOwn(otherCommon, undefined, [P('emma')], '').privacy.othersSensitive.photos).toBe(false);
+        expect(c.privacy.othersSensitive.sources).toBe(false);
+    });
+
     it('makes one item per package: its recipients, its salutation, its own settings', () => {
         const c = common();
         const rows = giftBatchRows(data, [P('emma'), P('daniel'), P('julia'), P('zora')], true);

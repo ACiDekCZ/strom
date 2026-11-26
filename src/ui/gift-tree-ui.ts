@@ -2459,13 +2459,13 @@ export const giftTreeMethods = uiModule({
             ...(branches ? [G.cutBranches(branches)] : [])].join(', ') + ` · ${sum.persons} ${G.persons(sum.persons)}`;
         let living: string;
         if (sum.living === 0) living = G.livingNone;
-        else if (s.privacy.others === 'full') living = G.livingAll;
         else {
             const model = livingOf(u);
             const extra = model.rows.filter(r => !r.household && s.privacy.fullIds.includes(r.id)).length;
             const firsts = giftRecipients(u.g).map(id => u.data.persons[id]?.firstName || shownName(u.data.persons[id]) || '?');
-            const others = s.privacy.others as Exclude<PrivacyMode, 'full'>;
-            living = `${G.livingFull(giftNamesLabel(language, firsts), extra)}, ${G.others[others]}`;
+            // Under 'full' the others are named with their own set (K6.5), not "in full".
+            const others = s.privacy.others === 'full' ? G.livingAll : G.others[s.privacy.others];
+            living = `${G.livingFull(giftNamesLabel(language, firsts), extra)}, ${others}`;
         }
         const parts = [G.parts.letter, ...(['app', 'pages', 'book', 'fan', 'gedcom'] as const).filter(k => s.parts[k]).map(k => G.parts[k])];
         const pkg = `${parts.join(', ')}, ${s.photos ? G.withPhotos : G.withoutPhotos} · ${G.about(formatTreeSize(sum.bytes, language))}`;
@@ -2489,7 +2489,7 @@ export const giftTreeMethods = uiModule({
         const right = el('div', 'gift-col gift-protect');
 
         if (living > 0) {
-            // The numbers: living of all, in full, shortened (a phone: four, the people last).
+            // The numbers: living of all, in full, shortened or other living (a phone: four, the people last).
             const stats = el('div', 'structure-stats gift-stats');
             const stat = (n: number, label: string, cls = ''): void => {
                 const box = el('div', `structure-stat${cls}`);
@@ -2503,6 +2503,9 @@ export const giftTreeMethods = uiModule({
             if (others !== 'full') {
                 stat(living - full.size, G.statShort[others], ' gift-stat-wide');
                 stat(living - full.size, G.statShortPhone, ' gift-stat-phone');
+            } else {
+                // Under 'full' the others are named, with the set of the other living (K6.5).
+                stat(living - full.size, G.statOthers);
             }
             stat(model.persons, G.persons(model.persons), ' gift-stat-phone');
             left.appendChild(stats);
@@ -2558,13 +2561,8 @@ export const giftTreeMethods = uiModule({
             right.appendChild(el('p', 'gift-faint gift-mode-desc', G.modeDesc[s.privacy.others]));
 
             right.appendChild(el('h3', 'gift-h3 gift-sens-h', G.sensitiveH));
-            const sens = el('div', 'content-checks gift-checks gift-sens');
-            for (const key of ['birthDates', 'addresses', 'contacts', 'photos', 'notes', 'religion', 'sources'] as const) {
-                sens.appendChild(this.giftCheck(`sens-${key}`, G.sensitive[key], s.privacy.sensitive[key], (on) => {
-                    s.privacy = { ...s.privacy, sensitive: { ...s.privacy.sensitive, [key]: on } };
-                }));
-            }
-            right.appendChild(sens);
+            right.appendChild(this.giftSensTable());
+            if (s.privacy.others !== 'full') right.appendChild(el('p', 'gift-note gift-sens-off', G.sensOthersOff));
         }
         right.appendChild(el('h3', 'gift-h3 gift-dead-h', G.deadH));
         const dead = el('div', 'content-checks gift-checks gift-dead');
@@ -2578,6 +2576,63 @@ export const giftTreeMethods = uiModule({
 
         cols.append(left, right);
         pane.appendChild(cols);
+    },
+
+    /**
+     * The sensitive details of the living (K6.5): one row per kind, a column
+     * for those shown in full and one for the other living (active only under
+     * 'full'; otherwise the mode decides what they keep).
+     */
+    giftSensTable(): HTMLElement {
+        const s = ui!.g.settings;
+        const G = strings.giftTree.guide;
+        const othersOn = s.privacy.others === 'full';
+        const table = el('table', 'gift-sens' + (othersOn ? '' : ' is-others-off'));
+        const head = el('tr');
+        const th = (text: string, cls: string): HTMLElement => {
+            const cell = el('th', cls, text);
+            cell.setAttribute('scope', 'col');
+            return cell;
+        };
+        head.append(th(G.sensKind, 'gift-sens-k'), th(G.sensColFull, 'gift-sens-c'), th(G.sensColOthers, 'gift-sens-c is-others'));
+        const thead = el('thead');
+        thead.appendChild(head);
+        const tbody = el('tbody');
+        const box = (gk: string, label: string, on: boolean, disabled: boolean, set: (on: boolean) => void): HTMLElement => {
+            const cell = el('td', 'gift-sens-c' + (gk.startsWith('osens-') ? ' is-others' : ''));
+            const input = el('input');
+            input.type = 'checkbox';
+            input.checked = on;
+            input.disabled = disabled;
+            input.dataset.gk = gk;
+            input.setAttribute('aria-label', label);
+            input.addEventListener('change', () => {
+                set(input.checked);
+                this.giftRender();
+            });
+            // The whole cell is the target (a touch screen's 44 px).
+            const hit = el('label', 'gift-sens-hit');
+            hit.appendChild(input);
+            cell.appendChild(hit);
+            return cell;
+        };
+        for (const key of ['birthDates', 'addresses', 'contacts', 'photos', 'notes', 'religion', 'sources'] as const) {
+            const row = el('tr');
+            const kind = el('th', 'gift-sens-k', G.sensitive[key]);
+            kind.setAttribute('scope', 'row');
+            row.append(
+                kind,
+                box(`sens-${key}`, `${G.sensitive[key]} – ${G.sensColFull}`, s.privacy.sensitive[key], false, (on) => {
+                    s.privacy = { ...s.privacy, sensitive: { ...s.privacy.sensitive, [key]: on } };
+                }),
+                box(`osens-${key}`, `${G.sensitive[key]} – ${G.sensColOthers}`, s.privacy.othersSensitive[key], !othersOn, (on) => {
+                    s.privacy = { ...s.privacy, othersSensitive: { ...s.privacy.othersSensitive, [key]: on } };
+                }),
+            );
+            tbody.appendChild(row);
+        }
+        table.append(thead, tbody);
+        return table;
     },
 
     /** A `.content-check` box; a change redraws the summary (the size follows photos and the rest). */
@@ -2595,14 +2650,17 @@ export const giftTreeMethods = uiModule({
         return box;
     },
 
-    /** Step 3's rows of the living: the household locked on top, the rest ticked for "in full" (filtered by the search). */
+    /**
+     * Step 3's rows of the living: the household locked on top, the rest ticked
+     * for "in full" (under 'full' the tick picks the set; filtered by the search).
+     */
     giftFillLiving(host: HTMLElement): void {
         const u = ui!;
         const s = u.g.settings;
         const G = strings.giftTree.guide;
         const model = livingOf(u);
         const full = giftFullSet(model, s);
-        const allFull = s.privacy.others === 'full';
+        const othersFull = s.privacy.others === 'full';
         host.replaceChildren();
         let rows = model.rows;
         const q = u.query.trim();
@@ -2631,7 +2689,7 @@ export const giftTreeMethods = uiModule({
             input.type = 'checkbox';
             input.checked = isFull;
             input.dataset.gk = `lv-${r.id}`;
-            if (r.household || allFull) input.disabled = true;
+            if (r.household) input.disabled = true;
             input.addEventListener('change', () => {
                 giftToggleFull(s, r.id, input.checked);
                 this.giftRender();
@@ -2642,7 +2700,7 @@ export const giftTreeMethods = uiModule({
             if (rel) text.appendChild(el('span', 'gift-lv-rel', rel));
             label.append(input, text);
             li.appendChild(label);
-            li.appendChild(el('span', 'gift-lv-v', isFull ? G.fullWord : r.shortened));
+            li.appendChild(el('span', 'gift-lv-v', isFull ? G.fullWord : othersFull ? G.othersWord : r.shortened));
             list.appendChild(li);
         }
         if (!householdEnded && rows.some(x => x.household)) householdNote();

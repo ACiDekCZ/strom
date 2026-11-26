@@ -85,8 +85,29 @@ test('from the person menu: steps 1 to 3, an exception in full changes the numbe
     await expect(livingRow(dialog, 'Sarah Walsh').locator('.gift-lv-v')).toHaveText('in full');
     await expect(dialog.locator('.gift-sum')).toContainText(`${living} living`);
 
+    // K6.5: one table, a column per set; the other living's column only under "Full data".
+    const sens = dialog.locator('table.gift-sens');
+    await expect(sens.locator('thead th')).toHaveText(['Detail', 'Shown in full', 'Other living']);
+    await expect(sens.locator('[data-gk="sens-sources"]')).toBeEnabled();
+    await expect(sens.locator('[data-gk="osens-sources"]')).toBeDisabled();
+    await expect(sens.locator('[data-gk="osens-birthDates"]')).toHaveAttribute('aria-label', 'Birth dates – Other living');
+    await expect(dialog.locator('.gift-sens-off')).toBeVisible();
+    await dialog.locator('[data-gk="others"]').selectOption('full');
+    await expect(sens.locator('[data-gk="osens-sources"]')).toBeEnabled();
+    await expect(sens.locator('[data-gk="osens-sources"]')).not.toBeChecked();
+    await expect(sens.locator('[data-gk="osens-photos"]')).toBeChecked();
+    await expect(dialog.locator('.gift-sens-off')).toHaveCount(0);
+    // The tick still picks the set: Sarah in full, the rest as the other living.
+    await expect.poll(() => livingStats(dialog)).toEqual([living, full + 1, short - 1]);
+    await expect(livingRow(dialog, 'Sarah Walsh').locator('input')).toBeEnabled();
+    const otherRow = dialog.locator('li.gift-lv-r:not(.is-full)').first();
+    await expect(otherRow.locator('.gift-lv-v')).toHaveText('as others');
+    await expect(otherRow.locator('input')).toBeEnabled();
+    await dialog.locator('[data-gk="others"]').selectOption('initials');
+    await expect(sens.locator('[data-gk="osens-sources"]')).toBeDisabled();
+
     // Nothing overflows sideways.
-    const wide = await dialog.locator('.modal').evaluate(m => [m, ...m.querySelectorAll('.gift-pane, .gift-lv-r, .gift-cols')]
+    const wide = await dialog.locator('.modal').evaluate(m => [m, ...m.querySelectorAll('.gift-pane, .gift-lv-r, .gift-cols, .gift-sens')]
         .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.className));
     expect(wide).toEqual([]);
 
@@ -149,7 +170,13 @@ test('on a phone: the whole screen, the list of steps as a sheet, step 3 in one 
     const sarah = livingRow(dialog, 'Sarah Walsh');
     await sarah.locator('input').check();
     await expect.poll(async () => (await livingStats(dialog, true)).slice(0, 3)).toEqual([living, full + 1, short - 1]);
-    const wide = await modal.evaluate(m => [m, ...m.querySelectorAll('.gift-pane, .gift-lv-r, .gift-cols')]
+    // K6.5: the table of both sets fits the phone's width.
+    await dialog.locator('[data-gk="others"]').selectOption('full');
+    await expect(dialog.locator('[data-gk="osens-sources"]')).toBeEnabled();
+    const sensBox = (await dialog.locator('table.gift-sens').boundingBox())!;
+    expect(sensBox.x).toBeGreaterThanOrEqual(0);
+    expect(sensBox.x + sensBox.width).toBeLessThanOrEqual(390);
+    const wide = await modal.evaluate(m => [m, ...m.querySelectorAll('.gift-pane, .gift-lv-r, .gift-cols, .gift-sens')]
         .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.className));
     expect(wide).toEqual([]);
 

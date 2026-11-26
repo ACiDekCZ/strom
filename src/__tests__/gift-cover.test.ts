@@ -165,11 +165,11 @@ describe('the cover page (§6)', () => {
         for (const lang of LANGS) {
             const C = getStringsForLang(lang).giftTree.cover;
             expect(coverOf({ lang })).toContain(C.shortened);
-            const open: GiftPrivacy = {
-                ...defaultGiftPrivacy(), others: 'full',
-                sensitive: { birthDates: true, addresses: true, contacts: true, photos: true, notes: true, religion: true, sources: true },
-            };
+            const all = { birthDates: true, addresses: true, contacts: true, photos: true, notes: true, religion: true, sources: true };
+            const open: GiftPrivacy = { ...defaultGiftPrivacy(), others: 'full', sensitive: all, othersSensitive: all };
             expect(coverOf({ lang, privacy: open })).not.toContain(C.shortened);
+            // The other living's own set (K6.5) shortens them under 'full' too.
+            expect(coverOf({ lang, privacy: { ...open, othersSensitive: defaultGiftPrivacy().othersSensitive } })).toContain(C.shortened);
         }
     });
 

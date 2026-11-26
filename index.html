@@ -32478,6 +32478,19 @@
         .gift-modal input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
         .gift-modal .gift-field:not(.gift-others) .gift-input { max-width: 420px; }
         .gift-sens-h, .gift-dead-h { margin-top: 6px; }
+        /* Step 3's sensitive details (K6.5): a kind per row, a narrow centred column of boxes per set. */
+        .gift-sens { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13.5px; color: var(--text); }
+        .gift-sens th, .gift-sens td { padding: 7px 6px; border-bottom: 1px solid var(--divider); vertical-align: middle; }
+        .gift-sens thead th { padding-top: 0; font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--text-light); }
+        .gift-sens .gift-sens-k { padding-left: 0; text-align: left; font-weight: 400; overflow-wrap: anywhere; }
+        .gift-sens thead .gift-sens-k { color: var(--text-faint); }
+        .gift-sens .gift-sens-c { width: 92px; text-align: center; overflow-wrap: anywhere; hyphens: auto; }
+        .gift-sens td.gift-sens-c { padding-top: 0; padding-bottom: 0; }
+        .gift-modal label.gift-sens-hit { display: flex; align-items: center; justify-content: center; min-height: 34px; margin: 0; cursor: pointer; }
+        .gift-sens.is-others-off .is-others { color: var(--text-faint); }
+        .gift-sens.is-others-off td.is-others input { opacity: 0.55; }
+        .gift-modal .gift-sens.is-others-off label.gift-sens-hit { cursor: default; }
+        .gift-sens-off { margin-top: -4px; }
         .gift-foot-sum { display: none; }
         /* Step 2 (§3): the depth as a segment with its counts, the preview of the cut, the branches on the right. */
         .gift-cols.is-s2 { grid-template-columns: minmax(0, 1fr) 360px; }
@@ -32573,6 +32586,7 @@
             .gift-cols.is-s2 { grid-template-columns: minmax(0, 1fr) 300px; }
             .gift-prev-host { height: 440px; }
             .gift-protect .content-checks { grid-template-columns: 1fr; }
+            .gift-sens .gift-sens-c { width: 76px; }
             .gift-rcp-h, .gift-rcp-r { grid-template-columns: minmax(0, 1.2fr) 130px 52px 56px 104px 28px; gap: 8px; }
         }
         @media (pointer: coarse) {
@@ -32585,6 +32599,7 @@
             .gift-modal button.gift-rcp-x, .gift-modal button.gift-switch-b { width: 44px; height: 44px; }
             .gift-rcp-h, .gift-rcp-r { grid-template-columns: minmax(0, 1.2fr) 130px 52px 56px 104px 44px; }
             .gift-modal .gift-rcp-sal { min-height: 44px; }
+            .gift-modal label.gift-sens-hit { min-height: 44px; }
         }
         /* A phone, and a phone held sideways: the whole screen; ‹ always (from step 1 it closes), the subtitle a
            button with the list of steps; one column, the footer's buttons full width with the summary under them. */
@@ -32632,6 +32647,10 @@
             .gift-modal .gift-field:not(.gift-others) .gift-input { max-width: none; }
             .gift-lv-note { padding-left: 30px; }
             .gift-protect .content-check { min-height: 48px; }
+            .gift-sens .gift-sens-c { width: 76px; }
+            .gift-sens tbody th { height: 48px; padding-top: 4px; padding-bottom: 4px; }
+            .gift-modal label.gift-sens-hit { min-height: 48px; }
+            .gift-modal .gift-sens td.gift-sens-c input[type="checkbox"] { width: 20px; height: 20px; }
             .gift-modal .buttons.gift-foot { flex-direction: column-reverse; align-items: stretch; gap: 8px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
             .gift-modal .gift-foot button { min-height: 48px; font-size: 15px; }
             .gift-foot-sum { display: block; text-align: center; font-size: 12.5px; color: var(--text-light); }

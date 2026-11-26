@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { applyLivingPrivacy, isLivingPerson, inferBirthUpperBounds, presumedDeceasedSet } from '../privacy.js';
+import { applyLivingPrivacy, isLivingPerson, inferBirthUpperBounds, presumedDeceasedSet, type LivingSensitive } from '../privacy.js';
 import { strings } from '../strings.js';
-import { addPersonMedia, personMedia } from '../media.js';
+import { addPersonMedia, personMedia, putMedia, treeMedia } from '../media.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 const NOW = 2026;
@@ -371,5 +371,92 @@ describe('presumedDeceasedSet (T35)', () => {
         expect(set.has('gp')).toBe(true);     // born 1888 at the latest
         expect(set.has('ggp')).toBe(true);    // born 1876 at the latest
         expect(set.has('alive')).toBe(false); // marked as alive
+    });
+});
+
+describe('two sets of the living shown in full (gift, spec 093 K6.5)', () => {
+    const ALL: LivingSensitive = { birthDates: true, addresses: true, contacts: true, photos: true, notes: true, religion: true, sources: true };
+    const FULL: LivingSensitive = { ...ALL, contacts: false };
+    const OTHERS: LivingSensitive = { birthDates: true, photos: true, addresses: false, contacts: false, notes: false, religion: false, sources: false };
+    const PHOTO = 'data:image/png;base64,AAAA';
+
+    /** a (shown in full) married to b (other living); b and c (other living) a couple too; a's earlier union with the deceased d. */
+    function family(): StromData {
+        const sensitive = (key: string): Partial<Person> => ({
+            birthDate: '1980-04-02', birthAddress: `Street ${key}`, emails: [`${key}@example.invalid`],
+            notes: `Note ${key}`, photo: PHOTO, sourceIds: [`src-${key}`],
+            events: [{ id: `rel-${key}`, type: 'religion', note: `Faith ${key}` }, { id: `res-${key}`, type: 'residence', address: `Home ${key}` }],
+        });
+        const data = tree(
+            person('a', { firstName: 'Quenby', ...sensitive('a'), partnerships: ['ab' as PartnershipId, 'ad' as PartnershipId] }),
+            person('b', { firstName: 'Ysmay', gender: 'female', ...sensitive('b'), partnerships: ['ab' as PartnershipId, 'bc' as PartnershipId] }),
+            person('c', { firstName: 'Pellam', ...sensitive('c'), partnerships: ['bc' as PartnershipId] }),
+            person('d', { firstName: 'Dorcas', gender: 'female', birthDate: '1900', deathDate: '1970', partnerships: ['ad' as PartnershipId] }),
+        );
+        const couple = (id: string, p1: string, p2: string) => ({
+            id: id as PartnershipId, person1Id: p1 as PersonId, person2Id: p2 as PersonId, childIds: [], status: 'married' as const,
+            address: `Couple home ${id}`, note: `Couple note ${id}`, sourceIds: [`src-${id}`], photo: PHOTO,
+        });
+        data.partnerships = { ab: couple('ab', 'a', 'b'), bc: couple('bc', 'b', 'c'), ad: couple('ad', 'a', 'd') } as StromData['partnerships'];
+        data.sources = Object.fromEntries(['a', 'b', 'c', 'ab', 'bc', 'ad'].map(k => [`src-${k}`, { id: `src-${k}`, title: `Register ${k}` }])) as StromData['sources'];
+        for (const k of ['a', 'b']) addPersonMedia(data, k as PersonId, { id: `m-${k}`, name: `${k}.jpg`, mimeType: 'image/jpeg', dataUrl: 'data:,', sizeBytes: 1 });
+        for (const k of ['ab', 'ad']) putMedia(data, { id: `m-${k}`, name: `${k}.jpg`, mimeType: 'image/jpeg', dataUrl: 'data:,', sizeBytes: 1, places: [{ partnershipId: k as PartnershipId }] });
+        return data;
+    }
+    const opts = (extra: object = {}) => ({ keepDeceasedSources: true, fullIds: ['a'], sensitive: FULL, ...extra });
+    const mediaIds = (d: StromData) => treeMedia(d).map(m => m.id).sort();
+
+    it('under full: those in fullIds by `sensitive`, the other living by `othersSensitive`', () => {
+        const out = applyLivingPrivacy(family(), 'full', NOW, opts({ othersSensitive: OTHERS }));
+        const a = P(out).a, b = P(out).b, c = P(out).c;
+        expect([a.birthAddress, a.notes, a.emails, a.sourceIds]).toEqual(['Street a', 'Note a', undefined, ['src-a']]);
+        expect(a.events?.map(e => e.type)).toEqual(['religion', 'residence']);
+        for (const x of [b, c]) {
+            expect(x.firstName).not.toBe(LIVING_LABEL);
+            expect(x.birthDate).toBe('1980-04-02');
+            expect(x.photo).toBe(PHOTO);
+            expect([x.birthAddress, x.notes, x.emails, x.sourceIds, x.events]).toEqual([undefined, undefined, undefined, undefined, undefined]);
+        }
+        expect(Object.keys(out.sources ?? {}).sort()).toEqual(['src-a', 'src-ad']);
+        // Attachments go with the other living's sources (off): b's own; a's stay.
+        expect(mediaIds(out)).toEqual(['m-a', 'm-ad']);
+    });
+
+    it('a couple of one shown in full and one other living takes the stricter set; one with a deceased partner the living one\'s', () => {
+        const out = applyLivingPrivacy(family(), 'full', NOW, opts({ othersSensitive: OTHERS }));
+        const ab = out.partnerships['ab' as PartnershipId];
+        expect([ab.address, ab.note, ab.sourceIds, ab.photo]).toEqual([undefined, undefined, undefined, PHOTO]);
+        const bc = out.partnerships['bc' as PartnershipId];
+        expect([bc.address, bc.note, bc.sourceIds]).toEqual([undefined, undefined, undefined]);
+        const ad = out.partnerships['ad' as PartnershipId];
+        expect([ad.address, ad.note, ad.sourceIds]).toEqual(['Couple home ad', 'Couple note ad', ['src-ad']]);
+        // Stricter by kind: the full set without photos and the others' without addresses hide both.
+        const strict = applyLivingPrivacy(family(), 'full', NOW, opts({ sensitive: { ...ALL, photos: false }, othersSensitive: { ...ALL, addresses: false } }));
+        const sab = strict.partnerships['ab' as PartnershipId];
+        expect([sab.address, sab.photo, sab.note]).toEqual([undefined, undefined, 'Couple note ab']);
+        expect(mediaIds(strict)).not.toContain('m-ab');
+        expect(P(strict).b.birthAddress).toBeUndefined();
+        expect(P(strict).b.photo).toBe(PHOTO);
+        expect(P(strict).a.birthAddress).toBe('Street a');
+        expect(P(strict).a.photo).toBeUndefined();
+    });
+
+    it('without othersSensitive nothing changes: under full every living person by `sensitive`', () => {
+        const out = applyLivingPrivacy(family(), 'full', NOW, opts());
+        for (const k of ['a', 'b', 'c']) {
+            expect(P(out)[k].birthAddress).toBe(`Street ${k}`);
+            expect(P(out)[k].emails).toBeUndefined();
+        }
+        expect(out.partnerships['ab' as PartnershipId].address).toBe('Couple home ab');
+        expect(mediaIds(out)).toEqual(['m-a', 'm-ab', 'm-ad', 'm-b']);
+    });
+
+    it('othersSensitive has no say under the other modes', () => {
+        const out = applyLivingPrivacy(family(), 'initials', NOW, opts({ othersSensitive: ALL }));
+        expect(P(out).a.birthAddress).toBe('Street a');
+        expect(P(out).b.firstName).toBe('Y.');
+        expect(P(out).b.birthAddress).toBeUndefined();
+        expect(P(out).b.photo).toBeUndefined();
+        expect(out.partnerships['ab' as PartnershipId].address).toBeUndefined();
     });
 });

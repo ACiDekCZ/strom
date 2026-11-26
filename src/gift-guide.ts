@@ -292,9 +292,12 @@ export function giftLivingModel(
     return { rows, persons: ids.size };
 }
 
-/** Who of the living is shown in full: the household and the exceptions, or everyone under 'full'. */
+/**
+ * Who of the living is shown in full: the household and the exceptions. Under
+ * 'full' the others are in the package by name too, but with the set of the
+ * other living (K6.5): the tick says which set applies.
+ */
 export function giftFullSet(model: GiftLivingModel, settings: GiftSettings): Set<PersonId> {
-    if (settings.privacy.others === 'full') return new Set(model.rows.map(r => r.id));
     const extra = new Set(settings.privacy.fullIds);
     return new Set(model.rows.filter(r => r.household || extra.has(r.id)).map(r => r.id));
 }

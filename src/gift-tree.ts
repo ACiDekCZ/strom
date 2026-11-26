@@ -70,7 +70,10 @@ export interface GiftPrivacy {
     others: PrivacyMode;
     /** Exceptions shown in full besides the recipient's household. */
     fullIds: PersonId[];
+    /** What the living shown in full (the household and the exceptions) keep. */
     sensitive: GiftSensitive;
+    /** Under others 'full': what the other living keep (spec 093 K6.5); unused under the other modes. */
+    othersSensitive: GiftSensitive;
     dead: DeceasedDetails;
 }
 
@@ -118,12 +121,18 @@ export interface GiftMemory {
     cutSize: number;
 }
 
-/** The default protection (spec 093 §4). */
+/** What the other living keep under 'full' by default (spec 093 K6.5): birth dates and photos only. */
+export function defaultGiftOthersSensitive(): GiftSensitive {
+    return { birthDates: true, photos: true, addresses: false, contacts: false, notes: false, religion: false, sources: false };
+}
+
+/** The default protection (spec 093 §4, K6.5). */
 export function defaultGiftPrivacy(): GiftPrivacy {
     return {
         others: 'initials',
         fullIds: [],
         sensitive: { birthDates: true, addresses: true, contacts: false, photos: true, notes: false, religion: true, sources: true },
+        othersSensitive: defaultGiftOthersSensitive(),
         dead: { causes: true, notes: true, sources: true },
     };
 }
@@ -303,7 +312,8 @@ export function giftCutData(source: StromData | LineageIndex, cut: GiftCut): Str
 /**
  * The data every part of the package gets (D4): the cut with the living
  * protected once — the household and the exceptions in full with their
- * sensitive details masked, the other living by `others`, the deceased's
+ * sensitive details masked, the other living by `others` (under 'full'
+ * masked by their own set, a couple by the stricter one, K6.5), the deceased's
  * details by `dead` — without the research's workshop, and without any
  * images when `photos` is off. The outputs apply no protection of their own.
  */
@@ -315,6 +325,7 @@ export function giftProtectedData(
     const fullIds = new Set<PersonId>([...giftHouseholdIds(sub, cut.recipients), ...privacy.fullIds]);
     let out = applyLivingPrivacy(sub, privacy.others, opts.currentYear ?? new Date().getFullYear(), {
         keepDeceasedSources: true, fullIds, sensitive: privacy.sensitive, dead: privacy.dead,
+        ...(privacy.others === 'full' ? { othersSensitive: privacy.othersSensitive ?? defaultGiftOthersSensitive() } : {}),
     });
     out = stripResearchWork(out);
     if (!opts.photos) out = stripMedia(out);
@@ -326,7 +337,8 @@ export function giftProtectedData(
  * Whether the protection shortens anything of a living person in the cut (the
  * cover page's "some details of the living are shortened", §6): a living
  * person outside the household and the exceptions under a mode other than
- * 'full', or a living person shown in full while some kind of detail is masked.
+ * 'full', or a living person shown in full while some kind of detail is masked
+ * (under 'full', the other living by their own set, K6.5).
  */
 export function giftShortensLiving(
     source: StromData | LineageIndex, cut: GiftCut, privacy: GiftPrivacy, currentYear: number = new Date().getFullYear(),
@@ -334,11 +346,14 @@ export function giftShortensLiving(
     const sub = giftCutData(source, cut);
     const bounds = inferBirthUpperBounds(sub);
     const full = new Set<PersonId>([...giftHouseholdIds(sub, cut.recipients), ...privacy.fullIds]);
-    const masks = Object.values(privacy.sensitive).some(kept => !kept);
+    const hides = (s: GiftSensitive): boolean => Object.values(s).some(kept => !kept);
+    const fullMasks = hides(privacy.sensitive);
+    const othersMask = privacy.others === 'full' && hides(privacy.othersSensitive ?? defaultGiftOthersSensitive());
     for (const p of Object.values(sub.persons)) {
         if (p.isPlaceholder || !isLivingPerson(p, currentYear, bounds)) continue;
-        if (masks) return true;
-        if (privacy.others !== 'full' && !full.has(p.id)) return true;
+        if (full.has(p.id)) {
+            if (fullMasks) return true;
+        } else if (privacy.others !== 'full' || othersMask) return true;
     }
     return false;
 }

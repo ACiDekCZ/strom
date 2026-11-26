@@ -425,9 +425,16 @@ export interface LivingPrivacyOptions {
     fullIds?: Iterable<string>;
     /**
      * What the living shown in full keep, by kind (true = kept). Missing =
-     * everything. Under 'full' it applies to every living person.
+     * everything. Under 'full' it applies to every living person, unless
+     * `othersSensitive` is given.
      */
     sensitive?: LivingSensitive;
+    /**
+     * Under 'full': what the living outside `fullIds` keep (a gift's "other
+     * living", spec 093 K6.5). Missing = `sensitive` for them too. A couple of
+     * two living people takes the stricter of their two masks.
+     */
+    othersSensitive?: LivingSensitive;
     /** What the deceased keep (true = kept). Missing = everything. */
     dead?: DeceasedDetails;
 }
@@ -634,7 +641,7 @@ export function applyLivingPrivacy(
 ): StromData {
     const copy = structuredClone(data);
     // A gift's choices (spec 093 §4): people in full, masks by kind, the deceased's details.
-    const gift = !!(options.fullIds || options.sensitive || options.dead);
+    const gift = !!(options.fullIds || options.sensitive || options.othersSensitive || options.dead);
     if (mode === 'full' && !gift) return copy;
     // The merge history keeps the details a merge changed, of the living too: never under a privacy mode.
     delete copy.merges;
@@ -675,7 +682,23 @@ export function applyLivingPrivacy(
     const shown = new Set([...living].filter(id => mode === 'full' || fullIds.has(id)));
     const obscured = shown.size ? new Set([...living].filter(id => !shown.has(id))) : living;
     const sensitive = options.sensitive;
+    const othersSensitive = mode === 'full' ? options.othersSensitive : undefined;
     const dead = options.dead;
+    // The mask of a living person shown in full: the "other living" one under 'full' outside fullIds.
+    const maskOf = (id: string): LivingSensitive | undefined =>
+        (othersSensitive && !fullIds.has(id) ? othersSensitive : sensitive);
+    // A couple's mask: the stricter of its shown living partners' (a deceased partner adds none).
+    const coupleMask = (partnership: Partnership): LivingSensitive | undefined => {
+        const masks = [partnership.person1Id, partnership.person2Id]
+            .filter(id => shown.has(id))
+            .map(maskOf)
+            .filter((m): m is LivingSensitive => !!m);
+        if (masks.length === 0) return undefined;
+        if (masks.length === 1) return masks[0];
+        const out = { ...masks[0] };
+        for (const key of Object.keys(out) as (keyof LivingSensitive)[]) out[key] = masks.every(m => m[key]);
+        return out;
+    };
 
     // A couple's details (dates, place, note, witnesses, narrative) describe
     // both of them, so they go as soon as either one is living — there is no
@@ -686,7 +709,8 @@ export function applyLivingPrivacy(
             stripPartnershipDetails(partnership, mode);
             forgetHiddenImports(partnership, true);
         } else if (shown.has(partnership.person1Id) || shown.has(partnership.person2Id)) {
-            if (sensitive) maskSensitiveCouple(partnership, sensitive);
+            const mask = coupleMask(partnership);
+            if (mask) maskSensitiveCouple(partnership, mask);
             if (dead) maskDeceased(partnership, dead);
         } else if (dead) {
             const p1 = copy.persons[partnership.person1Id];
@@ -697,7 +721,8 @@ export function applyLivingPrivacy(
 
     for (const person of Object.values(copy.persons)) {
         if (shown.has(person.id)) {
-            if (sensitive) maskSensitive(person, sensitive);
+            const mask = maskOf(person.id);
+            if (mask) maskSensitive(person, mask);
             continue;
         }
         if (!living.has(person.id)) {
@@ -735,9 +760,13 @@ export function applyLivingPrivacy(
         forgetHiddenImports(person, true);
     }
     // Attachments (scans, letters) of the living and of their couples are private documents — always dropped.
-    // Those of the living shown in full go with their photos or their sources.
-    const shownMediaGo = !!sensitive && (!sensitive.photos || !sensitive.sources);
-    const mediaGo = (id: PersonId): boolean => obscured.has(id) || (shownMediaGo && shown.has(id));
+    // Those of the living shown in full go with their photos or their sources (each by their own mask;
+    // a couple's go when either partner's would, which is the stricter mask).
+    const shownMediaGo = (id: PersonId): boolean => {
+        const mask = maskOf(id);
+        return !!mask && (!mask.photos || !mask.sources);
+    };
+    const mediaGo = (id: PersonId): boolean => obscured.has(id) || (shown.has(id) && shownMediaGo(id));
     dropMediaPlaces(copy, place => {
         const pid = placePersonId(place);
         if (pid) return mediaGo(pid);

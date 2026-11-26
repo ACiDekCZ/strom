@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { PersonId } from '../types.js';
 import { defaultGiftSettings, giftMemoryKey, giftPersonKey, loadGiftMemory, parseGiftMemory, saveGiftMemory } from '../gift-memory.js';
-import { defaultGiftPrivacy, type GiftLetter, type GiftMemory } from '../gift-tree.js';
+import { defaultGiftOthersSensitive, defaultGiftPrivacy, type GiftLetter, type GiftMemory } from '../gift-tree.js';
 
 const P = (s: string) => s as PersonId;
 
@@ -70,6 +70,36 @@ describe('gift memory', () => {
         st.setItem('strom.gift.t1', '{not json');
         expect(loadGiftMemory('t1', 'a', st)).toBeNull();
         expect(parseGiftMemory(null, [])).toBeNull();
+    });
+
+    it('K6.5: an entry with one set keeps it for those shown in full; the other living take the defaults', () => {
+        const st = memStorage();
+        const oldSet = { birthDates: false, addresses: false, contacts: true, photos: true, notes: true, religion: false, sources: false };
+        st.setItem('strom.gift.t1', JSON.stringify({
+            a: { lastAt: '2026-11-01', cutSize: 12, settings: { privacy: { others: 'full', fullIds: ['x'], sensitive: oldSet, dead: { causes: false } } } },
+        }));
+        const p = loadGiftMemory('t1', 'a', st)!.settings.privacy;
+        expect(p.others).toBe('full');
+        expect(p.fullIds).toEqual(['x']);
+        expect(p.sensitive).toEqual(oldSet);
+        expect(p.othersSensitive).toEqual(defaultGiftOthersSensitive());
+        expect(p.othersSensitive).toEqual({ birthDates: true, photos: true, addresses: false, contacts: false, notes: false, religion: false, sources: false });
+        expect(p.dead).toEqual({ causes: false, notes: true, sources: true });
+    });
+
+    it('K6.5: both sets saved and loaded again', () => {
+        const st = memStorage();
+        const privacy = defaultGiftPrivacy();
+        privacy.others = 'full';
+        privacy.othersSensitive = { ...privacy.othersSensitive, sources: true, photos: false };
+        const memory: GiftMemory = {
+            lastAt: '2026-11-26T10:00:00.000Z', cutSize: 5,
+            settings: { ...defaultGiftSettings([P('a')], LETTER), privacy },
+        };
+        saveGiftMemory('t1', 'a', memory, st);
+        const back = loadGiftMemory('t1', 'a', st)!.settings.privacy;
+        expect(back.othersSensitive).toEqual(privacy.othersSensitive);
+        expect(back.sensitive).toEqual(defaultGiftPrivacy().sensitive);
     });
 
     it('storage errors are swallowed', () => {

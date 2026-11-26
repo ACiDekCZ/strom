@@ -71,6 +71,8 @@ function parsePrivacy(raw: unknown): GiftPrivacy {
         others: MODES.includes(raw.others as PrivacyMode) ? raw.others as PrivacyMode : d.others,
         fullIds: Array.isArray(raw.fullIds) ? raw.fullIds.filter((x): x is PersonId => typeof x === 'string') : [],
         sensitive: flags(raw.sensitive, d.sensitive),
+        // An entry from before K6.5 has one set: it stays the set of those shown in full, the others take the defaults.
+        othersSensitive: flags(raw.othersSensitive, d.othersSensitive),
         dead: flags(raw.dead, d.dead),
     };
 }
