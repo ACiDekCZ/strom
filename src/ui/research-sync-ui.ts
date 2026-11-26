@@ -3258,6 +3258,8 @@ export const researchSyncMethods = uiModule({
         this.refreshResearchConflictCards();
         // The switcher's research marks (the open tree's own ask answered; spec 011).
         this.refreshResearchMarks();
+        // The Sample tag of a tree whose research `strom demo` made: its status says so (spec 143 K2).
+        this.setCurrentTreeTag(this.phoneResearchTreeName() ? null : TreeManager.getActiveTreeMetadata());
         // Source images left out of the research's file: loadable while its bridge runs.
         this.researchImagesBridgeChanged();
         // Materials: the research's capabilities remembered, the person's section and the cards' counts.

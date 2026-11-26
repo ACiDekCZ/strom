@@ -96,3 +96,55 @@ test.describe('the showcase with research', () => {
     });
 
 });
+
+test.describe('a research made by strom demo (tree.demo)', () => {
+    const LINKS = ['send', 'open', 'live', 'app', 'setup', 'chat', 'task', 'research'];
+
+    /** A research tree whose bridge answers; its status says `tree.demo` or not. */
+    async function demoResearch(page: Page, demo: boolean): Promise<void> {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.addInitScript((links) => {
+            if (sessionStorage.getItem('links-seeded')) return;
+            sessionStorage.setItem('links-seeded', '1');
+            localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
+        }, LINKS);
+        await openResearch(page);
+        await fakeBridge(page, {
+            accepts: { sync: { auto: 'off' }, sources: true, verified: true, media: null },
+            links: LINKS,
+            statusExtra: { tree: { id: '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', name: 'Fíškovi', ...(demo ? { demo: true } : {}), state: 'research' } },
+        });
+        await poll(page);
+    }
+
+    /** The person menu's research actions of Jan ([] when it has no Research row). */
+    async function personResearchActions(page: Page): Promise<string[]> {
+        await card(page, 'Jan').click();
+        await expect(page.locator('.context-menu').first()).toBeVisible();
+        if (await page.locator('.context-menu [data-menu="research"]').count() === 0) return [];
+        const sub = await openPersonSubmenu(page, 'research');
+        return sub.locator('[data-action]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action ?? ''));
+    }
+
+    test('without tree.demo: the agent offered (the control)', async ({ page }) => {
+        await demoResearch(page, false);
+        await expect(page.locator('.tree-switcher-btn .tree-sample-tag')).toHaveCount(0);
+        await openResearchMenu(page);
+        await expect(page.locator('#research-item-chat')).toBeVisible();
+        await page.keyboard.press('Escape');
+        expect(await personResearchActions(page)).toContain('research-ask');
+    });
+
+    test('tree.demo: no Continue with the agent, no Ask the agent, no AI tool; the tree is tagged Sample', async ({ page }) => {
+        await demoResearch(page, true);
+        // The tag comes with the status that says so (no reload, no switch of trees).
+        await expect(page.locator('.tree-switcher-btn .tree-sample-tag')).toHaveText('Sample');
+        await openResearchMenu(page, { expandMore: true });
+        await expect(page.locator('#research-menu')).toBeVisible();
+        await expect(page.locator('#research-item-chat')).toHaveCount(0);
+        await expect(page.locator('#research-menu .research-ai-badge')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        expect(await personResearchActions(page)).not.toContain('research-ask');
+        await expect(page.locator('.context-menu .research-ai-badge')).toHaveCount(0);
+    });
+});
