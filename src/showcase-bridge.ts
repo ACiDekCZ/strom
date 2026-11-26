@@ -71,10 +71,19 @@ export function showcaseUnanswered(feature: string): boolean {
     return feature.startsWith('media.') || SHOWCASE_UNANSWERED_FEATURES.includes(feature);
 }
 
-/** The snapshot's status as the shim gives it: what it cannot answer left out of `features`. */
+/**
+ * Writes the app offers by a feature alone, with no action of the research to grey (spec 143 K4.1): confirming
+ * a source's transcript or a fact from the record. Left out of the status, so the showcase does not draw them.
+ */
+export const SHOWCASE_WRITE_FEATURES: readonly string[] = ['sources.confirm', 'facts.confirm', 'facts.confirm.value'];
+
+/** The snapshot's status as the shim gives it: what it cannot answer, and its writes, left out of `features`. */
 function showcaseStatusOf(status: Record<string, unknown> | null): Record<string, unknown> | null {
     if (!status || !Array.isArray(status.features)) return status;
-    return { ...status, features: status.features.filter(f => typeof f === 'string' && !showcaseUnanswered(f)) };
+    return {
+        ...status,
+        features: status.features.filter(f => typeof f === 'string' && !showcaseUnanswered(f) && !SHOWCASE_WRITE_FEATURES.includes(f)),
+    };
 }
 
 /** A snapshot as stored (each part a JSON object or null), or null. */

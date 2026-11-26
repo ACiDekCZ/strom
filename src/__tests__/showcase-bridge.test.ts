@@ -36,7 +36,7 @@ function snapshot(): ShowcaseResearch {
     return {
         id: RID,
         status: {
-            name: 'Bergovi', head: 'h1', features: ['queue.page', EXCERPT_FEATURE, MATERIAL_THUMB_FEATURE, 'media.app', 'media.known', 'waiting.groups', 'status.parts'],
+            name: 'Bergovi', head: 'h1', features: ['queue.page', EXCERPT_FEATURE, MATERIAL_THUMB_FEATURE, 'media.app', 'media.known', 'waiting.groups', 'status.parts', 'sources.confirm', 'facts.confirm', 'facts.confirm.value'],
             tree: { kind: 'research', state: 'research' }, queueCounts: { next: 3 }, waiting: [],
         },
         log: { entries: [{ at: '2026-10-02T09:00:00Z', text: 'Matrika Dolní Lhota přečtena' }] },
@@ -98,7 +98,7 @@ describe('the snapshot answered', () => {
         expect(showcaseBridgeAnswer('GET', RID, 'status/no-such-part').status).toBe(404);
     });
 
-    it('leaves out of the status what the shim cannot answer', async () => {
+    it('leaves out of the status what the shim cannot answer, and the writes offered by a feature alone', async () => {
         const st = await body(showcaseBridgeAnswer('GET', RID, 'status')) as { features: string[] };
         expect(st.features).toEqual(['queue.page', 'waiting.groups', 'status.parts']);
         expect(showcaseUnanswered(EXCERPT_FEATURE)).toBe(true);
