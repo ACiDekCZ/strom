@@ -78,6 +78,10 @@ for (const width of [1440, 390]) {
         const toast = page.locator('body > .toast.show');
         await expect(toast).toBeVisible();
         await expect(offer).toBeHidden();
+        // Measured where it stands: the toast glides up into its place (0.3 s, reduced motion too);
+        // a box taken during the glide lies lower than the toast is by the next look, at 1440 x 800
+        // partly below the window.
+        await toast.evaluate(el => Promise.all(el.getAnimations().map(a => a.finished)));
         const box = (await toast.boundingBox())!;
         const onTop = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.toast'),
             [box.x + box.width / 2, box.y + box.height / 2]);
