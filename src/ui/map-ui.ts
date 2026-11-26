@@ -17,6 +17,7 @@
 import { canvasBusy } from './canvas-busy.js';
 import { stampedGeo } from '../place-find.js';
 import { DataManager } from '../data.js';
+import { townHouseCount } from './houses-ui.js';
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -1482,6 +1483,8 @@ export const mapMethods = uiModule({
                 ${outsideLine}
             </div>
             <div class="map-popup-foot">
+                ${!path && townHouseCount(DataManager.getData(), name) > 0
+                    ? `<button type="button" class="map-popup-town-houses" data-town="${this.escapeHtml(name)}">${this.escapeHtml(strings.houses.townHouses)}</button>` : ''}
                 <button type="button" class="map-popup-fix" data-key="${this.escapeHtml(point.type === 'town' ? point.ownKey ?? point.key : point.key)}">${m.wrongSpot}</button>
             </div>`;
         // Following the research: the runs at work here, right under the place's head.
@@ -1818,6 +1821,9 @@ export const mapMethods = uiModule({
             }
             const fix = target.closest('.map-popup-fix') as HTMLElement | null;
             if (fix) { this.showPlacesManager(fix.dataset.key); return; }
+            // "Houses in this town ›" (spec 030 §1): the Houses window on the town.
+            const townHouses = target.closest<HTMLElement>('.map-popup-town-houses');
+            if (townHouses?.dataset.town) { this.showTownHouses(townHouses.dataset.town); return; }
             const act = target.closest<HTMLElement>('.map-popup-keep, .map-popup-change, .map-popup-checkres, .map-popup-whymore, .map-popup-look');
             const key = act?.dataset.key;
             if (!act || key === undefined) return;

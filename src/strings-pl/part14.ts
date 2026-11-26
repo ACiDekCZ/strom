@@ -71,7 +71,7 @@ export const plPart14: Pick<StringsType, 'houses'> = {
         emptyHistory: 'Żaden dom nie ma historii 2 pokoleń lub 30 lat.',
         clearSearch: 'Wyczyść wyszukiwanie',
         loadMore: (n: number) => `Pokaż więcej (${n})`,
-        townHouses: 'Domy miejscowości ›',
+        townHouses: 'Domy w miejscowości ›',
         headerMenu: 'Więcej opcji',
     },
 };

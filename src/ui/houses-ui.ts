@@ -183,11 +183,15 @@ export const housesMethods = uiModule({
         modal.insertBefore(bar, modal.querySelector(':scope > .modal-content'));
         this.bindHousesWindow(overlay);
 
-        this.clearDialogStack();
-        if (parent) {
-            this.pushDialog(parent);
-            this.closeDialogById(parent);
+        // Back to the dialog it came from on close; a parent already in the stack (Places opened
+        // from the tree's menu) keeps the dialogs under it.
+        if (parent && this.dialogStack.includes(parent)) {
+            this.dialogStack = this.dialogStack.slice(0, this.dialogStack.indexOf(parent) + 1);
+        } else {
+            this.clearDialogStack();
+            if (parent) this.pushDialog(parent);
         }
+        if (parent) this.closeDialogById(parent);
         this.pushDialog(MODAL_ID);
         this.renderHousesList();
         if (opts.house) {
@@ -903,8 +907,11 @@ export const housesMethods = uiModule({
         this.dialogStack = this.dialogStack.filter(d => d !== MODAL_ID);
         state = null;
         if (!back) {
-            const parent = this.dialogStack[this.dialogStack.length - 1];
-            if (parent) this.closeFloatingDialog(parent);
+            // To the tree: every dialog under the window closes too (Places is drawn afresh next time).
+            for (const id of [...this.dialogStack].reverse()) {
+                if (id === 'places-modal') document.getElementById(id)?.remove();
+                else this.closeFloatingDialog(id);
+            }
             this.clearDialogStack();
             return;
         }

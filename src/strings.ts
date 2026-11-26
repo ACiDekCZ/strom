@@ -13311,7 +13311,7 @@ const stringsEN = {
         emptyHistory: 'No house has a history of 2 generations or 30 years.',
         clearSearch: 'Clear the search',
         loadMore: (n: number) => `Show more (${n})`,
-        townHouses: 'Houses of the town ›',
+        townHouses: 'Houses in this town ›',
         headerMenu: 'More options',
     },
 };
@@ -38655,7 +38655,7 @@ const stringsDE: StringsType = {
         emptyHistory: 'Kein Haus hat eine Geschichte über 2 Generationen oder 30 Jahre.',
         clearSearch: 'Suche aufheben',
         loadMore: (n: number) => `Weitere anzeigen (${n})`,
-        townHouses: 'Häuser des Ortes ›',
+        townHouses: 'Häuser im Ort ›',
         headerMenu: 'Weitere Optionen',
     },
 };

@@ -21,9 +21,10 @@
  */
 
 import { DataManager } from '../data.js';
+import { collectHouses } from '../houses.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PersonId, PlaceGeo } from '../types.js';
+import { PersonId, PlaceGeo, StromData } from '../types.js';
 import {
     collectPlaces, orphanedPlaceKeys, placeKey, PlaceUsage, sortPlacesForManager, placeFilterText, placeMatchesFilter,
     readPlacesSort, knownStreets, townOfPlace, placeTownGroups, townHousePlaces, splitPlaceHouses, countPlaceUses,
@@ -92,6 +93,13 @@ let managerKnown: KnownStreets = () => undefined;
 let managerYears = new Map<string, [number, number]>();
 /** The research's actions go (the research's bridge here), read once per draw. */
 let managerCanResearch = false;
+/** The towns (placeKey) with a numbered house of the tree, read once per draw ("Houses in this town ›"). */
+let managerHouseTowns = new Set<string>();
+
+/** The towns with a numbered house of the tree, by placeKey. */
+function houseTownKeys(data: StromData): Set<string> {
+    return new Set(collectHouses(data).map(h => h.townKey));
+}
 
 /** The dialog's place by key, as last drawn (the search of a row reads it). */
 export function managerPlaceUsage(key: string): PlaceUsage | undefined {
@@ -200,6 +208,7 @@ export const placesManagerMethods = uiModule({
         }
         placesView.usages = managerPlaces;
         managerYears = placeYearSpans(data);
+        managerHouseTowns = houseTownKeys(data);
         const research = this.placesResearchContext();
         managerCanResearch = research.canResearch;
         if (!managerCanResearch) resetPlacesView();
@@ -304,6 +313,8 @@ export const placesManagerMethods = uiModule({
             if (placesView.menu && !(e.target as HTMLElement).closest('.places-more, .places-more-btn')) this.setPlacesMenu(false);
             const hist = (e.target as HTMLElement).closest<HTMLElement>('[data-place-hist]');
             if (hist) this.placesHistoryAction(hist.dataset.placeHist ?? '', hist.dataset.hkey ?? '');
+            const houses = (e.target as HTMLElement).closest<HTMLElement>('.place-town-houses');
+            if (houses?.dataset.town) this.showTownHouses(houses.dataset.town, 'places-modal');
         };
         (overlay.querySelector('#places-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-close') as HTMLButtonElement).onclick = close;
@@ -416,6 +427,11 @@ export const placesManagerMethods = uiModule({
         return sortPlacesForManager(items, this.placesSort, getCurrentLanguage(), rank);
     },
 
+    /** "Houses in this town ›" of a town with a numbered house: opens the Houses window on it. */
+    placeTownHousesHtml(town: string): string {
+        return `<button type="button" class="place-act place-town-houses" data-town="${this.escapeHtml(town)}">${this.escapeHtml(strings.houses.townHouses)}</button>`;
+    },
+
     renderPlaceGroup(g: DialogGroup, byKey: ReadonlyMap<string, ManagerPlace>): string {
         if (g.variant) return this.renderVariantGroup(g, g.variant, byKey);
         const m = strings.map;
@@ -431,6 +447,7 @@ export const placesManagerMethods = uiModule({
                        <span class="place-count">${this.escapeHtml(meta)}</span>
                        ${g.unplacedCount ? `<span class="place-unplaced-tag">${this.escapeHtml(m.unplacedN(g.unplacedCount))}</span>` : ''}
                    </div>
+                   ${managerHouseTowns.has(placeKey(g.town)) ? `<div class="place-acts">${this.placeTownHousesHtml(g.town)}</div>` : ''}
                </div>`;
         const members = g.members.map(mem => byKey.get(mem.key)).filter((p): p is ManagerPlace => !!p);
         return `
@@ -750,6 +767,11 @@ export const placesManagerMethods = uiModule({
             } else {
                 acts.push(`<button type="button" class="place-split-one place-act">${m.splitOne}</button>`);
             }
+        }
+        // "Houses in this town ›": the Houses window on the town (spec 030 §1), for a town of a numbered house.
+        if (!opts.sub) {
+            const town = g ? g.town : p.usage.display;
+            if (managerHouseTowns.has(placeKey(town))) acts.push(this.placeTownHousesHtml(town));
         }
         const cls = ['place-row'];
         if (!geo) cls.push('place-row-unplaced');
