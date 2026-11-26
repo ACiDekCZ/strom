@@ -224,7 +224,8 @@ export const housePageMethods = uiModule({
                 + sections.map(s => `<li><a class="pp-toc-link sel-tab" data-sel-dir="side" href="#${esc(s.id)}" data-pp-toc="${esc(s.id)}"><span class="sel-l" data-label="${esc(s.label)}">${esc(s.label)}</span></a></li>`).join('')
                 + '</ol></nav>'
             : '';
-        const title = `${house.ref.town} ${house.text}`;
+        // The number kept to its marker in the header too (houseTitle; designer's round 2, question 18).
+        const title = houseTitle(house);
         const name = data.houses?.[house.id]?.name ?? house.name ?? research?.name ?? '';
         (overlay.querySelector('#hp-title') as HTMLElement).textContent = title;
         (overlay.querySelector('#hp-title') as HTMLElement).title = title;

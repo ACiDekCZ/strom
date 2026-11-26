@@ -154,6 +154,8 @@ async function openFromHouses(page: Page): Promise<void> {
     await expect(link).toHaveText('House page ›');
     await link.click();
     await expect(pageWin(page).locator('#hp-title')).toHaveText('Bělokamen čp. 16');
+    // The header's title (and its phone line) keeps the number to its marker: a non-breaking space (question 18).
+    expect(await pageWin(page).locator('#hp-title, .pp-mname').evaluateAll(els => els.map(e => e.textContent))).toEqual(['Bělokamen čp.\u00a016', 'Bělokamen čp.\u00a016']);
     // The research's result arrives and the page draws it.
     await expect(pageWin(page).locator('#hp-sec-people')).toBeVisible();
 }
