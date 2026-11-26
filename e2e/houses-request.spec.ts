@@ -138,9 +138,13 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         await expect(r.locator('.house-req[data-house-act="request"]')).toBeVisible();
         // Anna's čp. 4 is not a family house (one person, no history).
         await expect(page.locator('#places-modal .place-houses-sub .r')).toHaveCount(1);
+        // The house's page (spec 030 §3) over Places, which comes back when it closes.
         await r.locator('.place-house-page').click();
-        await expect(houseRow(page)).toBeVisible();
+        await expect(page.locator('#house-page-modal #hp-title')).toHaveText('Bělokamen čp. 16');
         await expect(page.locator('#places-modal')).not.toHaveClass(/active/);
+        await page.locator('#house-page-modal .pp-close').click();
+        await expect(page.locator('#house-page-modal')).toHaveCount(0);
+        await expect(page.locator('#places-modal')).toHaveClass(/active/);
     });
 
     test('the person card: an address at a house of the tree opens the house', async ({ page }) => {
@@ -152,7 +156,7 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         const link = page.locator(`#pm-lifeline-body .pm-house-link[data-house="${KEY}"]`).first();
         await expect(link).toHaveText('čp. 16');
         await link.click();
-        await expect(houseRow(page)).toBeVisible();
+        await expect(page.locator('#house-page-modal #hp-title')).toHaveText('Bělokamen čp. 16');
         await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
     });
 

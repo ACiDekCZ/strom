@@ -316,6 +316,7 @@ describe('place steps of a satellite window', () => {
     describe('the main window runs the satellite\'s place actions', () => {
         const deps = (): SatResearchMainDeps & Record<string, Fn> => ({
             showPlacesManager: vi.fn(), openPlacesBulk: vi.fn(), showHousesWindow: vi.fn(),
+            openHousePage: vi.fn((id: string) => id !== 'lhota|99'),
             placesIdentifyHere: vi.fn(async () => ({ ok: true, queued: 1, skipped: [] })),
             placesLiveHere: vi.fn(async () => null),
         }) as never;
@@ -352,13 +353,20 @@ describe('place steps of a satellite window', () => {
             registerSatelliteResearchActions(d);
             await runMainResearchAction(PLACES_LIVE_ACTION, { rev: 'p3' }).result;
             expect(d.placesLiveHere).toHaveBeenCalledWith('p3');
+            // A house: its page (spec 030 §3); one the main window's tree does not have: the Houses window on the town.
             expect(runMainResearchAction(HOUSES_OPEN_ACTION, { town: 'Lhota', house: 'lhota|12' })).toEqual({ handled: true, result: true });
-            expect(d.showHousesWindow).toHaveBeenCalledWith({ town: 'Lhota', house: 'lhota|12' });
+            expect(d.openHousePage).toHaveBeenCalledWith('lhota|12');
+            expect(d.showHousesWindow).not.toHaveBeenCalled();
+            expect(runMainResearchAction(HOUSES_OPEN_ACTION, { town: 'Lhota', house: 'lhota|99' })).toEqual({ handled: true, result: true });
+            expect(d.showHousesWindow).toHaveBeenCalledWith({ town: 'Lhota', house: 'lhota|99' });
+            expect(runMainResearchAction(HOUSES_OPEN_ACTION, { town: 'Lhota' })).toEqual({ handled: true, result: true });
+            expect(d.showHousesWindow).toHaveBeenCalledWith({ town: 'Lhota' });
+            expect(d.showHousesWindow).toHaveBeenCalledTimes(2);
             for (const bad of [{}, { town: '' }, { town: 7 }, { town: 'Lhota', house: 3 }, { town: 'Lhota', parent: 'x' }]) {
                 expect(readHousesOpenArgs(bad)).toBeNull();
                 expect(runMainResearchAction(HOUSES_OPEN_ACTION, bad)).toEqual({ handled: true });
             }
-            expect(d.showHousesWindow).toHaveBeenCalledTimes(1);
+            expect(d.showHousesWindow).toHaveBeenCalledTimes(2);
         });
 
         it('the main window without a bridge address of its own writes nothing (the satellite hears no answer)', async () => {

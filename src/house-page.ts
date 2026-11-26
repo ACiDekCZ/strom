@@ -694,10 +694,15 @@ function citedSources(c: Ctx): CitedSource[] {
 }
 
 function materialHtml(c: Ctx, m: HouseMaterial): string {
-    const kind = (c.H.matKind as Record<string, string>)[m.kind] ?? m.kind;
-    const title = m.title || (m.kind === 'text' ? c.H.memoryTitle : m.file) || kind;
+    const H = c.H;
+    const memory = m.kind === 'memory';
+    const image = !memory && !!m.file && /\.(png|jpe?g|gif|webp|heic|heif|tiff?|bmp)$/i.test(m.file);
+    const title = memory ? (m.title ? `${H.memoryTitle}: ${m.title}` : H.memoryTitle)
+        : m.kind === 'own-research' ? H.ownResearch : (m.title || m.file || H.matKind.file);
     // A witness's name stays in the app (the file never names who told it).
-    const sub = [c.app && m.witness ? c.H.witnessBy(m.witness) : '', dayText(m.at, c.lang)].filter(Boolean).join(' · ');
+    const who = memory ? [H.familyMemory, c.app ? (m.witness ? H.witnessBy(m.witness) : H.witnessNone) : ''] : [];
+    const sub = [...who, dayText(m.at, c.lang)].filter(Boolean).join(' · ');
+    const kind = memory ? H.matKind.text : image ? H.matKind.photo : H.matKind.file;
     return `<div class="hp-mat"><span class="hp-mat-t">${esc(title)}${sub ? `<span class="hp-mat-s">${esc(sub)}</span>` : ''}</span>`
         + `<span class="hp-mat-k">${esc(kind)}</span></div>`;
 }

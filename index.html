@@ -7681,6 +7681,12 @@
             display: inline; padding: 0; border: 0; border-radius: 0; background: none; font-family: var(--font-serif); font-size: 14px;
             color: var(--text); text-align: left; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer;
         }
+        /* "House page ›" at the foot of an open row (spec 030 §3). */
+        .houses-modal button.house-page-link {
+            display: block; margin: 10px 0 2px; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; font-size: 13.5px;
+            font-weight: 600; color: var(--primary-dark); text-decoration: none; cursor: pointer;
+        }
+        @media (hover: hover) { .houses-modal button.house-page-link:hover { text-decoration: underline; text-underline-offset: 2px; } }
         .houses-modal button.house-more-records, .houses-modal button.houses-load-more {
             align-self: flex-start; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; font-size: 13px;
             color: var(--primary-dark); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
@@ -7826,7 +7832,7 @@
             .houses-modal button.house-more-btn { position: relative; }
             .houses-modal button.house-more-btn::before { content: ''; position: absolute; inset: -10px -8px; }
             .houses-modal button.house-more-h, .houses-modal button.houses-load-more, .houses-modal button.house-more-records,
-            .houses-modal button.houses-terms-link { min-height: 44px; }
+            .houses-modal button.houses-terms-link, .houses-modal button.house-page-link { min-height: 44px; }
             .houses-modal .house-person button.p { display: inline-flex; align-items: center; min-height: 44px; }
             .house-sub-modal button.r.sel-opt { min-height: 44px; }
             .house-split-which label, .house-split-send { min-height: 44px; align-items: center; }
@@ -32626,7 +32632,7 @@
            here only the window chrome: frame, header, contents, ⋯ menu,
            the "Save as HTML" dialog and the entry points. Below the dialogs
            it opens (person editor, Materials, source viewer), like Sources. */
-        #person-page-modal { z-index: 190; }
+        #person-page-modal, #house-page-modal { z-index: 190; }
         .toast[data-kind="person-page"] { z-index: 250; }
         /* "‹ Back to the person page" after the ancestors' path opened from it: above the
            time bar on a computer and a tablet; on a phone at the top, under the map's chips and
@@ -32734,6 +32740,8 @@
             background: transparent; border: 0; text-align: left; font: inherit; font-size: 14.5px; color: var(--text); cursor: pointer;
         }
         .pp-menu-item--narrow { display: none !important; }
+        /* The house page's ⋯ groups (spec 030 §3). */
+        .pp-menu-sep { height: 1px; margin: 4px 6px; background: var(--divider); }
         /* A page of the family pages (spec 026 §0.8): Save as file, Print and the Family book in the header, ⋯ only on a phone. */
         .pp-is-set .modal--page .pp-head .pp-more { display: none; }
         .modal--page .pp-head .pp-book { font-weight: 500; }
@@ -32754,7 +32762,7 @@
         /* A phone, and a phone held sideways: the window is the whole screen;
            the header keeps ‹ · the name · Share · ⋯ · × (Save and Print in ⋯). */
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            #person-page-modal { align-items: stretch; justify-content: stretch; }
+            #person-page-modal, #house-page-modal { align-items: stretch; justify-content: stretch; }
             .modal.modal--page {
                 position: fixed; inset: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; border-radius: 0;
             }

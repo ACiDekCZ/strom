@@ -13482,7 +13482,6 @@ const stringsEN = {
             more: 'More actions',
             openInBook: 'Open in the book…',
             onMap: 'On the map',
-            confirmFailed: (reason: string) => `The answer did not reach the research: ${reason}`,
         },
     },
 };
@@ -26360,7 +26359,6 @@ const stringsCZ: StringsType = {
             more: 'Další akce',
             openInBook: 'Otevřít v knize…',
             onMap: 'Na mapě',
-            confirmFailed: (reason: string) => `Odpověď se do výzkumu nedostala: ${reason}`,
         },
     },
 };
@@ -39148,7 +39146,6 @@ const stringsDE: StringsType = {
             more: 'Weitere Aktionen',
             openInBook: 'Im Buch öffnen…',
             onMap: 'Auf der Karte',
-            confirmFailed: (reason: string) => `Die Antwort hat die Forschung nicht erreicht: ${reason}`,
         },
     },
 };

@@ -149,6 +149,7 @@ export const houseStateMethods = uiModule({
     /** The list changed: the open Houses window and Places' town lines show it. */
     houseStatesChanged(): void {
         this.refreshHousesWindow();
+        this.refreshHousePage();
         this.refreshPlaceTownHouseStates();
         this.refreshPlaceHousesRows();
     },

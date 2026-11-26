@@ -31,6 +31,8 @@ export interface SatResearchMainDeps {
     /** The research's places read through this window's bridge (null: no bridge here). */
     placesLiveHere(rev?: string): Promise<PlacesReadResult | null>;
     showHousesWindow(opts: { town?: string; house?: string }): void;
+    /** The page of a house of the tree (false: no such house here). */
+    openHousePage(id: string): boolean;
     /** A card's signal as its badge here opens it (the answer, "What the research knows"). */
     openCardSignal(personId: PersonId, signal: string): void;
     personWaitingItems(personId: PersonId): LiveWaiting[];
@@ -77,10 +79,13 @@ export function registerSatelliteResearchActions(ui: SatResearchMainDeps): void 
         read: readPlacesLiveArgs,
         run: (a) => ui.placesLiveHere(a.rev),
     });
-    // "Houses of the town ›" of a satellite: the Houses window here, with the research's part (this window's bridge).
+    // "Houses of the town ›" of a satellite: the Houses window here, with the research's part (this window's bridge);
+    // a house of it opens the house page.
     registerMainResearchAction(HOUSES_OPEN_ACTION, {
         read: readHousesOpenArgs,
         run: (a) => {
+            // A house of a satellite ("House page ›", an address in a card): its page here.
+            if (a.house && ui.openHousePage(a.house)) return true;
             ui.showHousesWindow({ town: a.town, ...(a.house ? { house: a.house } : {}) });
             return true;
         },

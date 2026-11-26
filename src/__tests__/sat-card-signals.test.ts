@@ -236,7 +236,7 @@ describe('card signals and "What the research knows" in a satellite window', () 
 
     describe('the main window runs them', () => {
         const deps = (): Record<keyof SatResearchMainDeps, Fn> => ({
-            showPlacesManager: vi.fn(), openPlacesBulk: vi.fn(), showHousesWindow: vi.fn(),
+            showPlacesManager: vi.fn(), openPlacesBulk: vi.fn(), showHousesWindow: vi.fn(), openHousePage: vi.fn(() => true),
             placesIdentifyHere: vi.fn(async () => null), placesLiveHere: vi.fn(async () => null),
             openCardSignal: vi.fn(), personWaitingItems: vi.fn(() => [{ id: 'w-3' }]), showPersonWaiting: vi.fn(),
             openWaitingStoryCompare: vi.fn(() => false), showResearchWaiting: vi.fn(),

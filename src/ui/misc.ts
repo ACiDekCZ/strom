@@ -930,6 +930,8 @@ export const miscMethods = uiModule({
                 if (this.topActiveOverlay()?.id === 'places-modal' && this.placesEscape()) return;
                 // The Houses window: its menu, its glossary and its small dialogs close one at a time first.
                 if (this.housesEscape(this.topActiveOverlay()?.id)) return;
+                // The house page: its ⋯ menu, the name being written, then the page (back to the dialog under it).
+                if (this.housePageEscape(this.topActiveOverlay()?.id)) return;
                 // Change structure…: one screen back, from its options back to the dialog it was opened from.
                 if (this.topActiveOverlay()?.id === 'structure-modal' && this.isStructureDialogOpen()) {
                     this.structureEscape();

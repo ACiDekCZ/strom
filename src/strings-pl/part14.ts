@@ -218,7 +218,6 @@ export const plPart14: Pick<StringsType, 'houses'> = {
             more: 'Więcej działań',
             openInBook: 'Otwórz w książce…',
             onMap: 'Na mapie',
-            confirmFailed: (reason: string) => `Odpowiedź nie dotarła do badań: ${reason}`,
         },
     },
 };

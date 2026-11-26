@@ -30,7 +30,7 @@ function fullResearch(): HouseResearch {
     r.unknown = [{ id: 'u1', text: 'Kdo dům držel 1912–1913?', question: 'Q0001' }];
     r.passed = [{ id: 'p1', what: 'Indikační skica 1840', found: false, at: '2026-10-02' }];
     r.archiveOnly = [{ id: 'a1', archive: 'Oblastní archiv Brodek', fond: 'Velkostatek Brodek', what: 'Gruntovní kniha 1790' }];
-    r.materials = [{ id: 'm1', kind: 'text', title: 'Vzpomínka na kůlnu', witness: 'Kvido Stranný', text: 'Kůlna stála za domem.', at: '2026-11-01' }];
+    r.materials = [{ id: 'm1', kind: 'memory', title: 'Vzpomínka na kůlnu', witness: 'Kvido Stranný', text: 'Kůlna stála za domem.', at: '2026-11-01' }];
     r.look = { text: 'Zděné přízemní stavení se dvěma okny do návsi.', images: [] };
     return r;
 }
@@ -53,6 +53,7 @@ describe('house page — app', () => {
         // No map until §4 fills the hook, no tree-only residents beside the research's.
         expect(html).not.toContain('id="hp-sec-map"');
         expect(html).not.toContain('id="hp-sec-treeResidents"');
+        expect(html).toContain('told by Kvido Stranný');
         expect(mapHtml({ mode: 'app', lang: 'en', house: houseOf(data, HOUSE_ID), research: null, location: null, layers: [] })).toBe('');
     });
 

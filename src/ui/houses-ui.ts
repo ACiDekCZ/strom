@@ -310,6 +310,12 @@ export const housesMethods = uiModule({
             if (h) this.houseResearchDetailClick(t, h);
             return;
         }
+        const pageLink = t.closest<HTMLElement>('.house-page-link');
+        if (pageLink) {
+            const id = pageLink.closest<HTMLElement>('.house-detail')?.dataset.house ?? '';
+            if (id) this.openHouse(id, MODAL_ID);
+            return;
+        }
         const records = t.closest<HTMLElement>('.house-more-records');
         if (records) {
             const id = records.closest<HTMLElement>('.house-detail')?.dataset.house ?? '';
@@ -525,6 +531,7 @@ export const housesMethods = uiModule({
                 <div class="house-people">${rows}</div>
                 ${rest > 0 ? `<button type="button" class="house-more-records">${this.escapeHtml(s.moreRecords(rest))}</button>` : ''}
                 ${this.renderHouseResearchDetail(h)}
+                <button type="button" class="house-page-link">${this.escapeHtml(s.page.open)}</button>
             </div>`;
     },
 
@@ -955,8 +962,8 @@ export const housesMethods = uiModule({
 
     /**
      * A house of the tree opened from elsewhere ("House page ›" in Places, a house number in the person panel's
-     * timeline, the place menu): the one place that opens a house. For now the Houses window on it, the house's row
-     * open; the house page (spec 030 §3) takes this over. A satellite as "Houses in this town ›".
+     * timeline, the place menu, the Houses window's "House page ›"): the one place that opens a house — its page
+     * (spec 030 §3). A satellite as "Houses in this town ›" (the main window opens the page).
      */
     openHouse(id: string, parent?: string): void {
         const h = this.treeHouseOf(id);
@@ -968,7 +975,7 @@ export const housesMethods = uiModule({
             main.run(HOUSES_OPEN_ACTION, args, true);
             return;
         }
-        this.showHousesWindow({ town: h.ref.town, house: h.id, ...(parent ? { parent } : {}) });
+        this.openHousePage(h.id, parent);
     },
 });
 
