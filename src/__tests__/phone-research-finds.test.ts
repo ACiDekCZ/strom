@@ -75,6 +75,10 @@ describe('a group of finds', () => {
         expect(phoneFindHead(group())).toEqual({ name: 'Bohumil Pýchavka', years: '1861–1934', plain: false });
         expect(phoneFindHead(group({ name: undefined }))).toEqual({ name: 'Bohumil Pýchavka', years: '1861–1934', plain: false });
         expect(phoneFindHead(group({ kind: 'family', title: 'Mlýnek family', span: undefined }))).toEqual({ name: 'Mlýnek family', plain: false });
+        // The research's marriage place of a family (K3.13) beside its years; a person never shows one.
+        expect(phoneFindHead(group({ kind: 'family', title: 'Mlýnek family', span: '1880', place: 'Sloup' }))).toEqual({ name: 'Mlýnek family', years: '1880 · Sloup', plain: false });
+        expect(phoneFindHead(group({ kind: 'family', title: 'Mlýnek family', span: undefined, place: 'Sloup' }))).toEqual({ name: 'Mlýnek family', years: 'Sloup', plain: false });
+        expect(phoneFindHead(group({ place: 'Sloup' }))).toEqual({ name: 'Bohumil Pýchavka', years: '1861–1934', plain: false });
         expect(phoneFindHead(group({ kind: 'sources' }))).toEqual({ name: 'New sources', plain: true });
         expect(phoneFindHead(group({ kind: 'resolved' }))).toEqual({ name: 'Resolved', plain: true });
     });

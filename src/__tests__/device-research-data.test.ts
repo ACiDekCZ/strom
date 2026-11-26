@@ -170,6 +170,10 @@ describe('device research data: cleaning', () => {
         expect(f.cut).toBe(2);
         expect(f.earlier).toBe('2026-11-10T10:00:00Z');
         expect(f.groups.map(g => g.key)).toEqual(['a1b2c3d4e5f6', 'f00d']);
+        // A family's marriage place (K3.13) is kept; nothing else carries one.
+        const one = (kind: string) => sanitizeFinds({ groups: [{ key: 'k', kind, title: 'Pýchavka a Mlýnková', place: 'Sloup', lines: [{ kind: 'family', text: '', at: '2026-11-25T06:00:00Z' }] }] })!.groups[0];
+        expect(one('family').place).toBe('Sloup');
+        expect(one('person').place).toBeUndefined();
         const person = f.groups[0];
         expect(person.person).toBe('P40');
         expect(person.lines.map(l => l.kind)).toEqual(['person', 'fact', 'child']);

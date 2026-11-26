@@ -203,6 +203,8 @@ export interface DeviceFindGroup {
     title?: string;
     name?: string;
     span?: string;
+    /** A family: its marriage place, the first part of it that says something (K3.13); never on other groups. */
+    place?: string;
     /** A person: its ID; a family: its first partner's (with `finds.person`). */
     person?: string;
     /** Its newest line's moment. */
@@ -533,6 +535,7 @@ function cleanFindGroup(v: unknown): DeviceFindGroup | null {
     const title = optText(r.title, MAX_NAME);
     const name = optText(r.name, MAX_NAME);
     const span = optText(r.span, 40);
+    const place = kind === 'family' ? optText(r.place, MAX_NAME) : undefined;
     const person = personId(r.person);
     return {
         key,
@@ -540,6 +543,7 @@ function cleanFindGroup(v: unknown): DeviceFindGroup | null {
         ...(title ? { title } : {}),
         ...(name ? { name } : {}),
         ...(span ? { span } : {}),
+        ...(place ? { place } : {}),
         ...(person ? { person } : {}),
         at: time(r.at) ?? lines.reduce((a, l) => (l.at > a ? l.at : a), ''),
         lines,

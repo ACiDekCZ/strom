@@ -528,7 +528,9 @@ export function phoneFindHead(g: DeviceFindGroup): PhoneFindHead {
     if (g.kind === 'sources') return { name: r.findsSources, plain: true };
     if (g.kind === 'resolved') return { name: r.findsResolved, plain: true };
     const name = g.kind === 'person' ? (g.name || withoutSpan(g.title ?? '', g.span)) : (g.title || g.name || '');
-    return { name, ...(g.span ? { years: g.span } : {}), plain: false };
+    // A family with its marriage place beside the years (K3.13; an older research sends none).
+    const years = [g.span, g.kind === 'family' ? g.place : undefined].filter(Boolean).join(' · ');
+    return { name, ...(years ? { years } : {}), plain: false };
 }
 
 /** What a line of finds says: a quiet prefix (its kind), the record's words, a quiet suffix ("· corrected"). */
