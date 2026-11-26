@@ -333,6 +333,8 @@ test.describe('the showcase on a phone', () => {
         await page.locator('#bb-view-more').tap();
         const chat = page.locator('#sheet-research-item-chat');
         await expect(chat).toBeVisible();
+        // No "trial · continues in the research" in the sample (it continues nowhere).
+        await expect(page.locator('.research-sheet-heading .research-trial-tag')).toHaveCount(0);
         await expectOff(page, chat, 'agent', 'Continue with the agent');
         const send = page.locator('#research-sheet-state button');
         await expect(send).toHaveAttribute('data-showcase-off', 'none');

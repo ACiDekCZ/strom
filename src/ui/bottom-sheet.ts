@@ -21,6 +21,7 @@ import { menuItemBody, menuItemAria, menuItemOffAttrs, PersonMenuAction } from '
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
+import { inShowcase } from '../research-link.js';
 import { markShowcaseOff } from './sample-why.js';
 import { getSelection, selectionText } from './view-selection-ui.js';
 import { selectionOffered } from './selection-picker-ui.js';
@@ -887,7 +888,8 @@ export const bottomSheetMethods = uiModule({
             const head = document.createElement('div');
             head.className = 'bottom-sheet-section research-sheet-heading';
             // "trial" on the right of the heading's line (it adds no height); the second level's footer has it too.
-            head.innerHTML = `<span>${esc(r.menuTitle)}</span>${researchTrialTagHtml(true)}`;
+            // Not in the showcase: its research continues nowhere, and the sample is only to look at.
+            head.innerHTML = `<span>${esc(r.menuTitle)}</span>${inShowcase() ? '' : researchTrialTagHtml(true)}`;
             list.appendChild(head);
             if (group.state) {
                 const st = group.state;
