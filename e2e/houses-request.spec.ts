@@ -1,5 +1,5 @@
 import { test, expect, Page, Route } from '@playwright/test';
-import { fakeBridge, links, openResearch, poll, BRIDGE } from './research-bridge.js';
+import { fakeBridge, fakePlaces, links, openResearch, poll, BRIDGE } from './research-bridge.js';
 
 /**
  * Asking the research for a house's history (spec 030 §2, §5): with the setting off the request goes to the
@@ -29,12 +29,15 @@ function row(init: Record<string, unknown> = {}): Record<string, unknown> {
     };
 }
 
-async function setup(page: Page, opts: { on?: boolean; features?: string[] } = {}): Promise<FakeHouses> {
+async function setup(page: Page, opts: { on?: boolean; features?: string[]; places?: boolean; rows?: Record<string, unknown>[] } = {}): Promise<FakeHouses> {
     await page.clock.setFixedTime(new Date('2027-03-20T10:30:00Z'));
-    const houses: FakeHouses = { rev: 'r1', rows: [row()], requests: [], on: !!opts.on };
+    const houses: FakeHouses = { rev: 'r1', rows: opts.rows ?? [row()], requests: [], on: !!opts.on };
     const bridge = await fakeBridge(page, {
-        features: opts.features ?? HOUSE, links: LINKS,
+        features: [...(opts.features ?? HOUSE), ...(opts.places ? ['places.identify'] : [])], links: LINKS,
         statusExtra: { houses: { on: houses.on, rev: houses.rev, counts: { done: 0, running: 0, queued: 0, waiting: 0, held: 0 } } },
+        // The research's Look up of places: the place menu of a place without a location.
+        ...(opts.places ? { places: fakePlaces({ reply: { rev: 'p1', places: {}, forms: {}, queue: { queued: 0, running: 0 },
+            counts: { offMap: 2, placed: 0, proposed: 0, unlocated: 0 } } }) } : {}),
     });
     await page.route(u => `${u.origin}${u.pathname}` === `${BRIDGE}/houses`, async (route: Route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ rev: houses.rev, houses: houses.rows }) });
@@ -184,6 +187,21 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         await link.click();
         await expect(page.locator('#house-page-modal #hp-title')).toHaveText('Bělokamen čp. 16');
         await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
+    });
+
+    test('the place menu of an address at a house: the research\'s state in the item\'s line, also as the first view of a house', async ({ page }) => {
+        await setup(page, { places: true, rows: [row({ state: 'done', at: '2027-03-12' })] });
+        await page.evaluate(() => {
+            const josef = Object.values(window.Strom.DataManager.getData().persons).find((p: { firstName: string }) => p.firstName === 'Josef') as { id: string };
+            window.Strom.UI.showEditPersonModal(josef.id as never);
+        });
+        // Nothing has read the research's houses yet: the menu reads them and its line follows.
+        const rowWithHouse = page.locator('#pm-lifeline-body .pm-lifeline-row', { has: page.locator(`.pm-house-link[data-house="${KEY}"]`) }).first();
+        await rowWithHouse.locator('button[data-place]').first().click();
+        const item = page.locator('.place-menu .place-menu-house');
+        await expect(item.locator('.place-menu-house-name')).toHaveText('House history čp. 16');
+        await expect(item.locator('.place-menu-house-line .hs[data-state="done"]')).toHaveCount(1);
+        await expect(item.locator('.place-menu-house-line')).toHaveText('done 12 Mar 2027 · house page');
     });
 
     test('an older research without house.request: no action anywhere, the house page still there', async ({ page }) => {

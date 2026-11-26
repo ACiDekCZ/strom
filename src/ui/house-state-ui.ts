@@ -155,6 +155,7 @@ export const houseStateMethods = uiModule({
         this.refreshPlaceTownHouseStates();
         this.refreshPlaceHousesRows();
         this.refreshMapHouses();
+        this.refreshPlaceMenuHouses();
     },
 
     /** The rev of the list read now ('' none). */

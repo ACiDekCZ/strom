@@ -417,12 +417,28 @@ export const houseRequestMethods = uiModule({
         const h = this.treeHouseOf(houseId);
         if (!h) return '';
         const f = strings.houses.familyHouses;
-        const row = this.houseResearchRow(h);
-        const state = row ? `${houseStateHtml(row, { lang: getCurrentLanguage() })} · ` : '';
-        const where = this.houseOpenMain() ? f.windowLine : f.pageLine;
+        // The research's list read when not yet (the menu may be the first view of a house): its line follows.
+        if (this.houseResearchBridge()) this.houseStatesSync();
         return `<button type="button" role="menuitem" class="place-menu-item place-menu-house" data-action="house" data-house="${esc(h.id)}">`
             + `<span class="place-menu-house-name">${esc(f.menuItem(houseLabel(h.text)))}</span>`
-            + `<span class="place-menu-house-line">${state}${esc(where)}</span></button>`;
+            + `<span class="place-menu-house-line">${this.placeMenuHouseLineHtml(h)}</span></button>`;
+    },
+
+    /** The place menu item's second line: the research's state (when its list has the house) · where it opens. */
+    placeMenuHouseLineHtml(h: TreeHouse): string {
+        const f = strings.houses.familyHouses;
+        const row = this.houseResearchRow(h);
+        const state = row ? `${houseStateHtml(row, { lang: getCurrentLanguage() })} · ` : '';
+        return `${state}${esc(this.houseOpenMain() ? f.windowLine : f.pageLine)}`;
+    },
+
+    /** An open place menu's house lines, from the research's list now (it came after the menu opened). */
+    refreshPlaceMenuHouses(): void {
+        document.querySelectorAll<HTMLElement>('.place-menu-house[data-house]').forEach(item => {
+            const h = this.treeHouseOf(item.dataset.house ?? '');
+            const line = item.querySelector<HTMLElement>('.place-menu-house-line');
+            if (h && line) line.innerHTML = this.placeMenuHouseLineHtml(h);
+        });
     },
 
     // ─── Places: a town's family houses (§5) ──────────────────────────────
