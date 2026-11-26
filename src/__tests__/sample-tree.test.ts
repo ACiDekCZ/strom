@@ -146,3 +146,24 @@ describe('the Manage trees row of a sample', () => {
         expect(`stav k ${formatFlexDate('2026-11-01')}`).toBe('stav k 1. 11. 2026');
     });
 });
+
+describe('deleting a showcase tree (spec 143 K4)', () => {
+    const RID = '943fce29-c1c6-5433-8031-96ce4bbbcd8d';
+    const snap = { id: RID, status: { tree: { id: RID } }, log: null, material: null, queue: null };
+
+    it('takes its research snapshot with its last tree', async () => {
+        const { keepShowcaseResearch, showcaseSnapshot, resetShowcaseBridgeForTest } = await import('../showcase-bridge.js');
+        try {
+            const tie = { id: RID, fingerprint: 'f', syncedAt: '2026-11-01T09:00:00.000Z' } as TreeMetadata['research'];
+            index([meta(SHOWCASE, 'Ukázka', { sample: MARK, research: tie }), meta(OWN, 'Novákovi', { sample: MARK, research: tie })]);
+            keepShowcaseResearch(snap, 'https://stromapp.info');
+            await TreeManager.deleteTree(SHOWCASE);
+            // Another showcase tree of the same research still reads it.
+            expect(showcaseSnapshot(RID)).not.toBeNull();
+            await TreeManager.deleteTree(OWN);
+            expect(showcaseSnapshot(RID)).toBeNull();
+        } finally {
+            resetShowcaseBridgeForTest();
+        }
+    });
+});

@@ -115,6 +115,8 @@ export function noteResearchWaiting(
     items: readonly LiveWaiting[],
     extra: { update?: { version: string } | null; busy?: LiveBusy; lastIntake?: LiveIntake | null; features?: readonly string[] | null } = {}
 ): void {
+    // A showcase's research (spec 143 K4): its snapshot is read from the page, nothing of it kept as waiting here.
+    if (showcaseResearchKnown(researchId)) return;
     try {
         const groups = !!extra.features?.includes(WAITING_GROUPS_FEATURE);
         // A file of a book's inbox set aside is kept as the research said it (made an item again when read).

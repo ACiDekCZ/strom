@@ -3,6 +3,7 @@
  * Handles tree CRUD operations and storage via IndexedDB
  */
 
+import { forgetShowcaseResearch } from './showcase-bridge.js';
 import {
     TreeId,
     TreeMetadata,
@@ -536,6 +537,7 @@ class TreeManagerClass {
         const idx = this.index.trees.findIndex(t => t.id === id);
         if (idx === -1) return false;
         const researchId = this.index.trees[idx].research?.id;
+        const showcase = !!this.index.trees[idx].sample;
 
         // Remove from the index FIRST: a save still queued for this tree
         // checks the index and skips, so it cannot resurrect the record after
@@ -555,6 +557,8 @@ class TreeManagerClass {
             await deleteHistoryStore(researchId);
             await deleteQualityBridgeRecord(researchId);
             await deleteSurnamesBridgeRecord(researchId);
+            // A showcase's research (spec 143 K4): its snapshot goes with its last tree.
+            if (showcase) forgetShowcaseResearch(researchId);
         }
         forgetPoolScope(id);
 

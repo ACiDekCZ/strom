@@ -12,7 +12,7 @@ import {
     showcaseBridgeAnswer, showcaseFetchInstalled, showcaseEventSource, showcaseQueuePage, showcaseUnanswered, SHOWCASE_READ_ONLY,
 } from '../showcase-bridge.js';
 import { parseLiveBridge, showcaseBridgeBase, showcaseResearchKnown, withAppVersion } from '../research-link.js';
-import { storedResearchBridge, hasStoredResearchBridge } from '../research-device.js';
+import { storedResearchBridge, hasStoredResearchBridge, noteResearchWaiting, storedResearchWaiting } from '../research-device.js';
 import { EXCERPT_FEATURE } from '../research-images.js';
 import { MATERIAL_THUMB_FEATURE } from '../materials.js';
 import type { ShowcaseResearch } from '../showcase-format.js';
@@ -140,6 +140,14 @@ describe('the snapshot answered', () => {
         expect(storedResearchBridge(RID)?.base).toBe(base);
         expect(hasStoredResearchBridge(RID)).toBe(true);
         expect(withAppVersion(`${base}/status`)).toBe(`${base}/status`);
+    });
+
+    it('keeps nothing of what waits in the showcase research as waiting here', () => {
+        const ls = fakeLocalStorage();
+        vi.stubGlobal('localStorage', ls);
+        noteResearchWaiting(RID, [{ id: 'W1', what: 'Která Anna Bergová?', at: '2026-10-01T10:00:00Z' } as never]);
+        expect(ls.length).toBe(0);
+        expect(storedResearchWaiting(RID)).toBeNull();
     });
 
     it('says one hello with the status on its events', async () => {
