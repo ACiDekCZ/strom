@@ -12,6 +12,8 @@ import { rewriteStorySources, storySourceIds } from './story-sources.js';
 import { StromData, Person, PersonId, Partnership, SourceExcerpt } from './types.js';
 import { strings } from './strings.js';
 import { yearOf } from './dates.js';
+import { collectHouses } from './houses.js';
+import { houseKey } from './places.js';
 import { forgetHiddenImports } from './import-origin.js';
 import { tidyShares } from './shared-events.js';
 import { stripPhotos, dropDanglingPortraitSources } from './photo.js';
@@ -316,6 +318,89 @@ export function inferBirthUpperBounds(data: StromData): Map<string, number> {
         }
     }
     return bounds;
+}
+
+// ==================== HOUSES IN OUTPUTS (spec 030 §10, K1.4a) ====================
+
+/**
+ * People of the last ~100 years (spec 030 K1.4a): a house is today the
+ * address of another family, so outputs give such people their name and
+ * role only, and a house where they lived keeps its location and its name
+ * after the farm to itself.
+ */
+export const RECENT_YEARS = 100;
+
+/** The first year of "the last ~100 years" by today's year. */
+export function recentFrom(currentYear: number): number {
+    return currentYear - RECENT_YEARS;
+}
+
+/** The latest year a person's own records name: birth, death, their events, their couples' dates (null: none). */
+export function personLatestYear(data: Pick<StromData, 'partnerships'>, person: Person): number | null {
+    let latest: number | null = null;
+    const see = (date: string | undefined): void => {
+        const y = yearOf(date);
+        if (y !== null && (latest === null || y > latest)) latest = y;
+    };
+    see(person.birthDate);
+    see(person.deathDate);
+    for (const ev of person.events ?? []) see(ev.date);
+    for (const uid of person.partnerships) {
+        const u = data.partnerships[uid];
+        if (!u) continue;
+        see(u.startDate);
+        see(u.endDate);
+        for (const ev of u.events ?? []) see(ev.date);
+    }
+    return latest;
+}
+
+/**
+ * A person of the last ~100 years: living (as the outputs judge it), or a
+ * record of their own in those years. `bounds` from inferBirthUpperBounds.
+ */
+export function isRecentPerson(data: Pick<StromData, 'partnerships'>, person: Person, currentYear: number, bounds?: Map<string, number>): boolean {
+    if (person.isPlaceholder) return false;
+    if (isLivingPerson(person, currentYear, bounds)) return true;
+    const latest = personLatestYear(data, person);
+    return latest !== null && latest >= recentFrom(currentYear);
+}
+
+/**
+ * What was said about houses as an output under a privacy mode carries it:
+ * a house where people of the last ~100 years have a record (or a record of
+ * the house falls in those years) loses its location and its name after the
+ * farm; what joins houses and tells them apart stays. Works on `copy`, judged
+ * on `data` (the tree before protection).
+ */
+function protectHouses(copy: StromData, data: StromData, currentYear: number, bounds: Map<string, number>): void {
+    if (!copy.houses) return;
+    const from = recentFrom(currentYear);
+    const recent = new Map<PersonId, boolean>();
+    const isRecent = (id: PersonId): boolean => {
+        let r = recent.get(id);
+        if (r === undefined) {
+            const p = data.persons[id];
+            r = !!p && isRecentPerson(data, p, currentYear, bounds);
+            recent.set(id, r);
+        }
+        return r;
+    };
+    const protectedIds = new Set<string>();
+    for (const h of collectHouses(data)) {
+        if (h.facts.some(f => (f.year !== undefined && f.year >= from) || isRecent(f.personId))) {
+            protectedIds.add(h.id);
+            // A house joined into it is the same house: its own entry goes the same way.
+            for (const n of h.numbers) protectedIds.add(`${h.townKey}|${houseKey(n.house)}`);
+        }
+    }
+    for (const [id, entry] of Object.entries(copy.houses)) {
+        if (!protectedIds.has(id)) continue;
+        delete entry.location;
+        delete entry.name;
+        if (!Object.keys(entry).length) delete copy.houses[id];
+    }
+    if (!Object.keys(copy.houses).length) delete copy.houses;
 }
 
 /** First letter + '.', e.g. "Jan" -> "J.". Empty stays empty. */
@@ -650,6 +735,8 @@ export function applyLivingPrivacy(
     if (mode === 'full' && !gift) return copy;
     // The merge history keeps the details a merge changed, of the living too: never under a privacy mode.
     delete copy.merges;
+    // A house of people of the last ~100 years keeps its location and name to itself (spec 030 §10).
+    protectHouses(copy, data, currentYear, inferBirthUpperBounds(data));
 
     // The source catalog may hold sensitive references (e.g. registers of the
     // living), so it is never exported under a privacy mode. Drop every citation

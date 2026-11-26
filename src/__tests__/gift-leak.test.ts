@@ -236,6 +236,26 @@ describe('K6.4 leak test: every part of the package', () => {
         }
     });
 
+    it('a house where people of the last ~100 years lived keeps its location and its name to itself in every file (spec 030 §10)', async () => {
+        // Aldous (1931–2004) was born at the house: today it is another family's address.
+        const tree = (): StromData => {
+            const d = leakTree();
+            d.persons[id('aldous')].birthPlace = 'Bělokamen';
+            d.persons[id('aldous')].birthAddress = 'čp. 16';
+            d.houses = { 'belokamen|16': { name: 'U Hollowmerů', location: { lat: 49.123457, lng: 15.654321, how: 'manual' }, merged: ['belokamen|9'] } };
+            return d;
+        };
+        for (const privacy of [defaultGiftPrivacy(), { ...defaultGiftPrivacy(), others: 'full' as const }]) {
+            const p = await pack(privacy, tree());
+            for (const [name, text] of p.texts) {
+                expect(text.includes('U Hollowmerů'), `house name in ${name}`).toBe(false);
+                expect(text.includes('49.123457'), `house location in ${name}`).toBe(false);
+            }
+            // What joins the houses stays.
+            expect(p.app).toContain('belokamen|9');
+        }
+    });
+
     it('under initials, anonymous and minimal the other living\'s citation details (main citation, QUAY) are in no file', async () => {
         // Unique marks in the citation details of the brother, his partner and their couple.
         const cite = (key: string) => ({ main: `Citemark main ${key}`, quay: `Citemark quay ${key}` });
