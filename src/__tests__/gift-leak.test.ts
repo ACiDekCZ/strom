@@ -124,8 +124,8 @@ const env: GiftPackageEnv = {
 interface Package { texts: Map<string, string>; bytes: Map<string, Uint8Array>; app: string; gedcom: string }
 
 /** Every file of the package (the archive unpacked), as text and as bytes. */
-async function pack(privacy: GiftPrivacy): Promise<Package> {
-    const r = await buildGiftPackage({ data: leakTree(), settings: settings(privacy), treeName: 'Fairbrook', env });
+async function pack(privacy: GiftPrivacy, data: StromData = leakTree()): Promise<Package> {
+    const r = await buildGiftPackage({ data, settings: settings(privacy), treeName: 'Fairbrook', env });
     const entries = readZipEntries(await blobBytes(r.blob));
     const texts = new Map<string, string>();
     const bytes = new Map<string, Uint8Array>();
@@ -233,6 +233,32 @@ describe('K6.4 leak test: every part of the package', () => {
         for (const [name, text] of p.texts) {
             expect(text.includes('Brannoch'), `name in ${name}`).toBe(false);
             expect(text.includes(PNG_OTHER_B64), `photo in ${name}`).toBe(false);
+        }
+    });
+
+    it('under initials, anonymous and minimal the other living\'s citation details (main citation, QUAY) are in no file', async () => {
+        // Unique marks in the citation details of the brother, his partner and their couple.
+        const cite = (key: string) => ({ main: `Citemark main ${key}`, quay: `Citemark quay ${key}` });
+        const tree = (): StromData => {
+            const d = leakTree();
+            for (const key of ['C', 'I']) {
+                const person = d.persons[id(key)];
+                person.citationMain = { birthSourceIds: cite(key).main };
+                person.citationQuay = { sourceIds: { [cite(key).quay]: 2 } };
+            }
+            const union = d.partnerships['leak_u_CI' as PartnershipId];
+            union.citationMain = { sourceIds: cite('CI').main };
+            union.citationQuay = { divorceSourceIds: { [cite('CI').quay]: 1 } };
+            return d;
+        };
+        for (const others of ['initials', 'anonymous', 'minimal'] as const) {
+            const p = await pack({ ...defaultGiftPrivacy(), others }, tree());
+            for (const [name, text] of p.texts) {
+                for (const key of ['C', 'I', 'CI']) {
+                    expect(text.includes(cite(key).main), `${others}: main citation of ${key} in ${name}`).toBe(false);
+                    expect(text.includes(cite(key).quay), `${others}: citation QUAY of ${key} in ${name}`).toBe(false);
+                }
+            }
         }
     });
 });

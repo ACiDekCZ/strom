@@ -351,6 +351,9 @@ function stripDetails(person: Person): void {
     delete person.sourceIds;
     delete person.birthSourceIds;
     delete person.deathSourceIds;
+    // …with their details: a citation's own QUAY and the main citation of a fact.
+    delete person.citationQuay;
+    delete person.citationMain;
     // Attachments (scans, letters) are private documents — always dropped (by the caller, StromData.media).
     // Name variants carry the full real name (e.g. a GEDCOM second NAME line
     // under "Living person"); the open question is free text about the person;
@@ -400,6 +403,8 @@ function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): v
     delete partnership.story;
     delete partnership.sourceIds;
     delete partnership.divorceSourceIds;
+    delete partnership.citationQuay;
+    delete partnership.citationMain;
     // The banns, the household at a census: dates, places, witnesses.
     delete partnership.events;
     // The couple's photo shows a living person (spec 107).
@@ -656,13 +661,17 @@ export function applyLivingPrivacy(
             delete person.sourceIds;
             delete person.birthSourceIds;
             delete person.deathSourceIds;
-            for (const ev of person.events ?? []) delete ev.sourceIds;
+            delete person.citationQuay;
+            delete person.citationMain;
+            for (const ev of person.events ?? []) { delete ev.sourceIds; delete ev.citationQuay; delete ev.citationMain; }
             rewriteStorySources(person.story, () => []);
         }
         for (const partnership of Object.values(copy.partnerships)) {
             delete partnership.sourceIds;
             delete partnership.divorceSourceIds;
-            for (const ev of partnership.events ?? []) delete ev.sourceIds;
+            delete partnership.citationQuay;
+            delete partnership.citationMain;
+            for (const ev of partnership.events ?? []) { delete ev.sourceIds; delete ev.citationQuay; delete ev.citationMain; }
             rewriteStorySources(partnership.story, () => []);
         }
     }
