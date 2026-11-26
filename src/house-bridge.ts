@@ -85,7 +85,8 @@ export interface HouseListRow {
     place: HousePlace;
     house: string;
     name?: string;
-    numbers?: string[];
+    /** The house's numbers over time the research found (a renumbering told apart by a person left out). */
+    numbers?: HouseRowNumber[];
     state: HouseState;
     at?: string;
     task?: string;
@@ -94,6 +95,11 @@ export interface HouseListRow {
     persons: number;
     years?: { from: number; to: number };
     summary: HouseSummary;
+}
+
+/** A number of a row of `GET /houses`: `{number, from?, to?, certainty}` (listRow of the research). */
+export interface HouseRowNumber extends ResearchHouseNumber {
+    certainty?: HouseCertainty;
 }
 
 export interface HouseNumberItem extends ResearchHouseNumber {
@@ -466,6 +472,18 @@ function town(v: unknown): HouseTown | undefined {
     };
 }
 
+/** A number of a list row: an object as the research sends it (a bare text, as an older bridge did, is its number). */
+function rowNumber(v: unknown): HouseRowNumber | null {
+    if (typeof v === 'string') {
+        const number = text(v, 100);
+        return number ? { number } : null;
+    }
+    const r = asRecord(v);
+    const number = text(r?.number, 100);
+    if (!r || !number) return null;
+    return { number, ...opt('from', date(r.from)), ...opt('to', date(r.to)), ...opt('certainty', oneOf(r.certainty, CERTAINTIES)) };
+}
+
 /** A row of `GET /houses`, checked; null: not a house the app can show. */
 export function sanitizeHouseRow(value: unknown): HouseListRow | null {
     const r = asRecord(value);
@@ -476,7 +494,7 @@ export function sanitizeHouseRow(value: unknown): HouseListRow | null {
     const state = oneOf(r?.state, STATES);
     if (!r || !key || !p || !house || !state) return null;
     const s = asRecord(r.summary) ?? {};
-    const numbers = Array.isArray(r.numbers) ? r.numbers.map(n => text(n, 100)).filter((n): n is string => !!n) : undefined;
+    const numbers = Array.isArray(r.numbers) ? r.numbers.slice(0, MAX_ITEMS).map(rowNumber).filter((n): n is HouseRowNumber => !!n) : undefined;
     return {
         ...opt('id', id), key, place: p, house, ...opt('name', text(r.name, 200)), ...opt('numbers', numbers?.length ? numbers : undefined), state,
         ...opt('at', isoDay(r.at)), ...opt('task', idOf(r.task)), ...opt('work', oneOf(r.work, WORKS)), ...opt('question', question(r.question)),

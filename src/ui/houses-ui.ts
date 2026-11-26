@@ -8,14 +8,14 @@
  *
  * The research's state of a house and its actions come from the hooks
  * `renderHouseStateSlot`, `houseStateSlotClick`, `houseMenuResearchItems`
- * and `houseResearchNumbers` (empty here; spec 030 §2 fills them).
+ * (spec 030 §2 fills them); `houseResearchNumbers` reads the research's row.
  */
 
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
 import type { HouseId, Person, PersonId, StromData } from '../types.js';
 import {
-    collectHouses, houseFacts, houseInteresting, withResearchNumbers,
+    collectHouses, houseFacts, houseInteresting, houseTownKey, withResearchNumbers,
     type HouseFact, type HouseNumber, type ResearchHouseNumber, type TreeHouse,
 } from '../houses.js';
 import {
@@ -106,9 +106,10 @@ export const housesMethods = uiModule({
 
     // The research's rows of a house's ⋯ menu (above the line), houseMenuResearchItems: src/ui/house-material-ui.ts.
 
-    /** The numbers the research knows of a house (its own included). */
-    houseResearchNumbers(_id: HouseId): HouseResearchNumber[] {
-        return [];
+    /** The numbers the research knows of a house (its own included): its row of `GET /houses`. */
+    houseResearchNumbers(id: HouseId, house?: Pick<TreeHouse, 'id' | 'townKey' | 'numbers'>): HouseResearchNumber[] {
+        const h = house ?? state?.byId.get(id) ?? { id, townKey: houseTownKey(id), numbers: [] };
+        return this.houseResearchRow(h)?.numbers ?? [];
     },
 
     // ==================== WINDOW ====================
@@ -194,7 +195,7 @@ export const housesMethods = uiModule({
     loadHouses(data: StromData): void {
         if (!state) return;
         const houses = collectHouses(data).map(h => {
-            const research = this.houseResearchNumbers(h.id);
+            const research = this.houseResearchNumbers(h.id, h);
             return research.length ? { ...h, numbers: withResearchNumbers(h, research, data.houses?.[h.id]) } : h;
         });
         state.houses = houses;

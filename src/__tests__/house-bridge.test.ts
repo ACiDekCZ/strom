@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     batchDoneHouse, clearHouseCaches, confirmHouse, fetchHouse, fetchHouses, houseCache, houseFeature, houseMaterialBody, houseStatus,
-    houseWriteReply, sanitizeHouseResearch, sendHouseMaterial,
+    houseWriteReply, sanitizeHouseResearch, sanitizeHouseRow, sendHouseMaterial,
 } from '../house-bridge.js';
 import { sanitizeLiveHouses, sanitizeLiveStatus } from '../research-link.js';
 
@@ -110,6 +110,22 @@ describe('reads', () => {
         const fresh = await fetchHouses(BASE, { rev: 'aaaa1111' });
         expect(fresh.ok && fresh.cached).toBe(false);
         expect(calls).toHaveLength(2);
+    });
+
+    it('reads a row\'s numbers as the research sends them: objects with their years and certainty', () => {
+        const row = sanitizeHouseRow({
+            ...MILL_ROW,
+            numbers: [
+                { number: '9', from: '1770', to: '1838', certainty: 'probable' },
+                { number: '16', from: '1838', certainty: 'high' },
+                { number: '' }, { from: '1900' }, 'čp. 4',
+            ],
+        });
+        expect(row?.numbers).toEqual([
+            { number: '9', from: '1770', to: '1838', certainty: 'probable' },
+            { number: '16', from: '1838', certainty: 'high' },
+            { number: 'čp. 4' },
+        ]);
     });
 
     it('reads one house whole: ids, a proposal, memory material, sensitive items of its timeline only, no recent', async () => {
