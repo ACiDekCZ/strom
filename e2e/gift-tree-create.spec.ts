@@ -240,6 +240,10 @@ test('step 4: the parts with their sizes, photos, the ZIP as a tree; Book settin
     await expect(zipRows).toHaveCount(count + 2);
     await expect(zipRows.filter({ hasText: 'Ancestor fan – Colour.svg' })).toHaveCount(1);
     await expect(zipRows.filter({ hasText: 'Ancestor fan – Antique.png' })).toHaveCount(1);
+    // Every fan file has its own size, not only the last one (093 U6 N2).
+    const fanSizes = await zipRows.filter({ hasText: 'Ancestor fan' }).locator('.gift-zip-s').allTextContents();
+    expect(fanSizes).toHaveLength(4);
+    for (const s of fanSizes) expect(s.trim()).not.toBe('');
     await expect(dialog.locator('[data-gk="fan-style-antique"]')).toBeEnabled();
     // As in the tree: one fan, the look's link back.
     await dialog.locator('[data-gk="fan-mode-tree"]').click();

@@ -1309,11 +1309,12 @@ export const giftTreeMethods = uiModule({
         row(2, names.app, { bytes: parts.app, off: !p.app });
         row(2, names.pages, { folder: true, bytes: parts.pages, off: !p.pages });
         row(2, names.book, { bytes: parts.book, off: !p.book });
-        names.fans.forEach((f, i) => {
-            const last = i === names.fans.length - 1;
-            row(2, `${f.stem}.svg`, { off: !p.fan });
-            row(2, `${f.stem}.png`, { off: !p.fan, ...(last ? { bytes: parts.fan } : {}) });
-        });
+        // Each variant's files with their own sizes (the part's sum is the fan's row in the list of parts).
+        for (const f of names.fans) {
+            const file = est.now.fanFiles[f.personId];
+            row(2, `${f.stem}.svg`, { off: !p.fan, ...(file ? { bytes: file.svg } : {}) });
+            row(2, `${f.stem}.png`, { off: !p.fan, ...(file ? { bytes: file.png } : {}) });
+        }
         const slash = names.gedcom.indexOf('/');
         row(2, names.gedcom.slice(0, slash), { folder: true, off: !p.gedcom });
         row(3, names.gedcom.slice(slash + 1), { bytes: parts.gedcom, off: !p.gedcom });

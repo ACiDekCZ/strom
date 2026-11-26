@@ -224,6 +224,19 @@ describe('the fan\'s variants (K5.6)', () => {
         expect(half).not.toBe(one);
         expect(estimateGiftSize(data, { ...base, fan: fan(['antique'], true) }, { treeFanShape: 'two' }).parts.fan).toBe(one);
     });
+
+    it('the estimate gives each fan file its own size, the same in every variant, summing to the fan part (093 U6 N2)', () => {
+        const data = sensitiveTree();
+        const settings = { ...settingsFor(['eva', 'jonas'], 'en'), fan: fan(['color', 'antique', 'mono']) };
+        const est = estimateGiftSize(data, settings);
+        const files = settings.cut.recipients.map(id => est.fanFiles[id]);
+        for (const f of files) {
+            expect(f?.svg).toBeGreaterThan(0);
+            expect(f?.png).toBeGreaterThan(0);
+        }
+        expect(files.reduce((n, f) => n + 3 * (f!.svg + f!.png), 0)).toBe(est.parts.fan);
+        expect(estimateGiftSize(data, { ...settings, parts: { ...settings.parts, fan: false } }).fanFiles).toEqual({});
+    });
 });
 
 describe('one package', () => {

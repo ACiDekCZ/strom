@@ -747,6 +747,11 @@ export interface GiftSizeEstimate {
     withoutPhotos: number;
     /** The same package without the app. */
     withoutApp: number;
+    /**
+     * One fan file's bytes by recipient (the same for each of its variants):
+     * the SVG and the PNG; parts.fan is their sum over every variant.
+     */
+    fanFiles: Partial<Record<PersonId, { svg: number; png: number }>>;
     /** The images the package would carry with photos (§5: "148 fotek · +22 MB"). */
     photos: { count: number; bytes: number };
     persons: number;
@@ -775,8 +780,8 @@ export function estimateGiftSize(
     const text = (n: number): number => Math.round(n * GIFT_TEXT_RATIO);
     const p = settings.parts;
 
-    let fanText = 0;
-    let fanPng = 0;
+    let fanBytes = 0;
+    const fanFiles: Partial<Record<PersonId, { svg: number; png: number }>> = {};
     if (p.fan) {
         // Each recipient's poster in the shape the package draws, once per variant (K5.6).
         const fan = settings.fan ?? defaultGiftFan();
@@ -788,9 +793,13 @@ export function estimateGiftSize(
             const model = buildFanModel(data, id, { generations: fanGenerations(data, id), shape, descGenerations: auto.descGenerations });
             if (!model) continue;
             const sectors = model.sectors.filter(s => s.person).length + model.desc.filter(s => s.person).length;
-            fanText += variants * (FAN_SVG_BYTES + sectors * FAN_SECTOR_BYTES);
             const geom = fanPosterGeometry(model, {});
-            fanPng += variants * Math.round(geom.width * geom.height * 4 * FAN_PNG_BYTES_PER_PX);
+            const file = {
+                svg: text(FAN_SVG_BYTES + sectors * FAN_SECTOR_BYTES),
+                png: Math.round(geom.width * geom.height * 4 * FAN_PNG_BYTES_PER_PX),
+            };
+            fanFiles[id] = file;
+            fanBytes += variants * (file.svg + file.png);
         }
     }
 
@@ -799,7 +808,7 @@ export function estimateGiftSize(
         app: p.app ? text((opts.appProgramBytes ?? GIFT_APP_PROGRAM_BYTES) + json) : 0,
         pages: p.pages ? text(PAGES_SHELL_BYTES + persons * PAGES_PERSON_BYTES + families * PAGES_FAMILY_BYTES) : 0,
         book: p.book ? text(BOOK_SHELL_BYTES + persons * BOOK_PERSON_BYTES) : 0,
-        fan: p.fan ? text(fanText) + fanPng : 0,
+        fan: p.fan ? fanBytes : 0,
         gedcom: p.gedcom ? text(GEDCOM_HEAD_BYTES + persons * GEDCOM_PERSON_BYTES + families * GEDCOM_FAMILY_BYTES) : 0,
     };
     const withImages = (k: 'app' | 'pages' | 'book' | 'gedcom'): number => (p[k] ? imageBytes : 0);
@@ -816,7 +825,7 @@ export function estimateGiftSize(
     };
     const total = sum(parts);
     return {
-        parts, total, withoutPhotos, withoutApp: total - parts.app,
+        parts, total, withoutPhotos, withoutApp: total - parts.app, fanFiles,
         photos: { count: imageCount, bytes: imagesIn }, persons,
     };
 }
