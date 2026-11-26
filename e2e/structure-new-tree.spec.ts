@@ -57,7 +57,7 @@ test('Rod: the chosen line says its real count; Create opens the new tree with a
     // The count is the line's people (selectionPersonIds), the same number its row shows.
     const n = Number((await row.locator('.sp-rodpick-c').textContent())!.trim());
     expect(n).toBeGreaterThanOrEqual(4);
-    await expect(dialog.locator('.structure-who-chosen')).toHaveText(new RegExp(`^Selected: .*Jesensk.* line · ${n} people$`));
+    await expect(dialog.locator('.structure-who-chosen b')).toHaveText(new RegExp(`^.*Jesensk.* line · ${n} people$`));
     await expect(go).toBeEnabled();
 
     await go.click();
@@ -85,6 +85,33 @@ test('Rod: the chosen line says its real count; Create opens the new tree with a
     await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Jesenští');
     expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { name: string }) => t.name).sort()))
         .toEqual(['Jesenští', 'Jesenští — výřez']);
+});
+
+/**
+ * The new tree takes the other parents of chosen children with them (extractSubtree), so the summary
+ * counts more people than were chosen: the step says so under "Selected: …", as Join does, and the
+ * summary's count is that total. When nobody comes along, no such sentence.
+ */
+test('Selected: says the partners the new tree takes with them, and the summary counts them', async ({ page }) => {
+    await openApp(page);
+    await seedTree(page, JESENSTI, 'Jesenští', 'vojtech');
+    const dialog = await whoStep(page);
+    const chosen = dialog.locator('.structure-who-chosen');
+    const go = dialog.locator('#structure-footer [data-action="continue"]');
+
+    // Vojtěch's ancestors: Vojtěch alone, nobody comes along.
+    await tab(dialog, 'ancestors').click();
+    await expect(chosen.locator('b')).toHaveText(/ · 1 person$/);
+    await expect(chosen.locator('.structure-who-partners')).toHaveCount(0);
+
+    // The line is seven people; Marie and Hana (the other parents of chosen children) come along.
+    await tab(dialog, 'rod').click();
+    await dialog.locator('li.sp-rodpick-rod', { hasText: 'Jesensk' }).first().locator('button').click();
+    await expect(chosen.locator('b')).toHaveText(/ line · 7 people$/);
+    await expect(chosen.locator('.structure-who-partners')).toHaveText('The new tree gets 2 partners too, the other parents of chosen children – 9 people in all.');
+    await go.click();
+    await expect(dialog).toHaveAttribute('data-step', 'summary');
+    await expect(dialog.locator('.structure-stat b').first()).toHaveText('9');
 });
 
 /**

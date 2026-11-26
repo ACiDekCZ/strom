@@ -7278,6 +7278,10 @@ const stringsEN = {
         joinPartners: (n: number, people: string) => n === 1
             ? `With them comes 1 partner too, the other parent of a chosen child – ${people} in all.`
             : `With them come ${n} partners too, the other parents of chosen children – ${people} in all.`,
+        /** The same under "Selected: …" of New tree from a selection: the new tree takes those partners too. */
+        newPartners: (n: number, people: string) => n === 1
+            ? `The new tree gets 1 partner too, the other parent of a chosen child – ${people} in all.`
+            : `The new tree gets ${n} partners too, the other parents of chosen children – ${people} in all.`,
 
         // ---- New tree from a selection: who to take (§3), the summary (§4) ----
         selectTitle: 'New tree from a selection',
@@ -20403,6 +20407,10 @@ const stringsCZ: StringsType = {
             `S nimi přejde i 1 partner, druhý rodič vybraného dítěte – celkem ${people}.`,
             `S nimi přejdou i ${n} partneři, druzí rodiče vybraných dětí – celkem ${people}.`,
             `S nimi přejde i ${n} partnerů, druhých rodičů vybraných dětí – celkem ${people}.`),
+        newPartners: (n: number, people: string) => plural('cs', n,
+            `Do nového stromu půjde i 1 partner, druhý rodič vybraného dítěte – celkem ${people}.`,
+            `Do nového stromu půjdou i ${n} partneři, druzí rodiče vybraných dětí – celkem ${people}.`,
+            `Do nového stromu půjde i ${n} partnerů, druhých rodičů vybraných dětí – celkem ${people}.`),
 
         // ---- New tree from a selection: who to take (§3), the summary (§4) ----
         selectTitle: 'Nový strom z výběru',
@@ -33289,6 +33297,9 @@ const stringsDE: StringsType = {
         joinPartners: (n: number, people: string) => n === 1
             ? `Mit ihnen kommt auch 1 Partner mit, der andere Elternteil eines gewählten Kindes – insgesamt ${people}.`
             : `Mit ihnen kommen auch ${n} Partner mit, die anderen Elternteile gewählter Kinder – insgesamt ${people}.`,
+        newPartners: (n: number, people: string) => n === 1
+            ? `In den neuen Stammbaum kommt auch 1 Partner, der andere Elternteil eines gewählten Kindes – insgesamt ${people}.`
+            : `In den neuen Stammbaum kommen auch ${n} Partner, die anderen Elternteile gewählter Kinder – insgesamt ${people}.`,
 
         // ---- New tree from a selection: who to take (§3), the summary (§4) ----
         selectTitle: 'Neuer Stammbaum aus einer Auswahl',

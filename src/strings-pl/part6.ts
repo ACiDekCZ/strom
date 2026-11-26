@@ -813,6 +813,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         joinPartners: (n: number, people: string) => n === 1
             ? `Razem z nimi przejdzie też partner – drugi rodzic wybranego dziecka, łącznie ${people}.`
             : `Razem z nimi przejdą też ich partnerzy (${n}) – drudzy rodzice wybranych dzieci, łącznie ${people}.`,
+        newPartners: (n: number, people: string) => n === 1
+            ? `Do nowego drzewa trafi też partner – drugi rodzic wybranego dziecka, łącznie ${people}.`
+            : `Do nowego drzewa trafią też ich partnerzy (${n}) – drudzy rodzice wybranych dzieci, łącznie ${people}.`,
 
         // ---- New tree from a selection: who to take (§3), the summary (§4) ----
         selectTitle: 'Nowe drzewo z wyboru',

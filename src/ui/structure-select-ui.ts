@@ -301,9 +301,11 @@ export const structureSelectMethods = uiModule({
             const result = current();
             const n = result?.ids.size ?? 0;
             chosenInto(chosen, result && n > 0 ? `${result.what} · ${strings.treeManager.persons(n)}` : null);
-            // Join: the guide takes the subtree, the partners glued to chosen children with it (§6.1) — said here, so its count is no surprise.
-            const glue = opts.mode === 'join' && result && n > 0 ? subtreeGlueCount(DataManager.getData(), result.ids) : 0;
-            if (glue > 0) chosen.appendChild(el('span', 'structure-who-partners', t.joinPartners(glue, strings.treeManager.persons(n + glue))));
+            // The partners glued to chosen children come along (the guide's subtree §6.1, the new tree's extractSubtree):
+            // said here, so the count in the guide or the summary is no surprise.
+            const glue = result && n > 0 ? subtreeGlueCount(DataManager.getData(), result.ids) : 0;
+            const partners = opts.mode === 'join' ? t.joinPartners : t.newPartners;
+            if (glue > 0) chosen.appendChild(el('span', 'structure-who-partners', partners(glue, strings.treeManager.persons(n + glue))));
             go.disabled = !result || n === 0;
         };
 
