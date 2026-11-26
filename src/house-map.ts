@@ -19,7 +19,7 @@ import type { LiveHouseLayer } from './research-link.js';
 import type { TreeHouse } from './houses.js';
 import { getStringsForLang, type Language } from './strings.js';
 import { safeHttpUrl } from './validation.js';
-import { TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL, TILE_SIZE, type TileRef } from './map.js';
+import { MAX_ZOOM, TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL, TILE_SIZE, type TileRef } from './map.js';
 import { sjtskBox } from './sjtsk.js';
 
 /** The zoom a house is shown at (a street: the house and its neighbours). */
@@ -27,7 +27,8 @@ export const HOUSE_MAP_ZOOM = 17;
 /** The zoom of a town when the house has no point of its own. */
 export const HOUSE_MAP_TOWN_ZOOM = 14;
 export const HOUSE_MAP_MIN_ZOOM = 12;
-export const HOUSE_MAP_MAX_ZOOM = 19;
+/** The closest zoom: the map's tiles end there (map.ts MAX_ZOOM). */
+export const HOUSE_MAP_MAX_ZOOM = MAX_ZOOM;
 
 export type HouseMapViewKind = 'today' | 'tiles' | 'image';
 

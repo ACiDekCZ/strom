@@ -11,8 +11,9 @@ import type { LiveHouseLayer } from '../research-link.js';
 import type { TreeHouse } from '../houses.js';
 import {
     houseMapAttribution, houseMapHtml, houseMapViews, housePointLabel, housePositionText, houseLocationUnsure,
-    houseImageUrl, tileBox3857, wmsGetMapUrl, wmsTileUrl, type HouseMapInput,
+    houseImageUrl, tileBox3857, wmsGetMapUrl, wmsTileUrl, type HouseMapInput, HOUSE_MAP_MAX_ZOOM,
 } from '../house-map.js';
+import { MAX_ZOOM, tilesForViewport } from '../map.js';
 import { wgs84ToSjtsk } from '../sjtsk.js';
 
 const ORTHO: LiveHouseLayer = {
@@ -169,5 +170,14 @@ describe('house map — the section', () => {
         expect(housePointLabel('čp. 16')).toBe('16');
         expect(housePointLabel('č. p. 7')).toBe('7');
         expect(housePointLabel('Kopřivná 12')).toBe('Kopřivná 12');
+    });
+});
+
+describe('house map zoom', () => {
+    it('zooms in no closer than the map’s tiles go', () => {
+        expect(HOUSE_MAP_MAX_ZOOM).toBe(18);
+        expect(HOUSE_MAP_MAX_ZOOM).toBe(MAX_ZOOM);
+        // Tiles exist at the closest zoom of the house map.
+        expect(tilesForViewport({ lat: 49.5, lon: 15.2 }, HOUSE_MAP_MAX_ZOOM, 256, 256).length).toBeGreaterThan(0);
     });
 });
