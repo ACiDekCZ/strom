@@ -80,7 +80,7 @@ test.describe('Family houses on the map', () => {
         await expect(chip(page)).toHaveText(/Family houses/);
         await expect(chip(page)).toHaveAttribute('aria-pressed', 'true');
         await expect(pill(page)).toHaveText('16');
-        await expect(pill(page)).toHaveAttribute('aria-label', 'House 16 · Bělokamen čp. 16');
+        await expect(pill(page)).toHaveAttribute('aria-label', 'House 16 · Bělokamen čp.\u00a016');
         await expect(townTag(page)).toHaveText(/2$/);
         await chip(page).click();
         await expect(chip(page)).toHaveAttribute('aria-pressed', 'false');

@@ -254,7 +254,8 @@ test.describe('Houses: the Table, the lists, the Statistics and the search (§15
         // Sorted by town, then by number (7 before 16 before 40); the people without a house last.
         await head(page, 'house').locator('.tv-cell-text').click();
         await expect(head(page, 'house')).toHaveAttribute('aria-sort', 'ascending');
-        const sorted = await houseColumn(page);
+        // The house number is kept to its marker by a non-breaking space (houseLabel).
+        const sorted = (await houseColumn(page)).map(t => t.replace(/\u00a0/g, ' '));
         const at = (t: string) => sorted.indexOf(t);
         expect(at('Bělokamen čp. 7')).toBeGreaterThanOrEqual(0);
         expect(at('Bělokamen čp. 7')).toBeLessThan(at('Bělokamen čp. 16'));
@@ -374,7 +375,7 @@ test.describe('Houses: the Table, the lists, the Statistics and the search (§15
         await expect(people).toHaveCount(3);
         const svatobor = people.filter({ hasText: 'Svatobor' });
         await expect(svatobor.locator('.person-picker-houseact')).toHaveText('House ›');
-        await expect(svatobor.locator('.person-picker-houseact')).toHaveAttribute('aria-label', 'House page Bělokamen čp. 16');
+        await expect(svatobor.locator('.person-picker-houseact')).toHaveAttribute('aria-label', 'House page Bělokamen čp.\u00a016');
 
         // A house's row opens its page; the field clears.
         await house.click();

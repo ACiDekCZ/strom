@@ -639,7 +639,9 @@ for (const locale of ['de-DE', 'pl-PL']) {
                     // Its placeholder shows whole, in full or its short form ("Suchen…"): de cut "Person
                     // suchen…" to "Person suche" (verification of 3.30.0). A computer's width has the full one.
                     expect(s.phShort, `${at}: the placeholder (${s.ph}) fits the field`).toBeLessThanOrEqual(0);
-                    if (width === 1440) expect(s.ph, `${at}: the full placeholder`).toBe(FULL_PLACEHOLDER[locale]);
+                    // In the wider font beside the Sample tag and its longer name ("Beispiel: Familie …", spec 143)
+                    // the full one does not fit even with the name capped and ＋ alone: only its short form, whole.
+                    if (width === 1440 && !what.includes('wider font')) expect(s.ph, `${at}: the full placeholder`).toBe(FULL_PLACEHOLDER[locale]);
                 }
             }
         }
