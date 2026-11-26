@@ -95,6 +95,147 @@ test.describe('the showcase with research', () => {
         expect(writes).toEqual([]);
     });
 
+    test('no write leaves the page; a write to the snapshot is refused (403)', async ({ page }) => {
+        const writes = writesOut(page);
+        await openShowcase(page);
+        // An answer to a waiting task: greyed in the task's row.
+        await page.evaluate(() => window.Strom.UI.openResearchOverview({ showWaiting: true }));
+        const overview = page.locator('#research-overview');
+        await overview.getByText('Oddavky Václava Horáka a Kateřiny Vlkové').first().click();
+        const answer = overview.locator('.research-overview__waiting-action', { hasText: 'Answer' });
+        await expectOff(page, answer, 'none', 'Answer');
+        await clickSaysWhy(page, answer, 'In full research: Answer');
+        // Straight at the snapshot: every write refused, a read answered.
+        const answers = await page.evaluate(async (id) => {
+            const base = `${location.origin}/__showcase/${id}`;
+            const ask = async (path: string, method: string) => {
+                const res = await fetch(`${base}${path}`, { method, ...(method === 'GET' ? {} : { body: '{}' }) });
+                const body = await res.json().catch(() => null) as { error?: string } | null;
+                return `${method} ${path} ${res.status}${body?.error ? ` ${body.error}` : ''}`;
+            };
+            return [
+                await ask('/sync', 'POST'),
+                await ask('/waiting/T0006', 'POST'),
+                await ask('/queue/order', 'PUT'),
+                await ask('/material/M0001', 'DELETE'),
+                await ask('/status', 'GET'),
+            ];
+        }, RESEARCH);
+        expect(answers).toEqual([
+            'POST /sync 403 showcase.read-only',
+            'POST /waiting/T0006 403 showcase.read-only',
+            'PUT /queue/order 403 showcase.read-only',
+            'DELETE /material/M0001 403 showcase.read-only',
+            'GET /status 200',
+        ]);
+        expect(writes).toEqual([]);
+    });
+
+    test('the overview shows the lines, the queue and the history of the snapshot; its actions greyed', async ({ page }) => {
+        await openShowcase(page);
+        await page.evaluate(() => window.Strom.UI.openResearchOverview({}));
+        const overview = page.locator('#research-overview');
+        await expect(overview).toBeVisible();
+        // The lines of the research.
+        await expect(overview).toContainText('Předci Anny Horákové');
+        await expect(overview).toContainText('Odkud pocházela Kateřina Vlková?');
+        // The queue and the history.
+        await expect(overview).toContainText('Sčítání lidu 1880 v Dolní Lhotě');
+        await expect(overview).toContainText('T0031 Křest Kateřiny Vlkové kolem 1870 · Předci Anny Horákové');
+        // The row of the showcase: view only, strom demo, as of the snapshot.
+        const note = overview.locator('.sample-note');
+        await expect(note).toContainText('View only in the sample – full research:');
+        await expect(note.locator('code')).toHaveText('strom demo');
+        await expect(note.locator('.sample-howto')).toHaveAttribute('href', 'https://stromapp.info/research/#demo');
+        await expect(overview).toContainText('Sample as of 11/1/2026');
+        await expectOff(page, overview.locator('.research-overview__work'), 'agent', 'Continue the research');
+        await expectOff(page, overview.locator('.research-directions__new'), 'terminal', 'New direction');
+        await expectOff(page, overview.locator('.research-overview__queue-order'), 'none', 'Change the queue\'s order');
+        await expectOff(page, overview.locator('.research-overview__queue-now'), 'agent', 'Process now');
+        await clickSaysWhy(page, overview.locator('.research-overview__work'), 'In full research: Continue the research · AI + terminal');
+        await clickSaysWhy(page, overview.locator('.research-directions__new'), 'In full research: New direction · terminal');
+    });
+
+    test('What the research knows: the conflict and the hypothesis greyed, a source with its transcript and scan', async ({ page }) => {
+        await openShowcase(page);
+        const josef = await personId(page, 'Josef');
+        await page.evaluate((id) => window.Strom.UI.showPersonResearchDialog(id), josef);
+        const dialog = page.locator('.person-research-modal');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('.person-research-body > .sample-note').first()).toContainText('strom demo');
+        const conflict = dialog.locator('.person-research-conflict');
+        await expect(conflict).toContainText('Rok narození Josefa Horáka');
+        await expectOff(page, conflict.locator('[data-do="decide"]'), 'terminal', 'Decide in the research');
+        await expectOff(page, dialog.locator('.person-research-agent'), 'agent', 'Leave it to the agent');
+        await expectOff(page, dialog.locator('.person-research-hypo-link'), 'terminal', 'Decide in the research');
+        await clickSaysWhy(page, dialog.locator('.person-research-agent'), 'In full research: Leave it to the agent · AI + terminal');
+        // A source of the conflict: its transcript and its scan, read from the tree.
+        await dialog.locator('.person-research-source', { hasText: 'Křest Josefa Horáka 1898' }).click();
+        const source = page.locator('#source-viewer-modal');
+        await expect(source).toBeVisible();
+        await expect(source).toContainText('Josephus, natus 3. Martii 1898');
+        await expect(source).toContainText('Transcription read by the research');
+        await expect(source.getByRole('img', { name: 'Excerpt: Křest Josefa Horáka 1898' })).toBeVisible();
+    });
+
+    test('the conflict panel of an edit: both choices greyed, a click says why', async ({ page }) => {
+        await openShowcase(page);
+        const marie = await personId(page, 'Marie');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'edit'), marie);
+        await page.locator('#person-modal .pm-conflict-tag[data-field="input-birthdate"]').click();
+        const panel = page.locator('#prc-panel');
+        await expect(panel).toBeVisible();
+        for (const side of ['user', 'research']) {
+            const choice = panel.locator(`.prc-panel-row[data-side="${side}"] .prc-panel-choice`);
+            await expect(choice).toHaveAttribute('data-showcase-off', 'terminal');
+            await expect(choice).toHaveAttribute('aria-disabled', 'true');
+        }
+        const take = panel.locator('.prc-panel-row[data-side="research"] .prc-panel-choice');
+        await take.click({ force: true });
+        await expect(why(page)).toBeVisible();
+        await expect(why(page).locator('.what')).toContainText('· terminal');
+        expect(await launched(page)).toEqual([]);
+    });
+
+    test('the Research menu and the person menu: the agent and sending greyed', async ({ page }) => {
+        await openShowcase(page);
+        await openResearchMenu(page);
+        await expectOff(page, page.locator('#research-item-chat'), 'agent', 'Continue with the agent');
+        await clickSaysWhy(page, page.locator('#research-item-chat'), 'In full research: Continue with the agent · AI + terminal');
+        await page.keyboard.press('Escape');
+        await card(page, 'Josef').click();
+        const sub = await openPersonSubmenu(page, 'research');
+        await expect(sub.locator('[data-action="research-knows"]')).toBeVisible();
+        const send = sub.locator('[data-showcase-label="Send to research"]');
+        const ask = sub.locator('[data-showcase-label="Ask the agent"]');
+        await expectOff(page, send, 'terminal', 'Send to research');
+        await expectOff(page, ask, 'agent', 'Ask the agent');
+        await ask.click({ force: true });
+        await expect(why(page)).toBeVisible();
+        await expect(why(page).locator('.what')).toHaveText('In full research: Ask the agent · AI + terminal');
+        expect(await launched(page)).toEqual([]);
+    });
+
+    test('the bubble: hover shows it, the keyboard\'s Enter shows it and runs nothing, Escape closes', async ({ page }) => {
+        await openShowcase(page);
+        await page.evaluate(() => window.Strom.UI.openResearchOverview({}));
+        const work = page.locator('#research-overview .research-overview__work');
+        await work.hover();
+        await expect(why(page)).toBeVisible();
+        await expect(why(page).locator('.what')).toHaveText('In full research: Continue the research · AI + terminal');
+        await page.mouse.move(5, 5);
+        await expect(why(page)).toBeHidden();
+        // The keyboard: the focus on it says why, Enter runs nothing.
+        await page.keyboard.press('Tab');
+        await work.focus();
+        await expect(why(page)).toBeVisible();
+        await page.keyboard.press('Enter');
+        await expect(why(page)).toBeVisible();
+        expect(await launched(page)).toEqual([]);
+        await page.keyboard.press('Escape');
+        await expect(why(page)).toBeHidden();
+        await expect(page.locator('#research-overview')).toBeVisible();
+    });
 });
 
 test.describe('the showcase on a phone', () => {
@@ -165,5 +306,22 @@ test.describe('a research made by strom demo (tree.demo)', () => {
         await page.keyboard.press('Escape');
         expect(await personResearchActions(page)).not.toContain('research-ask');
         await expect(page.locator('.context-menu .research-ai-badge')).toHaveCount(0);
+    });
+});
+
+test.describe('New tree: the showcase\'s download size', () => {
+    test('English: 0.3 MB', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        await page.locator('#tree-manager-modal .tree-manager-new-btn').click();
+        await expect(page.locator('#new-tree-menu-modal #new-tree-showcase-desc')).toHaveText('A made-up family with view-only research · 0.3 MB download');
+    });
+
+    test('Czech: 0,3 MB', async ({ page }) => {
+        await seedSetting(page, 'language', 'cs');
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        await page.locator('#tree-manager-modal .tree-manager-new-btn').click();
+        await expect(page.locator('#new-tree-menu-modal #new-tree-showcase-desc')).toHaveText('Vymyšlená rodina s výzkumem jen k prohlížení · stáhne se 0,3 MB');
     });
 });
