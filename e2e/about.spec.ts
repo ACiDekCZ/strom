@@ -82,6 +82,39 @@ test('The coffee cup in About plays one small animation a moment after opening, 
 });
 
 /**
+ * The figures that peek and run (C, I, J) stay at the button's height, beside or behind it: through their
+ * whole run none of their decorations covers the paragraph above the button (8px away).
+ */
+for (const [variant, at] of [['C', 2.5], ['I', 7.5], ['J', 8.5]] as const) {
+    test(`The coffee animation ${variant} never covers the paragraph above the button`, async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await page.addInitScript((r) => { Math.random = () => r; }, at / 9);
+        await openApp(page);
+        await page.locator('.app-logo').click();
+        const wrap = page.locator('#about-modal .about-coffee-wrap');
+        await expect(wrap).toHaveAttribute('data-acf', variant, { timeout: 5000 });
+        const covered = await wrap.evaluate((w) => {
+            const range = document.createRange();
+            range.selectNodeContents(w.closest('.about-support')!.querySelector('p')!);
+            const lines = [...range.getClientRects()];
+            const anims = document.getAnimations().filter((a) => a.effect instanceof KeyframeEffect && w.contains(a.effect.target));
+            anims.forEach((a) => a.pause());
+            const hits: string[] = [];
+            for (let t = 0; t <= 3000; t += 50) {
+                anims.forEach((a) => { a.currentTime = t; });
+                for (const el of w.querySelectorAll<Element>('.acf-fx')) {
+                    if (getComputedStyle(el).opacity === '0') continue;
+                    const b = el.getBoundingClientRect();
+                    if (lines.some((l) => b.right > l.left && b.left < l.right && b.bottom > l.top && b.top < l.bottom)) hits.push(`${el.getAttribute('class')} @${t}ms`);
+                }
+            }
+            return hits;
+        });
+        expect(covered).toEqual([]);
+    });
+}
+
+/**
  * What's new: About opens the same "What's new" dialog as after an update
  * (its "All changes ↗" leads on to the changelog on GitHub), over About. The
  * link keeps the changelog's address in the UI language at the section of the

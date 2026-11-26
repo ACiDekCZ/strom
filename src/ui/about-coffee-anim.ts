@@ -135,7 +135,7 @@ const BEAN = '<g class="acf-added acf-bean" stroke="none">'
     + '<path class="acf-added acf-lid" d="M4 9h12v8a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/>';
 
 interface VariantParts {
-    /** Behind the button, in the wrapper (C, I). */
+    /** Behind the button, in the wrapper (C, I, J). */
     behind?: string;
     /** Over the button, in the link. */
     over?: string;
@@ -154,7 +154,8 @@ const PARTS: Record<CoffeeVariant, VariantParts> = {
     G: { over: heart('acf-mini acf-m1') + SPARKS },
     H: { cupBeforeBody: BEAN },
     I: { behind: DOG_HEAD, over: heart('acf-mini acf-m1') },
-    J: { over: DOG_RUN + heart('acf-mini acf-m1') },
+    // The terrier runs behind the button (seen beside it), never over the paragraph above.
+    J: { behind: DOG_RUN, over: heart('acf-mini acf-m1') },
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
