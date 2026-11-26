@@ -237,7 +237,7 @@ type SelectHandler = (personId: string | null, origin: string, meta: SelectMeta)
 type LinkHandler = (link: { search?: string; files?: unknown[] }, from: string) => void;
 /** Runs a research action; what it returns (or its promise resolves to) goes back to an action sent with `reqId`. */
 type ResearchActionHandler = (action: string, args: unknown, from: string) => unknown;
-type HeldAction = { action: string; args: unknown; from: string; reqId?: string };
+type HeldAction = { action: string; args: unknown; from: string; reqId?: string; treeId?: TreeId | null };
 
 export class WindowRegistry {
     private readonly bus: WindowBus;
@@ -323,7 +323,7 @@ export class WindowRegistry {
             b.on('focus-req', m => this.onFocusRequest(m.from)),
             b.on('focused', m => this.focusWaiters.get(m.from)?.()),
             b.on('link', m => this.onLink({ search: m.search, files: m.files }, m.from)),
-            b.on('research-action', m => this.onResearchAction({ action: m.action, args: m.args, from: m.from, reqId: m.reqId })),
+            b.on('research-action', m => this.onResearchAction({ action: m.action, args: m.args, from: m.from, reqId: m.reqId, treeId: m.treeId })),
             b.on('research-menu-req', m => this.onResearchMenuRequest(m)),
             b.on('show-on-map', m => this.showOnMapHandler?.(m.ref, m.treeId)),
             b.on('agent-state-req', m => this.agentStateAsked(m.windowId || m.from)),
@@ -894,8 +894,10 @@ export class WindowRegistry {
 
     private runResearchAction(a: HeldAction): void {
         let result: unknown = null;
+        // An action for another tree (the main window switched meanwhile) does not run here: no outcome.
+        const sameTree = !a.treeId || a.treeId === this.host.treeId();
         try {
-            result = this.researchHandler?.(a.action, a.args, a.from);
+            if (sameTree) result = this.researchHandler?.(a.action, a.args, a.from);
         } catch (err) {
             console.error('research action failed', err);
         }

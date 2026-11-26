@@ -495,6 +495,22 @@ describe('links and research actions from other windows', () => {
         expect(other.of('research-menu')).toHaveLength(0);
     });
 
+    it('a satellite\'s research action runs for this tree; one for another tree (switched meanwhile) does not run and has no outcome', async () => {
+        const sat = listener(hub, 'sat-a');
+        const handler = vi.fn(() => 'done');
+        registry.setResearchActionHandler(handler);
+        sat.bus.post({ type: 'research-action', action: 'verify-person', args: { personId: 'p1' }, reqId: 'a1', treeId: TREE });
+        sat.bus.post({ type: 'research-action', action: 'verify-person', args: { personId: 'p1' }, reqId: 'a2', treeId: 'another-tree' as TreeId });
+        sat.bus.post({ type: 'research-action', action: 'places-queue', args: { places: ['Brodek'] }, treeId: 'another-tree' as TreeId });
+        await settle();
+        expect(handler).toHaveBeenCalledTimes(1);
+        expect(handler).toHaveBeenCalledWith('verify-person', { personId: 'p1' }, 'sat-a');
+        expect(sat.of('research-action-result')).toEqual([
+            expect.objectContaining({ to: 'sat-a', reqId: 'a1', result: 'done' }),
+            expect.objectContaining({ to: 'sat-a', reqId: 'a2', result: null }),
+        ]);
+    });
+
     it('wait for their handler, then go to it once', async () => {
         const tab = listener(hub, 'tab2');
         tab.bus.post({ type: 'link', search: '?person=p7' });

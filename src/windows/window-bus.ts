@@ -136,7 +136,7 @@ export type WindowMessageBody =
      * sat / overview → main: a research action to run in the main window (§2,
      * §6); with `reqId` its outcome comes back to that window only.
      */
-    | { type: 'research-action'; action: string; args?: unknown; reqId?: string }
+    | { type: 'research-action'; action: string; args?: unknown; reqId?: string; treeId?: TreeId | null }
     | { type: 'research-action-result'; to: string; reqId: string; result: unknown }
     /**
      * sat → main: the research's rows of the person menu (§2, 2g), as the

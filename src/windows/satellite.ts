@@ -510,7 +510,7 @@ export class SatelliteClient {
 
     /** A research action: the main window runs it (§2 person menu). */
     researchAction(action: string, args?: unknown): void {
-        this.bus.post({ type: 'research-action', action, args });
+        this.bus.post({ type: 'research-action', action, args, treeId: this._treeId });
     }
 
     /**
@@ -524,7 +524,7 @@ export class SatelliteClient {
         return new Promise((resolve) => {
             const timer = setTimeout(() => { this.actionWaiters.delete(reqId); resolve(null); }, waitMs);
             this.actionWaiters.set(reqId, (result) => { clearTimeout(timer); this.actionWaiters.delete(reqId); resolve(result); });
-            this.bus.post({ type: 'research-action', action, args, reqId });
+            this.bus.post({ type: 'research-action', action, args, reqId, treeId: this._treeId });
         });
     }
 

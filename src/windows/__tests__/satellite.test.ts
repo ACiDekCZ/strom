@@ -608,7 +608,7 @@ describe('the Research overview in its own window (K3)', () => {
         const sent = sat.researchActionResult('waiting-answer', { itemId: 'W1', text: 'Yes' }, 300);
         await settle();
         const req = of('research-action')[0];
-        expect(req).toMatchObject({ action: 'waiting-answer', args: { itemId: 'W1', text: 'Yes' } });
+        expect(req).toMatchObject({ action: 'waiting-answer', args: { itemId: 'W1', text: 'Yes' }, treeId: TREE });
         expect(req.reqId).toBeTruthy();
         main.post({ type: 'research-action-result', to: 'someone-else', reqId: req.reqId!, result: 'fail' });
         main.post({ type: 'research-action-result', to: SAT, reqId: req.reqId!, result: 'saved' });
@@ -618,6 +618,13 @@ describe('the Research overview in its own window (K3)', () => {
         const silent = sat.researchActionResult('waiting-answer', { itemId: 'W1', text: 'Yes' }, 300);
         await settle(301);
         await expect(silent).resolves.toBeNull();
+    });
+
+    it('an action without an outcome carries this window\'s tree too', async () => {
+        await connect();
+        sat.researchAction('places-queue', { places: ['Brodek'] });
+        await settle();
+        expect(of('research-action')[0]).toMatchObject({ action: 'places-queue', treeId: TREE });
     });
 });
 
