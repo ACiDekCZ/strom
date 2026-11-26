@@ -104,5 +104,12 @@ export const plPart14: Pick<StringsType, 'houses'> = {
         matKind: { file: 'plik', photo: 'zdjęcie', text: 'tekst' },
         errTown: 'Miejscowość nie ma jeszcze w badaniach zapisu miejsca; materiał będzie można dołączyć, gdy znajdzie się wśród jej miejsc.',
         errArchive: 'Archiwum nie przyjmuje materiałów.',
+        hiddenOut: 'ukryte w wynikach',
+        reveal: 'Pokaż w wynikach',
+        hide: 'Ukryj w wynikach',
+        hiddenSummary: (e: number, loc: boolean) => e && loc
+            ? `W wynikach (HTML, książka) ${nPl(e, 'wydarzenie', 'wydarzenia', 'wydarzeń')} i położenie domu nie są pokazywane.`
+            : e ? `W wynikach (HTML, książka) ${nPl(e, 'wydarzenie nie jest pokazywane', 'wydarzenia nie są pokazywane', 'wydarzeń nie jest pokazywanych')}.`
+                : 'W wynikach (HTML, książka) położenie domu nie jest pokazywane.',
     },
 };

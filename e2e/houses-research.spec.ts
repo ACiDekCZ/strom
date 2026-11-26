@@ -20,6 +20,8 @@ interface FakeHouses {
     reads: string[];
     posts: unknown[];
     materials?: Record<string, unknown>[];
+    /** Overrides of the house's research (`GET /houses/<key>`), e.g. its timeline and sensitive events. */
+    research?: Record<string, unknown>;
     materialReply?: { status: number; contentType: string; body: string };
 }
 
@@ -62,7 +64,8 @@ async function setup(page: Page, opts: { features?: string[]; houses?: FakeHouse
         }
         houses.reads.push(path);
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...row(), ...houses.rows[0], numbers: [], timeline: [], holders: [],
-            residents: [], maps: [], passed: [], manual: [], unknown: [], archiveOnly: [], sensitive: [], same: [], persons: [], materials: houses.materials ?? [] }) });
+            residents: [], maps: [], passed: [], manual: [], unknown: [], archiveOnly: [], sensitive: [], same: [], persons: [], materials: houses.materials ?? [],
+            ...houses.research }) });
     });
     await openResearch(page, { media: !!opts.media });
     // Josef and his son Jan born in Bělokamen čp. 16: a house of two generations.
@@ -258,5 +261,48 @@ test.describe('Houses: material of a house', () => {
         await dialog.getByRole('button', { name: /^Send/ }).click();
         await expect.poll(() => bridge.batchDone?.length ?? 0).toBe(1);
         expect(bridge.batchDone![0].body).toMatchObject({ house: KEY });
+    });
+});
+
+test.describe('Houses: protection in outputs', () => {
+    test('a sensitive event of the research: hidden in outputs, Show / Hide in outputs, undo reverts', async ({ page }) => {
+        const houses = fakeHouses([row({ state: 'done', at: '2027-03-12', summary: { events: 2, holders: 0, residents: 0, unknown: 0, materials: 0, passed: 0 } })], {
+            research: {
+                timeline: [
+                    { id: 'e1', kind: 'built', date: '1830', text: 'Stavení postaveno', sources: [] },
+                    { id: 'e9', kind: 'other', date: '1948', text: 'Konfiskace statku', sources: [] },
+                ],
+                sensitive: ['e9'],
+            },
+        });
+        await setup(page, { houses });
+        await openHouses(page);
+        await houseRow(page).locator('.house-chev').click();
+        const sens = page.locator('#houses-modal .house-detail .house-sensitive');
+        const ev = sens.locator('.house-sens[data-event="e9"]');
+        await expect(sens.locator('.house-sens')).toHaveCount(1);
+        await expect(ev.locator('.t')).toHaveText('1948 · Konfiskace statkuhidden in outputs');
+        await expect(sens.locator('.house-hidden-summary')).toContainText('In outputs (HTML, book)');
+        await ev.getByRole('button', { name: 'Show in outputs' }).click();
+        await expect(ev.locator('.s')).toHaveCount(0);
+        await expect(ev.getByRole('button', { name: 'Hide in outputs' })).toBeFocused();
+        expect(await page.evaluate(k => window.Strom.DataManager.getData().houses?.[k]?.revealInOutputs, KEY)).toEqual(['e9']);
+        await page.evaluate(() => window.Strom.UI.performUndo());
+        await expect(ev.getByRole('button', { name: 'Show in outputs' })).toBeVisible();
+        expect(await page.evaluate(k => window.Strom.DataManager.getData().houses?.[k]?.revealInOutputs ?? null, KEY)).toBeNull();
+        await ev.getByRole('button', { name: 'Show in outputs' }).click();
+        await ev.getByRole('button', { name: 'Hide in outputs' }).click();
+        await expect(ev.locator('.s')).toHaveText('hidden in outputs');
+    });
+
+    test('without sensitive events from the research: nothing about outputs', async ({ page }) => {
+        const houses = fakeHouses([row({ state: 'done', summary: { events: 1, holders: 0, residents: 0, unknown: 0, materials: 0, passed: 0 } })], {
+            research: { timeline: [{ id: 'e1', kind: 'built', date: '1830', text: 'Stavení postaveno', sources: [] }] },
+        });
+        await setup(page, { houses });
+        await openHouses(page);
+        await houseRow(page).locator('.house-chev').click();
+        await expect.poll(() => houses.reads).toEqual([KEY]);
+        await expect(page.locator('#houses-modal .house-sensitive, #houses-modal .house-reveal')).toHaveCount(0);
     });
 });

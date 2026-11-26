@@ -13357,6 +13357,14 @@ const stringsEN = {
         matKind: { file: 'file', photo: 'photo', text: 'text' },
         errTown: 'The research has no record of this town yet; material can be attached once the town is among its places.',
         errArchive: 'An archive does not take material.',
+        // Protection in outputs (spec 030 §10): a sensitive event of the research, hidden until shown.
+        hiddenOut: 'hidden in outputs',
+        reveal: 'Show in outputs',
+        hide: 'Hide in outputs',
+        hiddenSummary: (e: number, loc: boolean) => e && loc
+            ? `In outputs (HTML, book) ${nEn(e, 'event', 'events')} and the house location are not shown.`
+            : e ? `In outputs (HTML, book) ${nEn(e, 'event is', 'events are')} not shown.`
+                : 'In outputs (HTML, book) the house location is not shown.',
     },
 };
 
@@ -26118,6 +26126,13 @@ const stringsCZ: StringsType = {
         matKind: { file: 'soubor', photo: 'foto', text: 'text' },
         errTown: 'Obec zatím nemá ve výzkumu záznam místa; materiál půjde přiložit, až ji výzkum bude mít mezi místy.',
         errArchive: 'Archiv materiál nepřijímá.',
+        hiddenOut: 'skryto ve výstupech',
+        reveal: 'Ukázat ve výstupech',
+        hide: 'Skrýt ve výstupech',
+        hiddenSummary: (e: number, loc: boolean) => e && loc
+            ? `Ve výstupech (HTML, kniha) se ${nCs(e, 'událost', 'události', 'událostí')} a poloha domu neukazují.`
+            : e ? `Ve výstupech (HTML, kniha) se ${nCs(e, 'událost neukazuje', 'události neukazují', 'událostí neukazuje')}.`
+                : 'Ve výstupech (HTML, kniha) se poloha domu neukazuje.',
     },
 };
 
@@ -38787,6 +38802,13 @@ const stringsDE: StringsType = {
         matKind: { file: 'Datei', photo: 'Foto', text: 'Text' },
         errTown: 'Der Ort hat in der Forschung noch keinen Ortseintrag; Material lässt sich anhängen, sobald er unter ihren Orten ist.',
         errArchive: 'Ein Archiv nimmt kein Material an.',
+        hiddenOut: 'in Ausgaben verborgen',
+        reveal: 'In Ausgaben zeigen',
+        hide: 'In Ausgaben verbergen',
+        hiddenSummary: (e: number, loc: boolean) => e && loc
+            ? `In Ausgaben (HTML, Buch) werden ${nDe(e, 'Ereignis', 'Ereignisse')} und die Lage des Hauses nicht gezeigt.`
+            : e ? `In Ausgaben (HTML, Buch) ${e === 1 ? 'wird 1 Ereignis' : `werden ${e} Ereignisse`} nicht gezeigt.`
+                : 'In Ausgaben (HTML, Buch) wird die Lage des Hauses nicht gezeigt.',
     },
 };
 

@@ -7540,6 +7540,15 @@
             font-size: 13.5px; color: var(--primary-dark); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
         }
         .house-research-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        /* The research's sensitive events and what outputs leave out of the house (spec 030 §10). */
+        .house-sensitive { display: flex; flex-direction: column; gap: 6px; }
+        .house-sens-list { display: flex; flex-direction: column; border-top: 1px solid var(--divider); }
+        .house-sens {
+            display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 14px;
+            padding: 8px 0; border-bottom: 1px solid var(--divider); font-size: 14px;
+        }
+        .house-sens .t { min-width: 0; flex: 1 1 220px; overflow-wrap: anywhere; }
+        .house-sens .s { display: block; font-size: 12.5px; color: var(--text-light); }
         /* Attach material to the house: files, a memory, who told it, the name after the farm. */
         #house-material-modal { z-index: 220; }
         .modal.modal--md.house-material-modal { width: 620px; max-width: min(620px, 94vw); }

@@ -6,15 +6,51 @@
  */
 
 import { strings, getCurrentLanguage, type Language } from '../strings.js';
-import type { TreeHouse } from '../houses.js';
+import { houseTitle, type TreeHouse } from '../houses.js';
 import { houseGroupIds } from '../houses-view.js';
 import { placeKey } from '../places.js';
 import { formatPlaceDate } from '../place-identity.js';
-import { fetchHouses, houseFeature, houseStatus, type HouseListRow, type HouseState, type HouseWork } from '../house-bridge.js';
+import { formatFlexDate } from '../dates.js';
+import { fetchHouses, houseFeature, houseStatus, type HouseListRow, type HouseResearch, type HouseState, type HouseWork } from '../house-bridge.js';
+import { houseOutputFilter } from '../house-privacy.js';
+import { DataManager } from '../data.js';
+import type { HouseUserData, StromData } from '../types.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 
 const esc = (s: string): string => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+/**
+ * The research's sensitive events of a house in the open row (spec 030 §10, K1.4a): each "hidden in outputs"
+ * with "Show in outputs", or once shown "Hide in outputs" (none in a tree that cannot be changed), and the
+ * sentence of what outputs leave out of the house. '' when the research sent no `sensitive`.
+ */
+export function houseSensitiveHtml(house: TreeHouse, research: HouseResearch | null, data: StromData, now: Date, opts: { lang: Language; readOnly: boolean }): string {
+    const ids = new Set(research?.sensitive ?? []);
+    if (!research || !ids.size) return '';
+    const s = strings.houses;
+    const revealed = new Set(data.houses?.[house.id]?.revealInOutputs ?? []);
+    const rows = research.timeline.filter(e => ids.has(e.id)).map(e => {
+        const shown = revealed.has(e.id);
+        const date = e.date ? formatFlexDate(e.date, opts.lang) || e.date : '';
+        const act = opts.readOnly ? ''
+            : `<button type="button" class="house-research-act house-reveal" data-event="${esc(e.id)}" data-reveal="${shown ? 'hide' : 'show'}">${esc(shown ? s.hide : s.reveal)}</button>`;
+        return `<div class="house-sens" data-event="${esc(e.id)}"><span class="t">${esc([date, e.text].filter(Boolean).join(' · '))}`
+            + `${shown ? '' : `<span class="s">${esc(s.hiddenOut)}</span>`}</span>${act}</div>`;
+    });
+    if (!rows.length) return '';
+    const hidden = houseOutputFilter(house, research, data, now).hidden;
+    const summary = hidden.events || hidden.location
+        ? `<p class="house-research-note house-hidden-summary">${esc(s.hiddenSummary(hidden.events, hidden.location))}</p>` : '';
+    return `<div class="house-sensitive">${summary}<div class="house-sens-list">${rows.join('')}</div></div>`;
+}
+
+/** The house's events shown in outputs once a person reveals (or hides again) one of them. */
+export function withRevealed(current: readonly string[] | undefined, eventId: string, show: boolean): string[] {
+    const set = new Set(current ?? []);
+    if (show) set.add(eventId); else set.delete(eventId);
+    return [...set];
+}
 
 /** What the badge needs of a row of `GET /houses`. */
 export interface HouseStateOf {
@@ -163,13 +199,30 @@ export const houseStateMethods = uiModule({
         const row = this.houseResearchRow(h);
         const badge = houseStateHtml(row, { lang: getCurrentLanguage(), answer: true });
         const more = this.renderHouseMaterialsHtml(h);
-        return badge || more
-            ? `<div class="house-research">${badge ? `<div class="house-research-state">${badge}</div>` : ''}${more}</div>` : '';
+        const sensitive = houseSensitiveHtml(h, this.houseResearchOf(h), DataManager.getData(), new Date(),
+            { lang: getCurrentLanguage(), readOnly: DataManager.isReadOnly() });
+        return badge || more || sensitive
+            ? `<div class="house-research">${badge ? `<div class="house-research-state">${badge}</div>` : ''}${sensitive}${more}</div>` : '';
     },
 
     /** A click in the detail's research part: true when handled. */
     houseResearchDetailClick(target: HTMLElement, house: TreeHouse): boolean {
-        return this.houseStateSlotClick(target, house) || this.houseMaterialClick(target, house);
+        return this.houseStateSlotClick(target, house) || this.houseRevealClick(target, house) || this.houseMaterialClick(target, house);
+    },
+
+    /** "Show in outputs" / "Hide in outputs" of a sensitive event: one step of undo. */
+    houseRevealClick(target: HTMLElement, house: TreeHouse): boolean {
+        const btn = target.closest<HTMLElement>('.house-reveal');
+        if (!btn?.dataset.event) return false;
+        const user = DataManager.getData().houses?.[house.id];
+        const reveal = withRevealed(user?.revealInOutputs, btn.dataset.event, btn.dataset.reveal === 'show');
+        const next: HouseUserData = { ...(user ?? {}), revealInOutputs: reveal };
+        if (!reveal.length) delete next.revealInOutputs;
+        if (DataManager.setHousesUserData({ [house.id]: Object.keys(next).length ? next : undefined }, houseTitle(house))) {
+            this.refreshHousesWindow();
+            document.querySelector<HTMLElement>(`#houses-modal .house-detail[data-house="${CSS.escape(house.id)}"] .house-reveal[data-event="${CSS.escape(btn.dataset.event)}"]`)?.focus({ preventScroll: true });
+        }
+        return true;
     },
 
     /** Places: a town's line of its research houses ("1 done, 1 being researched"), or ''. */
