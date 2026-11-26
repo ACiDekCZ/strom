@@ -205,7 +205,7 @@ export const plPart9: Pick<StringsType, 'lists'> = {
                 head: { a: 'Rodzina i linie', b: 'Życie w czasie', c: 'Miejsca', d: 'Osoba', e: 'Dane', h: 'Z drzewa i z Tabeli' },
                 sub: {
                     family: 'przodkowie, potomkowie, rodzeństwo, kuzyni, małżonkowie', list: 'osoby innej listy', livedIn: 'także według stulecia',
-                    near: 'urodzenie, śmierć, ślub, zamieszkanie; do N km', has: 'zdjęcie, źródło, opowieść, rodzice, …', count: 'dzieci, małżeństwa, źródła',
+                    near: 'urodzenie, śmierć, ślub, zamieszkanie; do N km', livedInHouse: 'urodzenie, ślub, spis, zamieszkanie, zgon; w latach', has: 'zdjęcie, źródło, opowieść, rodzice, …', count: 'dzieci, małżeństwa, źródła',
                 },
             },
             pick: {
@@ -287,7 +287,7 @@ export const plPart9: Pick<StringsType, 'lists'> = {
                 family: 'Rodzina osoby', ancestors: 'Przodkowie osoby', descendants: 'Potomkowie osoby',
                 rod: 'Ród', line: 'Linia badania', list: 'Inna lista',
                 born: 'Urodzenie w okresie', died: 'Śmierć w okresie', married: 'Ślub w okresie', livedIn: 'Żył w okresie',
-                deathAge: 'Wiek w chwili śmierci', alive: 'Żyjący / zmarły', near: 'Miejsce i okolica', gender: 'Płeć',
+                deathAge: 'Wiek w chwili śmierci', alive: 'Żyjący / zmarły', near: 'Miejsce i okolica', gender: 'Płeć', livedInHouse: 'Mieszkał(a) w domu',
                 occupation: 'Zawód', has: 'Ma dane', count: 'Liczba', text: 'Tekst w opowieści lub notatce',
                 added: 'Dodane w okresie', changed: 'Zmienione w okresie', tableFilter: 'Zapisany filtr Tabeli',
             },
@@ -306,6 +306,7 @@ export const plPart9: Pick<StringsType, 'lists'> = {
                 died: (y: string) => `śmierć ${y}`,
                 married: (y: string) => `ślub ${y}`,
                 livedIn: (y: string) => `żył ${y}`,
+                livedInHouse: (house: string, y: string | null) => `mieszkał(a) w domu ${house}${y ? ` w latach ${y}` : ''}`,
                 century: (c: number) => `żył w ${c}. wieku`,
                 deathAge: (from?: number, to?: number) => `wiek w chwili śmierci ${from !== undefined && to !== undefined ? `${from}–${to}` : from !== undefined ? `od ${from}` : `do ${to}`} ${(to ?? from) === 1 ? 'roku' : 'lat'}`,
                 alive: { living: 'żyjący', deceased: 'zmarli' },

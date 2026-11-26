@@ -11735,7 +11735,7 @@ const stringsEN = {
                 head: { a: 'Family and lines', b: 'Life in time', c: 'Places', d: 'Person', e: 'Facts', h: 'From the tree and the Table' },
                 sub: {
                     family: 'ancestors, descendants, siblings, cousins, spouses', list: 'the people of another list', livedIn: 'also by century',
-                    near: 'birth, death, marriage, residence; within N km', has: 'photo, source, story, parents, …', count: 'children, marriages, sources',
+                    near: 'birth, death, marriage, residence; within N km', livedInHouse: 'birth, marriage, census, residence, death; in the years', has: 'photo, source, story, parents, …', count: 'children, marriages, sources',
                 },
             },
             pick: {
@@ -11817,7 +11817,7 @@ const stringsEN = {
                 family: 'Family of a person', ancestors: 'Ancestors of a person', descendants: 'Descendants of a person',
                 rod: 'Family line', line: 'Research line', list: 'Another list',
                 born: 'Birth in a period', died: 'Death in a period', married: 'Marriage in a period', livedIn: 'Lived in a period',
-                deathAge: 'Age at death', alive: 'Living / deceased', near: 'Place and surroundings', gender: 'Sex',
+                deathAge: 'Age at death', alive: 'Living / deceased', near: 'Place and surroundings', gender: 'Sex', livedInHouse: 'Lived in the house',
                 occupation: 'Occupation', has: 'Has a fact', count: 'Count', text: 'Text in story or note',
                 added: 'Added in a period', changed: 'Changed in a period', tableFilter: 'Saved Table filter',
             },
@@ -11836,6 +11836,7 @@ const stringsEN = {
                 died: (y: string) => `death ${y}`,
                 married: (y: string) => `marriage ${y}`,
                 livedIn: (y: string) => `lived ${y}`,
+                livedInHouse: (house: string, y: string | null) => `lived in the house ${house}${y ? ` in the years ${y}` : ''}`,
                 century: (c: number) => `lived in the ${ordEn(c)} century`,
                 deathAge: (from?: number, to?: number) => `age at death ${from !== undefined && to !== undefined ? `${from}–${to}` : from !== undefined ? `from ${from}` : `up to ${to}`} ${(to ?? from) === 1 ? 'year' : 'years'}`,
                 alive: { living: 'living', deceased: 'deceased' },
@@ -24752,7 +24753,7 @@ const stringsCZ: StringsType = {
                 head: { a: 'Rodina a linie', b: 'Život v čase', c: 'Místa', d: 'Osoba', e: 'Údaje', h: 'Ze stromu a z Tabulky' },
                 sub: {
                     family: 'předci, potomci, sourozenci, bratranci, manželé', list: 'osoby jiného seznamu osob', livedIn: 'i podle století',
-                    near: 'narození, úmrtí, sňatek, bydliště; do N km', has: 'fotka, pramen, vyprávění, rodiče, …', count: 'děti, sňatky, prameny',
+                    near: 'narození, úmrtí, sňatek, bydliště; do N km', livedInHouse: 'narození, sňatek, sčítání, bydliště, úmrtí; v letech', has: 'fotka, pramen, vyprávění, rodiče, …', count: 'děti, sňatky, prameny',
                 },
             },
             pick: {
@@ -24834,7 +24835,7 @@ const stringsCZ: StringsType = {
                 family: 'Rodina osoby', ancestors: 'Předci osoby', descendants: 'Potomci osoby',
                 rod: 'Rod', line: 'Linie výzkumu', list: 'Jiný seznam',
                 born: 'Narození v období', died: 'Úmrtí v období', married: 'Sňatek v období', livedIn: 'Žil v období',
-                deathAge: 'Věk při úmrtí', alive: 'Žijící / zemřelý', near: 'Místo a okolí', gender: 'Pohlaví',
+                deathAge: 'Věk při úmrtí', alive: 'Žijící / zemřelý', near: 'Místo a okolí', gender: 'Pohlaví', livedInHouse: 'Žil(a) v domě',
                 occupation: 'Povolání', has: 'Má údaj', count: 'Počet', text: 'Text ve vyprávění nebo poznámce',
                 added: 'Přidáno za období', changed: 'Změněno za období', tableFilter: 'Uložený filtr Tabulky',
             },
@@ -24853,6 +24854,7 @@ const stringsCZ: StringsType = {
                 died: (y: string) => `úmrtí ${y}`,
                 married: (y: string) => `sňatek ${y}`,
                 livedIn: (y: string) => `žil ${y}`,
+                livedInHouse: (house: string, y: string | null) => `žil(a) v domě ${house}${y ? ` v letech ${y}` : ''}`,
                 century: (c: number) => `žil v ${c}. století`,
                 deathAge: (from?: number, to?: number) => `věk při úmrtí ${from !== undefined && to !== undefined ? `${from}–${to}` : from !== undefined ? `od ${from}` : `do ${to}`} ${(to ?? from) === 1 ? 'roku' : 'let'}`,
                 alive: { living: 'žijící', deceased: 'zemřelí' },
@@ -37602,7 +37604,7 @@ const stringsDE: StringsType = {
                 head: { a: 'Familie und Linien', b: 'Leben in der Zeit', c: 'Orte', d: 'Person', e: 'Angaben', h: 'Aus dem Stammbaum und der Tabelle' },
                 sub: {
                     family: 'Vorfahren, Nachkommen, Geschwister, Cousins, Ehepartner', list: 'die Personen einer anderen Liste', livedIn: 'auch nach Jahrhundert',
-                    near: 'Geburt, Tod, Heirat, Wohnort; bis N km', has: 'Foto, Quelle, Erzählung, Eltern, …', count: 'Kinder, Ehen, Quellen',
+                    near: 'Geburt, Tod, Heirat, Wohnort; bis N km', livedInHouse: 'Geburt, Heirat, Zählung, Wohnort, Tod; in den Jahren', has: 'Foto, Quelle, Erzählung, Eltern, …', count: 'Kinder, Ehen, Quellen',
                 },
             },
             pick: {
@@ -37684,7 +37686,7 @@ const stringsDE: StringsType = {
                 family: 'Familie einer Person', ancestors: 'Vorfahren einer Person', descendants: 'Nachkommen einer Person',
                 rod: 'Stamm', line: 'Forschungslinie', list: 'Andere Liste',
                 born: 'Geburt im Zeitraum', died: 'Tod im Zeitraum', married: 'Heirat im Zeitraum', livedIn: 'Gelebt im Zeitraum',
-                deathAge: 'Sterbealter', alive: 'Lebend / verstorben', near: 'Ort und Umgebung', gender: 'Geschlecht',
+                deathAge: 'Sterbealter', alive: 'Lebend / verstorben', near: 'Ort und Umgebung', gender: 'Geschlecht', livedInHouse: 'Wohnte im Haus',
                 occupation: 'Beruf', has: 'Hat Angabe', count: 'Anzahl', text: 'Text in Erzählung oder Notiz',
                 added: 'Hinzugefügt im Zeitraum', changed: 'Geändert im Zeitraum', tableFilter: 'Gespeicherter Tabellenfilter',
             },
@@ -37703,6 +37705,7 @@ const stringsDE: StringsType = {
                 died: (y: string) => `Tod ${y}`,
                 married: (y: string) => `Heirat ${y}`,
                 livedIn: (y: string) => `lebte ${y}`,
+                livedInHouse: (house: string, y: string | null) => `wohnte im Haus ${house}${y ? ` in den Jahren ${y}` : ''}`,
                 century: (c: number) => `lebte im ${c}. Jahrhundert`,
                 deathAge: (from?: number, to?: number) => `Sterbealter ${from !== undefined && to !== undefined ? `${from}–${to}` : from !== undefined ? `ab ${from}` : `bis ${to}`} ${(to ?? from) === 1 ? 'Jahr' : 'Jahre'}`,
                 alive: { living: 'lebend', deceased: 'verstorben' },

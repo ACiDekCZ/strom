@@ -180,6 +180,12 @@ function sanitizeCondParams(c: RuleCondName, raw: Record<string, unknown>): Rule
             if (raw.below === true) p.below = true;
             return p;
         }
+        case 'livedInHouse': {
+            const p: RuleParamsMap['livedInHouse'] = { house: str(raw.house), houseName: str(raw.houseName) };
+            const y = isObject(raw.years) ? years(raw.years) : null;
+            if (y && (y.from !== undefined || y.to !== undefined)) p.years = y;
+            return p;
+        }
         case 'gender': return raw.value === 'male' || raw.value === 'female' || raw.value === 'unknown' ? { value: raw.value } : null;
         case 'occupation': {
             const values = Array.isArray(raw.values) ? raw.values.filter((x): x is string => typeof x === 'string' && x !== '') : [];
@@ -211,7 +217,7 @@ function sanitizeCondParams(c: RuleCondName, raw: Record<string, unknown>): Rule
 
 const COND_NAMES: ReadonlySet<string> = new Set<RuleCondName>([
     'family', 'ancestors', 'descendants', 'rod', 'line', 'list', 'born', 'died', 'married', 'livedIn', 'deathAge', 'alive',
-    'near', 'gender', 'occupation', 'has', 'count', 'text', 'added', 'changed', 'tableFilter',
+    'near', 'gender', 'occupation', 'has', 'count', 'text', 'added', 'changed', 'tableFilter', 'livedInHouse',
 ]);
 
 function sanitizeNode(raw: unknown, level: number): RuleNode | null {

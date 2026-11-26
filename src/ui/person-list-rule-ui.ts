@@ -32,6 +32,7 @@ import {
 import { escHtml as esc, newRuleCond, ruleCatalog, ruleCondEditor, type RuleEditorCtx, type RulePickOpts, type RulePickRow } from './person-list-rule-editors.js';
 import './person-list-rule-cond-editors.js';
 import './person-list-rule-near.js';
+import './person-list-rule-house.js';
 import './person-list-rule-family.js';
 import { foldSearch2 } from '../section-search-match.js';
 import { openPersonPopover } from './person-popover.js';

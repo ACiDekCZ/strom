@@ -1737,7 +1737,7 @@ export type RuleCondName =
     | 'family' | 'ancestors' | 'descendants' | 'rod' | 'line' | 'list'
     | 'born' | 'died' | 'married' | 'livedIn' | 'deathAge' | 'alive'
     | 'near' | 'gender' | 'occupation' | 'has' | 'count' | 'text'
-    | 'added' | 'changed' | 'tableFilter';
+    | 'added' | 'changed' | 'tableFilter' | 'livedInHouse';
 
 /** A year period of a condition; at least one end is set. Both ends are included. */
 export interface RuleYears { from?: number; to?: number }
@@ -1795,6 +1795,8 @@ export interface RuleParamsMap {
     deathAge: RuleYears;
     alive: { value: 'living' | 'deceased' };
     near: { placeKey: string; placeName: string; events: RuleNearEvent[]; km: number; below?: true };
+    /** A birth, marriage, census, residence or death at a house of the tree (spec 030 §15), in the years when given. */
+    livedInHouse: { house: HouseId; houseName: string; years?: RuleYears };
     gender: { value: 'male' | 'female' | 'unknown' };
     occupation: { values: string[]; labels: string[] };
     has: { have: boolean; what: RuleHasWhat };

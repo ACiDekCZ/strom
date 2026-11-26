@@ -26,6 +26,7 @@ import type {
 import { FAMILY_PRESETS, familyPresetOf, familySet, partnersOf, rodLabels, type LineageIndex, type RodId } from './lineage.js';
 import { parseFlexDate, formatFlexDate } from './dates.js';
 import { placeKey, townOfPlace } from './places.js';
+import { collectHouses, houseTitle, type HouseFactKind, type TreeHouse } from './houses.js';
 import { geoOfKey } from './live-follow-map.js';
 import { personMediaIndex } from './media.js';
 import { shownName } from './person-name.js';
@@ -321,6 +322,44 @@ export function ruleOccupationChoices(index: LineageIndex): Array<{ key: string;
 }
 
 /** Whether a place key is still a place of the tree (a person's or a union's place, a located or researched place). */
+/** The facts that say a person lived in a house (spec 030 §15): not an event of another kind (an occupation…). */
+const LIVED_KINDS: ReadonlySet<HouseFactKind> = new Set<HouseFactKind>(['birth', 'marriage', 'census', 'residence', 'death']);
+
+/** The tree's houses, read once per index: by id, and a house joined by hand under its own id too. */
+function housesOf(index: LineageIndex): { list: TreeHouse[]; byId: Map<string, TreeHouse> } {
+    return memo(index, 'houses', () => {
+        const list = collectHouses(index.data);
+        const byId = new Map<string, TreeHouse>(list.map(h => [h.id, h]));
+        for (const h of list) for (const m of index.data.houses?.[h.id]?.merged ?? []) if (!byId.has(m)) byId.set(m, h);
+        return { list, byId };
+    });
+}
+
+/** The house of a "Lived in the house" condition (a house joined into another one is that one), or null. */
+export function ruleHouseOf(index: LineageIndex, id: string): TreeHouse | null {
+    return id ? housesOf(index).byId.get(id) ?? null : null;
+}
+
+/** The houses a "Lived in the house" condition offers: the tree's, by town and number, with their people. */
+export function ruleHouseChoices(index: LineageIndex): Array<{ id: string; name: string; persons: number }> {
+    return housesOf(index).list.filter(h => h.persons > 0).map(h => ({ id: h.id, name: houseTitle(h), persons: h.persons }));
+}
+
+/** The people with a birth, marriage, census, residence or death at the house, in the years when given (a fact without a year not then). */
+export function livedInHouseIds(index: LineageIndex, p: RuleParamsMap['livedInHouse']): Set<PersonId> {
+    const house = ruleHouseOf(index, p.house);
+    const out = new Set<PersonId>();
+    if (!house) return out;
+    const y = p.years;
+    const dated = !!y && (y.from !== undefined || y.to !== undefined);
+    for (const f of house.facts) {
+        if (!LIVED_KINDS.has(f.kind)) continue;
+        if (dated && (f.year === undefined || (y!.from !== undefined && f.year < y!.from) || (y!.to !== undefined && f.year > y!.to))) continue;
+        if (realPerson(index.data, f.personId)) out.add(f.personId);
+    }
+    return out;
+}
+
 function placeInTree(index: LineageIndex, key: string): boolean {
     const data = index.data;
     return placeIndexOf(index).places.has(key) || !!data.places?.[key] || !!data.placeRefs?.[key];
@@ -360,6 +399,9 @@ export function condNeed(cond: RuleCond): RuleNeed | null {
         case 'count': return Number.isInteger(cond.p.n) && cond.p.n >= 0 ? null : 'number';
         case 'added': case 'changed': return period(cond.p) ? null : 'period';
         case 'tableFilter': return cond.p.filter && Array.isArray(cond.p.filter.items) ? null : 'view';
+        case 'livedInHouse':
+            if (!cond.p.house) return 'place';
+            return !cond.p.years || years(cond.p.years) ? null : 'years';
         case 'alive': case 'gender': case 'has': return null;
     }
 }
@@ -375,6 +417,8 @@ export function condMissing(index: LineageIndex, cond: RuleCond): Omit<MissingRe
             return cond.p.personId && !data.persons[cond.p.personId] ? { kind: 'person', name: cond.p.personName || '?' } : null;
         case 'near':
             return cond.p.placeKey && !placeInTree(index, cond.p.placeKey) ? { kind: 'place', name: cond.p.placeName || cond.p.placeKey } : null;
+        case 'livedInHouse':
+            return cond.p.house && !ruleHouseOf(index, cond.p.house) ? { kind: 'place', name: cond.p.houseName || cond.p.house } : null;
         case 'list':
             return cond.p.listId && !personListsOf(data).some(l => l.id === cond.p.listId) ? { kind: 'list', name: cond.p.listName || '?' } : null;
         case 'rod':
@@ -544,6 +588,7 @@ function computeCond(index: LineageIndex, cond: RuleCond, env: ListEnv, st: Eval
             }
             return out;
         }
+        case 'livedInHouse': return livedInHouseIds(index, cond.p);
         case 'gender': {
             const v = cond.p.value;
             return byPerson(data, p => v === 'unknown' ? p.gender !== 'male' && p.gender !== 'female' : p.gender === v);
@@ -891,6 +936,7 @@ export function stripTemplateParams(root: RuleGroup): RuleGroup {
             case 'family': case 'ancestors': case 'descendants':
                 return { ...node, p: { ...node.p, personId: '' as PersonId, personName: '' } } as RuleCond;
             case 'near': return { ...node, p: { ...node.p, placeKey: '', placeName: '' } };
+            case 'livedInHouse': return { ...node, p: { ...structuredClone(node.p), house: '', houseName: '' } };
             case 'list': return { ...node, p: { listId: '', listName: '' } };
             case 'rod': return { ...node, p: { rodIds: [], rodName: '' } };
             case 'line': return { ...node, p: { directionId: '', lineName: '' } };
@@ -1010,6 +1056,12 @@ export function condLabel(cond: RuleCond, index?: LineageIndex, filterWords?: Fi
             const all = (['birth', 'death', 'marriage', 'residence'] as const).every(e => cond.p.events.includes(e));
             const events = all ? null : (['birth', 'death', 'marriage', 'residence'] as const).filter(e => cond.p.events.includes(e)).map(e => t.say.events[e]);
             return t.say.near(events, gone(cond.p.placeName || cond.p.placeKey, missing), cond.p.km, !!cond.p.below);
+        }
+        case 'livedInHouse': {
+            const house = index ? ruleHouseOf(index, cond.p.house) : null;
+            const y = cond.p.years;
+            return t.say.livedInHouse(gone(house ? houseTitle(house) : cond.p.houseName || cond.p.house || '?', missing),
+                y && (y.from !== undefined || y.to !== undefined) ? yearsText(y) : null);
         }
         case 'gender': return t.say.gender[cond.p.value];
         case 'occupation': return t.say.occupation((cond.p.labels.length ? cond.p.labels : cond.p.values).join(', '));

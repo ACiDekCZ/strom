@@ -284,6 +284,7 @@ function filledParam(root: RuleGroup, need: 'person' | 'place'): string {
             return p ? shownName(p) : node.p.personName;
         }
         if (need === 'place' && node.c === 'near' && node.p.placeKey) return node.p.placeName;
+        if (need === 'place' && node.c === 'livedInHouse' && node.p.house) return node.p.houseName;
         return '';
     };
     return walk(root);
