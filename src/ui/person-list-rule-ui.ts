@@ -394,6 +394,8 @@ export const personListRuleMethods = uiModule({
                 cell.classList.toggle('is-busy', !need && busy);
             }
             const m = row.querySelector<HTMLElement>(':scope > .plr-m');
+            // A condition's hint follows a typed field too (the years of "Lived in the house": its preview's count).
+            if (m && node.t === 'cond') this.ruleRowHintRefresh(m, node, path);
             const mark = m?.querySelector<HTMLElement>(':scope > .plr-zero');
             if (zeroAt === path && m && !mark) {
                 const z = document.createElement('span');
@@ -402,6 +404,28 @@ export const personListRuleMethods = uiModule({
                 m.querySelector(':scope > .plr-n')?.after(z);
             } else if (zeroAt !== path) mark?.remove();
         }
+    },
+
+    /**
+     * A condition row's plain hint (an editor's `hint`) as its parameters say now: kept, changed, added or
+     * taken away in place, without drawing the row again (the focus stays in the field being typed in).
+     */
+    ruleRowHintRefresh(m: HTMLElement, node: RuleCond, path: string): void {
+        const editor = ruleCondEditor(node.c);
+        if (!editor?.hint || editor.hintHtml) return;
+        const text = editor.hint(node as never, this.ruleEditorCtx(path));
+        let el = m.querySelector<HTMLElement>(':scope > .plr-s:not(.plr-cyc):not(.plr-sx)');
+        if (!text) {
+            el?.remove();
+            return;
+        }
+        if (!el) {
+            el = document.createElement('span');
+            el.className = 'plr-s';
+            const before = m.querySelector(':scope > .plr-sx');
+            if (before) before.before(el); else m.append(el);
+        }
+        if (el.textContent !== text) el.textContent = text;
     },
 
     /** A click in the builder (true: it was the builder's). */
