@@ -44,6 +44,30 @@ import { activatedElement } from './busy.js';
 import { showProgressToast, type ProgressStep } from './toast.js';
 import { setMirroredResearchStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
+import { setInShowcaseLookup } from '../research-link.js';
+import { keepShowcaseResearch, restoreShowcaseResearch, showcaseSnapshot } from '../showcase-bridge.js';
+import { isBridgelessWindow } from '../research-device.js';
+
+/** The open tree is a showcase (TreeMetadata.sample): its research only read, nothing ever sent (spec 143 K4.1). */
+export function openTreeIsShowcase(): boolean {
+    if (DataManager.isViewMode()) return false;
+    const id = DataManager.getCurrentTreeId();
+    return !!id && !!TreeManager.getTreeMetadata(id)?.sample;
+}
+
+setInShowcaseLookup(openTreeIsShowcase);
+
+/** The research ids of the showcase trees kept in this browser (lowercase). */
+function showcaseResearchIds(): Set<string> {
+    return new Set(TreeManager.getTrees().filter(t => t.sample && t.research?.id).map(t => t.research!.id.toLowerCase()));
+}
+
+/** The snapshot's status mirrored as its research's (what reads the status reads it; nothing asked of a bridge). */
+function mirrorShowcaseStatus(researchId: string): void {
+    const raw = showcaseSnapshot(researchId)?.status;
+    const status = raw ? sanitizeLiveStatus(raw) : null;
+    if (status) setMirroredResearchStatus(researchId, status);
+}
 
 /** How long the offer of a newer showcase stands (it has two actions to read). */
 const OFFER_MS = 15_000;
@@ -426,8 +450,20 @@ export const showcaseOpenMethods = uiModule({
             sendMode: 'off',
         });
         this.researchKeepCopy(treeId, loaded);
-        const status = file.research?.status ? sanitizeLiveStatus(file.research.status) : null;
-        if (status) setMirroredResearchStatus(id, status);
+        // Its snapshot kept with the research (it reads after a restart too) and answered in the page from now on.
+        if (file.research && file.research.id.toLowerCase() === id.toLowerCase()) keepShowcaseResearch(file.research);
+        mirrorShowcaseStatus(id);
+    },
+
+    /**
+     * At the start (the main window): the research snapshots of the showcase
+     * trees still here answer again in the page, their status mirrored as
+     * after the opening; the snapshots of trees gone are forgotten.
+     */
+    initShowcaseResearch(): void {
+        if (isBridgelessWindow()) return;
+        const ids = showcaseResearchIds();
+        for (const snap of restoreShowcaseResearch(id => ids.has(id))) mirrorShowcaseStatus(snap.id);
     },
 
     /** A showcase tree half made goes again; the tree open before it opens again. */

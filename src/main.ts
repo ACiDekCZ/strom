@@ -962,6 +962,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Opening from outside: ?import-url= / ?live= (Strom Research on this
         // computer) and the installed app's file handler (launchQueue). Reads
         // its parameters before handleUrlImportParam may clear the address.
+        // The showcases' research (spec 143 K4): their snapshots answer again in the page, before anything asks.
+        UI.initShowcaseResearch();
         const externalOpen = UI.initExternalOpen();
         // Where a research tree stands with its research (a research that says so).
         UI.initResearchSync();
