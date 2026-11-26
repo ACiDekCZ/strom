@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.33.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Stammbaum verschenken**: *Stammbaum verschenken…* im Personenmenü, auf der Personenseite und unter *Aktionen › Für die Familie* bereitet den Teil des Stammbaums einer Person als Geschenk vor: ihre Vorfahren mit den Familien um sie herum (Tanten, Onkel und Cousins bis zur gewählten Tiefe, Zweige lassen sich in einer Vorschau einzeln hinzufügen oder entfernen), ihren eigenen Haushalt und ihre Nachkommen – ohne die andere Seite des Stammbaums und ohne Vorfahren von Partnern. Ein Assistent in sechs Schritten legt fest, was bei Lebenden sichtbar ist (jede sensible Angabe einzeln: Geburtsdaten, Adressen, Kontakte, Fotos, Notizen, Konfession, Quellen), was ins Paket kommt und den Begleitbrief mit einer Nachricht, und erstellt eine ZIP-Datei: *Hier beginnen* mit der Nachricht und dem Stammbaum in Zahlen, die Strom-App mit dem Stammbaum, die Familienseiten, das Familienbuch, den Ahnenfächer und eine GEDCOM-Datei – alles gleich geschützt. Ein weihnachtliches Aussehen ist wählbar. Ein Paar bekommt ein Paket; aus einer Personenliste oder einer Auswahl bekommt jede Person ein eigenes Paket in einer ZIP-Datei. Die Einstellungen bleiben für das nächste Mal bei der Person. Der Export-Dialog hat den neuen Umfang *Stammbaum einer Person…* für alle Formate, und *Nur aktuelle Ansicht* bietet jetzt ebenfalls alle Formate.
+
 ## 3.32.0
 
 *Veröffentlicht am 25. November 2026.*

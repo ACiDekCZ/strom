@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.33.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Darovat rodokmen**: *Darovat rodokmen…* v nabídce osoby, na stránce osoby a v *Akce › Pro rodinu* připraví kus stromu té osoby jako dárek: její předky s rodinami kolem nich (tety, strýce a bratrance do zvolené hloubky, větve jde v náhledu přidat nebo ubrat po jedné), její domácnost a potomky – bez druhé strany stromu a bez předků partnerů. Průvodce v šesti krocích určí, co se u žijících ukáže (každý citlivý údaj zvlášť: data narození, adresy, kontakty, fotky, poznámky, vyznání, prameny), co bude v balíčku a průvodní list se vzkazem, a vytvoří jeden ZIP: *Začít zde* se vzkazem a rodokmenem v číslech, aplikaci Strom s rodokmenem, stránky rodiny, knihu rodu, vějíř předků a soubor GEDCOM – všechno chráněné stejně. Vánoční vzhled je volitelný. Pár dostane jeden balíček; ze seznamu osob nebo z výběru dostane každá osoba vlastní balíček v jednom ZIPu. Nastavení zůstane u osoby pro příště. Dialog Export má nový rozsah *Rodokmen osoby…* pro všechny formáty a *Jen aktuální pohled* nově také nabízí všechny formáty.
+
 ## 3.32.0
 
 *Vydáno 25. listopadu 2026.*

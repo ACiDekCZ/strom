@@ -4,6 +4,12 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.33.0
+
+*Ta wersja jest w przygotowaniu; ta sekcja rośnie z każdą wersją testową.*
+
+- **Podarować rodowód**: *Podarować rodowód…* w menu osoby, na stronie osoby i w *Akcje › Dla rodziny* przygotowuje część drzewa tej osoby jako prezent: jej przodków z rodzinami wokół nich (ciotki, wujków i kuzynów do wybranej głębokości, gałęzie można w podglądzie dodawać lub usuwać pojedynczo), jej własne gospodarstwo domowe i potomków – bez drugiej strony drzewa i bez przodków partnerów. Kreator w sześciu krokach ustala, co widać u żyjących (każda wrażliwa dana osobno: daty urodzenia, adresy, kontakty, zdjęcia, notatki, wyznanie, źródła), co trafi do paczki oraz list przewodni z wiadomością, i tworzy jeden plik ZIP: *Zacznij tutaj* z wiadomością i rodowodem w liczbach, aplikację Strom z rodowodem, strony rodziny, księgę rodu, wachlarz przodków i plik GEDCOM – wszystko chronione tak samo. Świąteczny wygląd jest opcjonalny. Para dostaje jedną paczkę; z listy osób lub z zaznaczenia każda osoba dostaje własną paczkę w jednym pliku ZIP. Ustawienia zostają przy osobie na następny raz. Okno Eksport ma nowy zakres *Rodowód osoby…* dla wszystkich formatów, a *Tylko bieżący widok* również oferuje teraz wszystkie formaty.
+
 ## 3.32.0
 
 *Wydano 25 listopada 2026.*

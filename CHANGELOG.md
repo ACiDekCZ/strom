@@ -2,6 +2,12 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.33.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Give a family tree**: *Give a family tree…* in a person's menu, on the person page and under *Actions › For the family* prepares that person's part of the tree as a gift: their ancestors with the families around them (aunts, uncles and cousins down to the chosen depth, branches added or removed one by one in a preview), their own household and descendants — without the other side of the tree or partners' ancestors. A guide in six steps decides what living people show (each sensitive detail on its own: birth dates, addresses, contacts, photos, notes, religion, sources), what goes into the package and the cover letter with a message, then makes one ZIP: *Start here* with the message and the tree in numbers, the Strom app with the tree, the family pages, the family book, the ancestor fan and a GEDCOM file — all protected the same way. A Christmas look is optional. A couple gets one package; from a person list or a selection every person gets their own package in one ZIP. The settings stay with the person for next time. The Export dialog gains the scope *Person's family tree…* for every format, and *Current view only* now offers every format too.
+
 ## 3.32.0
 
 *Released 25 November 2026.*
