@@ -60,8 +60,15 @@ async function paired(page: Page, gw: FakeGateway): Promise<void> {
     await page.waitForFunction(() => !!(globalThis as { __stromDeviceAgent?: unknown }).__stromDeviceAgent);
 }
 
-/** The flow started as a button of the device would start it (not awaited: the sheet waits for the person). */
+/**
+ * The flow started as a button of the device would start it (not awaited: the sheet waits for the person). First
+ * the gateway's status read in the page: the device actions it announces (`agent.start`) give the sheet's primary
+ * its mark, and the hook is there as soon as the device is paired, before that status (the Research screen draws
+ * its buttons only after it).
+ */
 async function start(page: Page, link: string, o: { only?: string } = {}): Promise<void> {
+    await expect.poll(() => page.evaluate(() =>
+        (globalThis as unknown as { __stromDeviceAgent: { actions(): string[] } }).__stromDeviceAgent.actions())).toContain('agent.start');
     await page.evaluate(([l, only]) => {
         type Hook = { start(link: string, ctx?: unknown): Promise<string> };
         const h = (globalThis as unknown as { __stromDeviceAgent: Hook }).__stromDeviceAgent;

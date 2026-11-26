@@ -271,12 +271,14 @@ interface SheetHandle {
 export const deviceAgentMethods = uiModule({
     /**
      * The browser tests' way to the flow before the Research screen draws its buttons (only in the device mode,
-     * called once the device is paired): `__stromDeviceAgent.start(link, ctx)`.
+     * called once the device is paired): `__stromDeviceAgent.start(link, ctx)`. `actions()`: the device actions the
+     * last status announced (none before the first status is read: a sheet then draws its primary without a mark).
      */
     exposeDeviceAgentForTests(): void {
         (globalThis as Record<string, unknown>).__stromDeviceAgent = {
             start: (link: string, ctx?: DeviceAgentCtx) => this.startAgentFromDevice(link, ctx),
             state: (tree: string) => deviceAgentStartOf(tree),
+            actions: () => [...(researchDeviceState()?.actions ?? [])],
         };
     },
 
