@@ -22,12 +22,12 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage, getStringsForLang } from '../strings.js';
 import { PrivacyMode } from '../privacy.js';
-import { PersonId, StromData, TreeId } from '../types.js';
+import { HouseId, PersonId, StromData, TreeId } from '../types.js';
 import { buildFamilyBook, buildFamilyBookAsync, type BookBuildEnv } from '../book.js';
 import { bookFileName, bookPreparingHtml } from '../book-window.js';
 import {
-    BOOK_PART_KEYS, BookDetail, BookEnv, BookEstimate, BookLang, BookOptions, BookPartKey, BookSelectionSpec,
-    autoBookTitle, bookPartAvailability, bookPeriod, bookRodCounts, estimateBook,
+    BOOK_HOUSE_PARTS, BOOK_PART_KEYS, BookDetail, BookEnv, BookEstimate, BookLang, BookOptions, BookPartKey, BookSelectionSpec,
+    autoBookTitle, bookHouseDefaults, bookPartAvailability, bookPeriod, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
     BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PAGES_GROUP_KEYS, PagesChoices, PagesGroups,
@@ -158,6 +158,8 @@ interface DialogState {
     hasHouse: boolean;
     /** The tree's houses, worked out once per opening when the House tile is used. */
     houses?: TreeHouse[];
+    /** The tree's houses whose history the research has done (the Houses chapter, K7.3). */
+    finishedHouses: ReadonlySet<HouseId>;
     /** The scope sentence under the house, kept for its house. */
     houseScope?: { key: string; text: string };
     /** The book took the whole tree for chosen people: said once under the selection, until the next change. */
@@ -245,6 +247,18 @@ function selectionOf(s: DialogState): BookSelectionSpec | null {
 function housesOf(s: DialogState): TreeHouse[] {
     if (!s.houses) s.houses = collectHouses(s.data);
     return s.houses;
+}
+
+/** What the parts' availability takes besides the data and the options. */
+function partsEnvOf(s: DialogState): BookEnv {
+    // The tree's houses only for a tree that has some (the Houses chapter and the index of houses, spec 030 §8).
+    return { index: s.index, hasHistory: s.hasHistory, houses: s.hasHouse ? housesOf(s) : [], finishedHouses: s.finishedHouses };
+}
+
+/** The house parts the tree cannot have with these options: not remembered, so their default still follows the tree. */
+function unavailableHouseParts(s: DialogState, opts: BookOptions): BookPartKey[] {
+    const avail = bookPartAvailability(s.data, opts, partsEnvOf(s));
+    return BOOK_HOUSE_PARTS.filter(k => !avail[k].available);
 }
 
 /** The chosen house, or null. */
@@ -601,8 +615,7 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
     const sel = selectionOf(s);
     const ready = selectionReady(sel);
     const opts = currentOptions(s);
-    // The tree's houses only for a tree that has some (the index of houses, spec 030 §8).
-    const env = { index: s.index, hasHistory: s.hasHistory, houses: s.hasHouse ? housesOf(s) : [] };
+    const env = partsEnvOf(s);
 
     // Presets, and the hint line while Custom is chosen (§4.9)
     const P = s.presets;
@@ -1022,7 +1035,10 @@ function mountSelPicker(s: DialogState, host: HTMLElement): void {
 
 /** What the memory keeps besides the options: the output, the pages' choices, the preset and Custom's values. */
 function memoryExtra(s: DialogState): Parameters<typeof saveBookMemory>[3] {
-    return { output: s.output, pages: s.pages, preset: s.presets.preset, custom: s.presets.custom };
+    return {
+        output: s.output, pages: s.pages, preset: s.presets.preset, custom: s.presets.custom,
+        omitParts: unavailableHouseParts(s, currentOptions(s)),
+    };
 }
 
 /** A change: remember the options (not the selection's person or the title) and refresh. */
@@ -1125,9 +1141,16 @@ export const bookUiMethods = uiModule({
         const treeId = TreeManager.getActiveTreeId();
         const appLang = appBookLang();
         const memory = loadBookMemory(storage(), treeId);
+        // A book of a house only while the tree has a numbered house (spec 030 §8); the houses whose history the
+        // research has done put the Houses chapter and the index of houses on by default (K7.3).
+        const hasHouse = hasNumberedHouse(data);
+        const treeHouses = hasHouse ? collectHouses(data) : undefined;
+        if (hasHouse) this.houseStatesSync();
+        const finishedHouses = this.bookFinishedHouses(treeHouses ?? []);
         const opts = reuse
             ? { ...reuse.options, parts: { ...reuse.options.parts } }
-            : bookOptionsFromMemory(appLang, memory, over?.selection ?? bookEntrySelection(entry, index, memory?.lastRods));
+            : bookOptionsFromMemory(appLang, memory, over?.selection ?? bookEntrySelection(entry, index, memory?.lastRods),
+                bookHouseDefaults({ finishedHouses }));
         const sel = opts.selection;
         // A small lineage is listed only when the entry asks for it (its pages' window's Save as file).
         const all = new Set(allRods(index).map(r => r.id));
@@ -1148,8 +1171,7 @@ export const bookUiMethods = uiModule({
         // Chosen people are for the pages only: the book takes the whole tree and says so (1102 §3.1).
         const personsBook = !!over?.personsBook && sel.kind === 'persons';
         const movedToTree = sel.kind === 'persons' && output !== 'pages' && !personsBook;
-        // A book of a house only while the tree has a numbered house, and never as pages (spec 030 §8).
-        const hasHouse = hasNumberedHouse(data);
+        // A book of a house never as pages (spec 030 §8).
         const houseGone = sel.kind === 'house' && (!hasHouse || output === 'pages');
         if (st?.job) st.job.cancelled = true;
         if (st?.estTimer != null) clearTimeout(st.estTimer);
@@ -1168,6 +1190,8 @@ export const bookUiMethods = uiModule({
             personsBook,
             house: sel.kind === 'house' ? { place: sel.place, house: sel.house } : null,
             hasHouse,
+            ...(treeHouses ? { houses: treeHouses } : {}),
+            finishedHouses,
             moved: movedToTree,
             opts,
             presets: initialPresetState(opts, memory),
@@ -1705,6 +1729,14 @@ export const bookUiMethods = uiModule({
         return buildFamilyBook(data, options, this.familyBookEnv(options, forSave));
     },
 
+    /** The houses whose history the research has done, of these houses of the tree (by the research's list read so far). */
+    bookFinishedHouses(houses: readonly TreeHouse[]): ReadonlySet<HouseId> {
+        const out = new Set<HouseId>();
+        if (!houses.length || !this.houseResearchBridge()) return out;
+        for (const h of houses) if (this.houseResearchRow(h)?.state === 'done') out.add(h.id);
+        return out;
+    },
+
     /** What the book is built with besides the data and the options (window or saved file). */
     familyBookEnv(options: BookOptions, forSave: boolean): BookBuildEnv {
         const data = DataManager.getData();
@@ -1719,6 +1751,7 @@ export const bookUiMethods = uiModule({
             personHistory: (id) => this.personPageHistory(id),
             // The research's results of houses read so far (the Houses window reads them): the index of houses.
             houseResearch: (house) => this.houseResearchRead(house),
+            finishedHouses: this.bookFinishedHouses(options.parts.houses && hasNumberedHouse(data) ? collectHouses(data) : []),
             ...(forSave ? { forSave: true } : {
                 approveStoryUrl: (p) => this.storyApproveUrl(p.id),
                 storyDraftUrls: (owner) => this.storyCompareUrls('person' in owner

@@ -5,7 +5,7 @@
  * or `lifelineDefaults` (§4.3).
  */
 
-import { PersonId, StromData } from './types.js';
+import { HouseId, PersonId, StromData } from './types.js';
 import { personSourceIds, partnershipSourceIds } from './model-values.js';
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang } from './strings.js';
@@ -22,23 +22,36 @@ export type BookDetail = 'brief' | 'normal' | 'all';
 export type BookPreset = 'family' | 'research' | 'custom';
 
 /**
- * The parts in the order of the dialog and the book; `houses` (spec 030 part 2) will follow `smallRods`.
- * `houseIndex` (spec 030 §8) is the index of houses after the index of people.
+ * The parts in the order of the dialog and the book: `houses` (spec 030 §8, K7.3) is the Houses chapter after
+ * the other families, `houseIndex` the index of houses after the index of people.
  */
-export const BOOK_PART_KEYS = ['toc', 'tree', 'families', 'story', 'chart', 'history', 'sources', 'media', 'smallRods', 'index', 'houseIndex'] as const;
+export const BOOK_PART_KEYS = ['toc', 'tree', 'families', 'story', 'chart', 'history', 'sources', 'media', 'smallRods', 'houses', 'index', 'houseIndex'] as const;
 export type BookPartKey = typeof BOOK_PART_KEYS[number];
 export type BookParts = Record<BookPartKey, boolean>;
 
-/** Parts off by default and outside the presets (a preset keeps what they say): the index of houses. */
-const OPTIONAL_PARTS: ReadonlySet<BookPartKey> = new Set(['houseIndex']);
+/**
+ * Parts outside the presets (a preset keeps what they say): the Houses chapter and the index of houses.
+ * Off by default; on when the tree has a house with its history done (bookHouseDefaults, K7.3).
+ */
+const OPTIONAL_PARTS: ReadonlySet<BookPartKey> = new Set(['houses', 'houseIndex']);
+/** The parts whose default depends on the tree (bookHouseDefaults). */
+export const BOOK_HOUSE_PARTS: readonly BookPartKey[] = ['houses', 'houseIndex'];
 
-/** Every part ticked but the optional ones (`houseIndex` off by default, spec 030 §8). */
-export function defaultBookParts(): BookParts {
-    return Object.fromEntries(BOOK_PART_KEYS.map(k => [k, !OPTIONAL_PARTS.has(k)])) as BookParts;
+/** Every part ticked but the optional ones (`houses`, `houseIndex`: see bookHouseDefaults). */
+export function defaultBookParts(houses = false): BookParts {
+    return Object.fromEntries(BOOK_PART_KEYS.map(k => [k, OPTIONAL_PARTS.has(k) ? houses : true])) as BookParts;
+}
+
+/**
+ * The default of the Houses chapter and of the index of houses (spec 030 §8, K7.3, question 3): on when the
+ * tree has a house whose history the research has done, otherwise off.
+ */
+export function bookHouseDefaults(env: Pick<BookEnv, 'finishedHouses'>): boolean {
+    return !!env.finishedHouses && env.finishedHouses.size > 0;
 }
 
 /** Parts that can be unavailable, with the reason the dialog shows (§4.3). */
-export type BookPartReasonKey = 'story' | 'chart' | 'history' | 'sources' | 'media' | 'smallRods' | 'houseIndex';
+export type BookPartReasonKey = 'story' | 'chart' | 'history' | 'sources' | 'media' | 'smallRods' | 'houses' | 'houseIndex' | 'houseIndexChapter';
 
 export interface BookOptions {
     selection: BookSelectionSpec;
@@ -96,6 +109,8 @@ export interface BookEnv {
     hasHistory?: boolean;
     /** The tree's houses (collectHouses of the same data), worked out once by the caller. */
     houses?: readonly TreeHouse[];
+    /** The tree's houses whose history the research has done (the research's list, state `done`). */
+    finishedHouses?: ReadonlySet<HouseId>;
 }
 
 function indexOf(data: StromData, env: BookEnv): LineageIndex {
@@ -111,6 +126,21 @@ export function bookHouses(data: StromData, personIds: Iterable<PersonId>, house
     const ids = new Set<PersonId>();
     for (const id of personIds) if (data.persons[id] && !data.persons[id].isPlaceholder) ids.add(id);
     return ids.size ? houses.filter(h => h.personIds.some(id => ids.has(id))) : [];
+}
+
+/**
+ * The houses of the Houses chapter (spec 030 §8, K7.3): the book's houses with their history done by the
+ * research or above the threshold (2 generations or 30 years, isOverThreshold).
+ */
+export function bookChapterHouses(data: StromData, personIds: Iterable<PersonId>, houses: readonly TreeHouse[] = collectHouses(data),
+    finished: ReadonlySet<HouseId> = new Set()): TreeHouse[] {
+    return bookHouses(data, personIds, houses).filter(h => h.overThreshold || finished.has(h.id));
+}
+
+/** The Houses chapter's pages: the introduction, then a house's head, its numbers and records (35 rows a page). */
+export function housesChapterPages(houses: readonly TreeHouse[]): number {
+    if (!houses.length) return 0;
+    return 0.5 + houses.reduce((n, h) => n + 0.4 + (h.numbers.length + new Set(h.facts.map(f => f.factRef)).size) / 35, 0);
 }
 
 /** Every part's availability and the reason when it is not (§4.3). */
@@ -129,12 +159,19 @@ export function bookPartAvailability(data: StromData, options: BookOptions, env:
         || Object.values(catalog).some(s => (s.excerpts ?? []).length > 0);
     const state = (available: boolean, key: BookPartReasonKey): BookPartState =>
         ({ available, reason: available ? '' : B.unavailable[key] });
-    // The index of houses: with a house with a number among the book's people (part 1 of spec 030; with the
-    // Houses chapter of part 2 it will follow that chapter).
-    const houseCount = bookHouses(data, sel.personIds, env.houses).length;
-    const houseIndex: BookPartState = houseCount
-        ? { available: true, reason: '', note: B.houseIndexNote(houseCount) }
-        : state(false, 'houseIndex');
+    // The Houses chapter (K7.3): the book's houses with history or above the threshold, with its page estimate.
+    const treeHouses = env.houses ?? collectHouses(data);
+    const chapterHouses = bookChapterHouses(data, sel.personIds, treeHouses, env.finishedHouses);
+    const houses: BookPartState = chapterHouses.length
+        ? { available: true, reason: '', note: B.housesNote(chapterHouses.length, Math.max(1, Math.round(housesChapterPages(chapterHouses)))) }
+        : state(false, 'houses');
+    // The index of houses: with a house with a number among the book's people, and with the Houses chapter
+    // ticked (§8); a book of a house has it on its own (K1.3: the index goes with the house selection).
+    const houseCount = bookHouses(data, sel.personIds, treeHouses).length;
+    const withChapter = options.selection.kind === 'house' || (options.parts.houses && houses.available);
+    const houseIndex: BookPartState = !houseCount ? state(false, 'houseIndex')
+        : withChapter ? { available: true, reason: '', note: B.houseIndexNote(houseCount) }
+            : state(false, 'houseIndexChapter');
     return {
         toc: { available: true, reason: '' },
         tree: { available: true, reason: '' },
@@ -145,6 +182,7 @@ export function bookPartAvailability(data: StromData, options: BookOptions, env:
         sources: state(hasSources, 'sources'),
         media: state(hasMedia, 'media'),
         smallRods: state(options.selection.kind === 'tree', 'smallRods'),
+        houses,
         index: { available: true, reason: '' },
         houseIndex,
     };
@@ -273,6 +311,9 @@ export function estimateBook(data: StromData, options: BookOptions, env: BookEnv
     if (parts.smallRods && model.smallRods.length) pages += 0.5 + model.smallRods.length / 14;
     if (parts.sources) pages += cited.size / 28;
     if (parts.index) pages += 0.5 + persons / 90;
+    // The Houses chapter (K7.3).
+    const chapterHouses = parts.houses ? bookChapterHouses(data, model.personIds, env.houses, env.finishedHouses) : [];
+    pages += housesChapterPages(chapterHouses);
     // The index of houses: a house's head and its people, 40 rows a page.
     const houses = parts.houseIndex ? bookHouses(data, model.personIds, env.houses) : [];
     if (houses.length) pages += 0.5 + houses.reduce((n, h) => n + 1 + h.personIds.length, 0) / 40;
@@ -286,6 +327,7 @@ export function estimateBook(data: StromData, options: BookOptions, env: BookEnv
         outline.push(B.outlineFamilies(range(model.chapters)));
     }
     if (parts.smallRods && model.smallRods.length) outline.push(B.parts.smallRods);
+    if (chapterHouses.length) outline.push(B.parts.houses);
     if (parts.sources && cited.size) outline.push(B.parts.sources);
     if (parts.index) outline.push(B.parts.index);
     if (houses.length) outline.push(B.parts.houseIndex);

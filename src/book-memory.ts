@@ -23,7 +23,7 @@ import { chapterRods } from './book-model.js';
 import { ImageChoice } from './image-registry.js';
 import type { BookPresetValues } from './book-preset.js';
 import {
-    BOOK_PART_KEYS, BookDetail, BookLang, BookOptions, BookParts, BookPreset, BookSelectionSpec,
+    BOOK_PART_KEYS, BookDetail, BookLang, BookOptions, BookPartKey, BookParts, BookPreset, BookSelectionSpec,
     applyBookPreset, bookPresetOf, defaultBookOptions, defaultBookParts,
 } from './book-options.js';
 
@@ -216,7 +216,7 @@ export function loadBookMemory(storage: StorageLike | null | undefined, treeId: 
  */
 export function saveBookMemory(
     storage: StorageLike | null | undefined, treeId: string | null | undefined, options: BookOptions,
-    extra: { output?: BookOutput; pages?: PagesChoices; preset?: BookPreset; custom?: BookPresetValues | null } = {},
+    extra: { output?: BookOutput; pages?: PagesChoices; preset?: BookPreset; custom?: BookPresetValues | null; omitParts?: readonly BookPartKey[] } = {},
 ): void {
     if (!storage || !treeId) return;
     try {
@@ -226,7 +226,7 @@ export function saveBookMemory(
         const custom = extra.custom !== undefined ? extra.custom : prev?.custom;
         const memory: BookMemory = {
             preset: extra.preset ?? bookPresetOf(options),
-            parts: { ...options.parts },
+            parts: withoutParts(options.parts, extra.omitParts),
             detail: options.detail,
             notes: options.notes,
             research: options.research,
@@ -239,6 +239,16 @@ export function saveBookMemory(
         };
         storage.setItem(bookMemoryKey(treeId), JSON.stringify(memory));
     } catch { /* not kept */ }
+}
+
+/**
+ * The parts to keep: a part the tree could not have when it was saved (the Houses chapter, the index of houses) is
+ * not kept, so its default, which follows the tree's houses, still applies later (spec 030 §8).
+ */
+function withoutParts(parts: BookParts, omit: readonly BookPartKey[] | undefined): BookParts {
+    const out = { ...parts };
+    for (const k of omit ?? []) delete (out as Partial<BookParts>)[k];
+    return out;
 }
 
 function clonePages(p: PagesChoices): PagesChoices {
@@ -255,8 +265,11 @@ export function pagesChoicesFromMemory(memory: Partial<BookMemory> | null): Page
  * fields over them, the entry's selection, no title (automatic). A remembered
  * preset without its parts (an entry cut short) is applied as a preset.
  */
-export function bookOptionsFromMemory(appLang: BookLang, memory: Partial<BookMemory> | null, selection: BookSelectionSpec): BookOptions {
-    let base = defaultBookOptions(memory?.lang ?? appLang);
+export function bookOptionsFromMemory(
+    appLang: BookLang, memory: Partial<BookMemory> | null, selection: BookSelectionSpec, houseDefault = false,
+): BookOptions {
+    // The house parts on by default when the tree has a house with its history done (bookHouseDefaults).
+    let base = { ...defaultBookOptions(memory?.lang ?? appLang), parts: defaultBookParts(houseDefault) };
     if (memory?.preset && memory.preset !== 'custom' && !memory.parts) base = applyBookPreset(base, memory.preset);
     return {
         ...base,

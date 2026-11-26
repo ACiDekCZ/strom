@@ -41,9 +41,13 @@ describe('the index of houses: the part', () => {
         expect(applyBookPreset(opts, 'research').parts.houseIndex).toBe(false);
     });
 
-    it('available with a house with a number among the book\'s people, with how many houses it lists', () => {
+    it('available with a house with a number among the book\'s people and the Houses chapter, with how many houses it lists', () => {
         const data = houseTree();
-        const opts = { ...defaultBookOptions('cs'), parts: { ...defaultBookOptions('cs').parts, houseIndex: true } };
+        // Without the Houses chapter: only with it (spec 030 §8).
+        const alone = { ...defaultBookOptions('cs'), parts: { ...defaultBookOptions('cs').parts, houseIndex: true } };
+        expect(bookPartAvailability(data, alone).houseIndex).toEqual({ available: false, reason: 'Jen s kapitolou Domy.' });
+        expect(effectiveBookParts(data, alone).houseIndex).toBe(false);
+        const opts = { ...defaultBookOptions('cs'), parts: { ...defaultBookOptions('cs').parts, houses: true, houseIndex: true } };
         const avail = bookPartAvailability(data, opts);
         expect(avail.houseIndex).toEqual({ available: true, reason: '', note: '2 domy → osoby, roky' });
         expect(effectiveBookParts(data, opts).houseIndex).toBe(true);

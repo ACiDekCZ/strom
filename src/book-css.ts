@@ -190,6 +190,23 @@ ${PERSON_PAGE_CHART_CSS}
 .book-house-numbers { display: block; color: #5c5546; font-size: 9.5pt; }
 .book-house-person { padding-left: 10px; }
 .book-house-history { margin: 2px 0 0 10px; color: #4a4438; font-size: 9.5pt; }
+/* The Houses chapter (spec 030 §8, K7.3): a house's heading, its name after the farm, rows of years, tables, notes */
+.book-houses-h { font-size: 22.5pt; margin-bottom: 8px; }
+.book-houses-intro { color: #4a4438; }
+.book-house-ch { margin-top: 18px; border-top: 1px solid #e3dccd; padding-top: 10px; }
+.book-house-ch h3 { font-size: 15pt; break-after: avoid; overflow-wrap: anywhere; }
+.book-house-alias { color: #4a4438; margin: 1px 0 6px; }
+.book-house-text { text-align: justify; hyphens: auto; }
+.book-house-rows { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 1px 12px; font-size: 10.5pt; }
+.book-house-rows b { font-weight: 600; color: #8a5528; font-variant-numeric: tabular-nums; }
+.book-house-table { width: 100%; border-collapse: collapse; font-size: 10.5pt; break-inside: avoid; }
+.book-house-table th { text-align: left; font-weight: 600; color: #5c5546; border-bottom: 1px solid #e3dccd; padding: 2px 8px 2px 0; }
+.book-house-table td { padding: 2px 8px 2px 0; vertical-align: top; overflow-wrap: anywhere; }
+.book-house-fn-mark { color: #8a5528; font: 600 7.5pt ${SANS}; margin-left: 1px; }
+.book-house-note { margin-top: 6px; font-size: 10.5pt; }
+.book-house-fns { margin-top: 18px; border-top: 1px solid #e3dccd; padding-top: 6px; font-size: 9.5pt; color: #4a4438; }
+.book-house-fns p { margin: 0 0 2px; }
+.book-house-fns .book-pn { color: #8a5528; font-weight: 600; font-family: ${SANS}; font-size: 9pt; margin-right: 6px; }
 
 /* The window's own controls (the toolbar, the side contents: src/book-window.ts): on screen only */
 .book-nv { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #f6ecd3; color: #7f5500; font: 13px/1.45 ${SANS}; text-align: left; }
@@ -230,6 +247,7 @@ ${STORY_COMPARE_CSS}
     .book-clips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .book-index, .book-sources.is-long { column-count: 1; }
     .book-house-person, .book-house-history { padding-left: 6px; margin-left: 0; }
+    .book-house-rows { grid-template-columns: 64px minmax(0, 1fr); gap: 1px 8px; }
     .pp-row { grid-template-columns: 52px 18px minmax(0, 1fr); }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .book-title-page { min-height: auto; padding: 24px 0; } }

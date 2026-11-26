@@ -10,7 +10,7 @@
  * date and "now" are injected). Typesetting lives in src/book-css.ts.
  */
 
-import { Partnership, Person, PersonId, PartnershipId, StromData, Story, StoryDraft } from './types.js';
+import { HouseId, Partnership, Person, PersonId, PartnershipId, StromData, Story, StoryDraft } from './types.js';
 import { applyLivingPrivacy, inferBirthUpperBounds, isLivingPerson, stripResearchWork } from './privacy.js';
 import { stripMedia } from './attachments.js';
 import { formatFlexDate, yearOf } from './dates.js';
@@ -24,10 +24,11 @@ import { shownName } from './person-name.js';
 import { buildLineages } from './lineage.js';
 import { PersonPageContext } from './person-page.js';
 import { BookChapter, buildBookModel } from './book-model.js';
-import { BookLang, BookOptions, BookParts, autoBookTitle, bookHouses, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
+import { BookLang, BookOptions, BookParts, autoBookTitle, bookChapterHouses, bookHouses, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
 import { collectHouses, withResearchNumbers, type TreeHouse } from './houses.js';
 import type { HouseResearch } from './house-bridge.js';
 import { houseOutputFilter, housePrivacyContext } from './house-privacy.js';
+import { housesChapterHtml, type BookHouseChapterEntry } from './book-houses.js';
 import {
     BookCtx, BookHouseEntry, BookLinkTarget, BookSourceNumbers, BookStoryExtras, familyChapterHtml, houseIndexHtml, indexHtml, pairFirstNames, pairName,
     rodHasMaleLine, rodLabelOf, rodLineageHtml, rodOverviewHtml, smallRodsHtml, sourcesHtml,
@@ -76,6 +77,8 @@ export interface BookBuildEnv {
      * its events for the index of houses, filtered as outputs show a house (src/house-privacy.ts).
      */
     houseResearch?: (house: TreeHouse) => HouseResearch | null;
+    /** The tree's houses whose history the research has done: in the Houses chapter even below the threshold (K7.3). */
+    finishedHouses?: ReadonlySet<HouseId>;
 }
 
 function esc(text: string): string {
@@ -133,6 +136,7 @@ export function tocHtml(ctx: BookCtx, parts: BookParts): string {
     }
     const back = (id: string, label: string): string => `<li class="book-toc-rod"><a href="#${id}">${esc(label)}</a></li>`;
     if (parts.smallRods && ctx.model.smallRods.length) rows.push(back('book-small-rods', B.parts.smallRods));
+    if (parts.houses) rows.push(back('book-houses', B.parts.houses));
     if (parts.sources && ctx.sources.no.size) rows.push(back('book-sources', B.sources));
     if (parts.index) rows.push(back('book-index', B.index));
     if (parts.houseIndex) rows.push(back('book-house-index', B.parts.houseIndex));
@@ -182,6 +186,7 @@ function bookSideEntries(ctx: BookCtx, parts: BookParts): BookSideEntry[] {
         for (const ch of ctx.model.chapters) { const e = chapter(ch, 'link'); if (e) out.push(e); }
     }
     if (parts.smallRods && ctx.model.smallRods.length) out.push({ kind: 'link', href: '#book-small-rods', label: esc(B.parts.smallRods) });
+    if (parts.houses) out.push({ kind: 'link', href: '#book-houses', label: esc(B.parts.houses) });
     if (parts.sources && ctx.sources.no.size) out.push({ kind: 'link', href: '#book-sources', label: esc(B.sources) });
     if (parts.index) out.push({ kind: 'link', href: '#book-index', label: esc(B.index) });
     if (parts.houseIndex) out.push({ kind: 'link', href: '#book-house-index', label: esc(B.parts.houseIndex) });
@@ -230,9 +235,13 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     const now = env.now ?? new Date();
     const year = now.getFullYear();
     const index = env.index && env.index.data === data ? env.index : buildLineages(data);
-    // The tree's houses, only for a book that asks for the index of houses (spec 030 §8).
-    const treeHouses = opts.parts.houseIndex ? collectHouses(data) : [];
-    const partsEnv = { index, houses: treeHouses, ...(env.hasHistory !== undefined ? { hasHistory: env.hasHistory } : {}) };
+    // The tree's houses, only for a book that asks for the Houses chapter or the index of houses (spec 030 §8).
+    const treeHouses = opts.parts.houses || opts.parts.houseIndex ? collectHouses(data) : [];
+    const partsEnv = {
+        index, houses: treeHouses,
+        ...(env.hasHistory !== undefined ? { hasHistory: env.hasHistory } : {}),
+        ...(env.finishedHouses ? { finishedHouses: env.finishedHouses } : {}),
+    };
     const parts = effectiveBookParts(data, opts, partsEnv);
     const model = buildBookModel(data, opts.selection, index);
 
@@ -342,23 +351,29 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     if (parts.smallRods && model.smallRods.length) {
         back.push(`<section class="book-sheet book-back" id="book-small-rods">${smallRodsHtml(model.smallRods, ctx)}</section>`);
     }
+    // A house as outputs show it (spec 030 §10): judged on the data before protection, named from the protected tree.
+    const hctx = parts.houses || parts.houseIndex ? housePrivacyContext(data, now) : null;
+    const houseEntry = (house: TreeHouse): BookHouseChapterEntry => {
+        const research = env.houseResearch?.(house) ?? null;
+        return {
+            house, research,
+            name: tree.houses?.[house.id]?.name?.trim() ?? '',
+            numbers: research ? withResearchNumbers(house, research.numbers, data.houses?.[house.id]) : house.numbers,
+            out: houseOutputFilter(house, research, data, now, hctx ?? undefined),
+        };
+    };
+    if (parts.houses && hctx) {
+        const chapter = housesChapterHtml(ctx, bookChapterHouses(data, model.personIds, treeHouses, env.finishedHouses).map(houseEntry), hctx.from, data.sources);
+        if (chapter) back.push(`<section class="book-sheet book-back book-houses" id="book-houses">${chapter}</section>`);
+        else parts.houses = false;
+    }
     if (parts.sources) {
         const list = sourcesHtml(ctx);
         if (list) back.push(`<section class="book-sheet book-back book-sources-page" id="book-sources">${list}</section>`);
     }
     if (parts.index) back.push(`<section class="book-sheet book-back book-index-page" id="book-index">${indexHtml(ctx)}</section>`);
-    if (parts.houseIndex) {
-        // Each house as outputs show it (spec 030 §10): judged on the data before protection, named from the protected tree.
-        const hctx = housePrivacyContext(data, now);
-        const entries: BookHouseEntry[] = bookHouses(data, model.personIds, treeHouses).map(house => {
-            const research = env.houseResearch?.(house) ?? null;
-            return {
-                house,
-                name: tree.houses?.[house.id]?.name?.trim() ?? '',
-                numbers: research ? withResearchNumbers(house, research.numbers, data.houses?.[house.id]) : house.numbers,
-                out: houseOutputFilter(house, research, data, now, hctx),
-            };
-        });
+    if (parts.houseIndex && hctx) {
+        const entries: BookHouseEntry[] = bookHouses(data, model.personIds, treeHouses).map(houseEntry);
         back.push(`<section class="book-sheet book-back book-index-page" id="book-house-index">${houseIndexHtml(ctx, entries, hctx.from)}</section>`);
     }
 
