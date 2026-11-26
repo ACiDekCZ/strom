@@ -1,0 +1,195 @@
+import { test, expect, Page, Locator, Download } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { inflateRawSync } from 'node:zlib';
+import { openApp, card, cardAction } from './helpers.js';
+
+/**
+ * Give a family tree… → Create package (spec 093 §5, §8): the package made
+ * for Daniel Berg of the sample tree is a ZIP with one folder holding the
+ * cover page ("Start here.html"), the app with the cut's data opening on
+ * Daniel, the family pages, the book, the ancestor fan and the GEDCOM. A
+ * hidden detail of a living person outside the household (Eva Berg's e-mail
+ * and address, fictional, added for the test) is in none of its files.
+ * On a computer the file downloads at once; on a phone through "Save to
+ * Files". Cancelling while it is made says "Cancelled" and downloads nothing.
+ */
+
+const TODAY = new Date('2026-12-10T10:00:00');
+const EMAIL = 'eva.test@example.invalid';
+const ADDRESS = 'Fjordveien 12';
+
+/** The entries of a ZIP (stored or deflated), by path. */
+function readZip(buf: Buffer): Map<string, Buffer> {
+    const out = new Map<string, Buffer>();
+    let eocd = buf.length - 22;
+    while (eocd >= 0 && buf.readUInt32LE(eocd) !== 0x06054b50) eocd--;
+    if (eocd < 0) throw new Error('not a ZIP');
+    const count = buf.readUInt16LE(eocd + 10);
+    let at = buf.readUInt32LE(eocd + 16);
+    for (let i = 0; i < count; i++) {
+        const method = buf.readUInt16LE(at + 10);
+        const csize = buf.readUInt32LE(at + 20);
+        const nameLen = buf.readUInt16LE(at + 28);
+        const extraLen = buf.readUInt16LE(at + 30);
+        const commentLen = buf.readUInt16LE(at + 32);
+        const local = buf.readUInt32LE(at + 42);
+        const name = buf.subarray(at + 46, at + 46 + nameLen).toString('utf8');
+        const dataAt = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+        const raw = buf.subarray(dataAt, dataAt + csize);
+        out.set(name, method === 8 ? inflateRawSync(raw) : Buffer.from(raw));
+        at += 46 + nameLen + extraLen + commentLen;
+    }
+    return out;
+}
+
+async function sampleOnDaniel(page: Page): Promise<void> {
+    await page.clock.setFixedTime(TODAY);
+    await openApp(page);
+    await page.evaluate(async ({ email, address }) => {
+        await window.Strom.UI.loadDemoTree();
+        // A living person outside Daniel's household with a contact and an address (fictional).
+        const eva = window.Strom.DataManager.getData().persons['demo_eva' as never] as unknown as Record<string, unknown>;
+        eva.emails = [email];
+        eva.birthAddress = address;
+        eva.events = [...((eva.events as unknown[]) ?? []), { id: 'ev_gift_test', type: 'residence', place: 'Bergen', address }];
+        await window.Strom.TreeRenderer.setFocus('demo_daniel' as never);
+    }, { email: EMAIL, address: ADDRESS });
+    await expect(card(page, 'Daniel')).toBeVisible();
+}
+
+/** The guide from Daniel's person menu, straight to step 6. */
+async function openOnReview(page: Page): Promise<Locator> {
+    await cardAction(page, 'Daniel', 'gift-tree');
+    const dialog = page.locator('#gift-modal');
+    await expect(dialog).toHaveClass(/active/);
+    // A phone has no side tabs: step 1's "Straight to preview".
+    const phone = (page.viewportSize()?.width ?? 1440) <= 640;
+    await dialog.locator(phone ? '[data-gk="fast-phone"]' : '#gift-nav [data-step="6"]').click();
+    await expect(dialog.locator('.gift-review')).toBeVisible();
+    return dialog;
+}
+
+/** Everything the package holds, checked; returns the entries' paths. */
+function checkPackage(download: Download, buf: Buffer): string[] {
+    expect(download.suggestedFilename()).toBe('Family tree – Daniel Berg – 2026.zip');
+    const zip = readZip(buf);
+    const paths = [...zip.keys()];
+    const folder = 'Family tree – Daniel Berg/';
+    expect(paths.every(p => p.startsWith(folder))).toBe(true);
+    const at = (p: string): Buffer => {
+        const b = zip.get(folder + p);
+        expect(b, p).toBeTruthy();
+        return b!;
+    };
+    // The cover page names the recipient and leads to the parts.
+    const cover = at('Start here.html').toString('utf8');
+    expect(cover).toContain('Daniel');
+    expect(cover).toContain('Family%20pages/index.html');
+    // The app: the cut's data, opening on Daniel.
+    const app = at('Family tree (app).html').toString('utf8');
+    const m = /window\.STROM_EMBEDDED_DATA = (\{[\s\S]*?\});<\/script>/.exec(app);
+    expect(m).toBeTruthy();
+    const envelope = JSON.parse(m![1]) as { data: { defaultPersonId?: string; persons: Record<string, unknown> } };
+    expect(envelope.data.defaultPersonId).toBe('demo_daniel');
+    expect(envelope.data.persons.demo_daniel).toBeTruthy();
+    expect(at('Family pages/index.html').toString('utf8')).toContain('Daniel');
+    expect(at('Family book.html').toString('utf8')).toContain('Berg');
+    expect(at('Ancestor fan.svg').toString('utf8')).toContain('<svg');
+    expect(at('For other programs/Family tree.ged').toString('utf8')).toContain('0 HEAD');
+    // No hidden detail of the living anywhere in the package.
+    for (const [path, b] of zip) {
+        const text = b.toString('utf8');
+        expect(text.includes(EMAIL), `${path} holds the e-mail`).toBe(false);
+        expect(text.includes(ADDRESS), `${path} holds the address`).toBe(false);
+    }
+    return paths;
+}
+
+test('a computer: Create package makes the ZIP with every part, downloads it, and no hidden detail of the living leaks', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await sampleOnDaniel(page);
+    const dialog = await openOnReview(page);
+
+    // Step 6: the numbers, the rows with "Change", the archive's name, the cover page.
+    await expect(dialog.locator('#gift-sub')).toHaveText('step 6 of 6: Preview and create');
+    await expect(dialog.locator('.gift-review-stats .structure-stat')).toHaveCount(4);
+    await expect(dialog.locator('.gift-review-dl .gift-change')).toHaveCount(5);
+    await expect(dialog.locator('[data-gk="file-name"]')).toHaveValue('Family tree – Daniel Berg – 2026.zip');
+    await expect(dialog.locator('.gift-thumb iframe')).toHaveCount(1);
+    await expect(dialog.locator('#gift-next')).toHaveText('Create package');
+
+    const downloaded = page.waitForEvent('download', { timeout: 60_000 });
+    await dialog.locator('#gift-next').click();
+    await expect(dialog.locator('.gift-run')).toBeVisible();
+    const download = await downloaded;
+    await expect(dialog.locator('.gift-run[data-phase="done"] .gift-run-h')).toHaveText('The package is ready', { timeout: 60_000 });
+    await expect(dialog.locator('.gift-done-name')).toHaveText('Family tree – Daniel Berg – 2026.zip');
+    await expect(dialog.locator('.gift-run .gift-note').last()).toContainText('The settings were saved for Daniel Berg');
+    await expect(dialog.locator('[data-gk="run-finish"]')).toHaveText('Done');
+    await expect(dialog.locator('#gift-next')).toBeHidden();
+
+    const paths = checkPackage(download, readFileSync((await download.path())!));
+    expect(paths.some(p => p.endsWith('Ancestor fan.png'))).toBe(true);
+
+    // The cover page in its own window; Escape closes it, the guide stays.
+    await dialog.locator('[data-gk="open-cover"]').click();
+    await expect(page.locator('#gift-cover-modal iframe')).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#gift-cover-modal')).toHaveCount(0);
+    await expect(dialog).toHaveClass(/active/);
+
+    // Done closes the guide; the person menu now carries the day it was made.
+    await dialog.locator('[data-gk="run-finish"]').click();
+    await expect(dialog).not.toHaveClass(/active/);
+});
+
+test('a phone: the package is saved through "Save to Files"', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await sampleOnDaniel(page);
+    const dialog = await openOnReview(page);
+    let early = false;
+    page.on('download', () => { early = true; });
+    await dialog.locator('#gift-next').click();
+    await expect(dialog.locator('.gift-run[data-phase="done"]')).toBeVisible({ timeout: 60_000 });
+    // A phone does not download by itself.
+    expect(early).toBe(false);
+    const save = dialog.locator('[data-gk="run-save"]');
+    await expect(save).toHaveText('Save to Files');
+    const downloaded = page.waitForEvent('download');
+    await save.click();
+    const download = await downloaded;
+    checkPackage(download, readFileSync((await download.path())!));
+    const box = await dialog.locator('.modal').boundingBox();
+    expect(box?.width).toBe(390);
+});
+
+test('cancelling while the package is made says Cancelled and downloads nothing', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await sampleOnDaniel(page);
+    // The app's file waits until released: the making stays in its second step.
+    await page.evaluate(() => {
+        const w = window as unknown as { __giftRelease?: () => void };
+        const exporter = window.Strom.AppExporter as unknown as { buildFocusAppBlob: () => Promise<Blob> };
+        exporter.buildFocusAppBlob = () => new Promise<Blob>(resolve => { w.__giftRelease = () => resolve(new Blob(['app'])); });
+    });
+    const dialog = await openOnReview(page);
+    let downloads = 0;
+    page.on('download', () => { downloads++; });
+    await dialog.locator('#gift-next').click();
+    const run = dialog.locator('.gift-run[data-phase="making"]');
+    await expect(run.locator('.prog-k')).toHaveText('step 2 of 7');
+    await expect(run.locator('.gift-stp.is-done')).toHaveCount(1);
+    await expect(run.locator('.gift-stp.is-now')).toContainText('App with the family tree');
+    await expect(dialog.locator('#gift-nav [data-step="1"]')).toHaveAttribute('aria-disabled', 'true');
+    await dialog.locator('[data-gk="run-cancel"]').click();
+    await page.evaluate(() => (window as unknown as { __giftRelease?: () => void }).__giftRelease?.());
+    await expect(dialog.locator('.gift-run[data-phase="cancelled"] .gift-run-h')).toHaveText('Cancelled');
+    await expect(dialog.locator('[data-gk="run-again"]')).toHaveText('Create again');
+    expect(downloads).toBe(0);
+    // A side tab leads back to the steps.
+    await dialog.locator('#gift-nav [data-step="6"]').click();
+    await expect(dialog.locator('.gift-review')).toBeVisible();
+    await expect(dialog.locator('#gift-next')).toBeVisible();
+});
