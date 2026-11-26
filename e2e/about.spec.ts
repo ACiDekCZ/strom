@@ -82,35 +82,54 @@ test('The coffee cup in About plays one small animation a moment after opening, 
 });
 
 /**
- * The figures that peek and run (C, I, J) stay at the button's height, beside or behind it: through their
- * whole run none of their decorations covers the paragraph above the button (8px away).
+ * Every one of the nine coffee animations stays at the button's height, on it, beside it or behind it:
+ * through its whole run none of its decorations covers the paragraph above the button (8px away) or the
+ * share note below it, in Czech and German, at phone and desktop width, light and dark.
  */
-for (const [variant, at] of [['C', 2.5], ['I', 7.5], ['J', 8.5]] as const) {
-    test(`The coffee animation ${variant} never covers the paragraph above the button`, async ({ page }) => {
-        await page.emulateMedia({ reducedMotion: 'no-preference' });
-        await page.addInitScript((r) => { Math.random = () => r; }, at / 9);
-        await openApp(page);
-        await page.locator('.app-logo').click();
-        const wrap = page.locator('#about-modal .about-coffee-wrap');
-        await expect(wrap).toHaveAttribute('data-acf', variant, { timeout: 5000 });
-        const covered = await wrap.evaluate((w) => {
-            const range = document.createRange();
-            range.selectNodeContents(w.closest('.about-support')!.querySelector('p')!);
-            const lines = [...range.getClientRects()];
-            const anims = document.getAnimations().filter((a) => a.effect instanceof KeyframeEffect && w.contains(a.effect.target));
-            anims.forEach((a) => a.pause());
-            const hits: string[] = [];
-            for (let t = 0; t <= 3000; t += 50) {
-                anims.forEach((a) => { a.currentTime = t; });
-                for (const el of w.querySelectorAll<Element>('.acf-fx')) {
-                    if (getComputedStyle(el).opacity === '0') continue;
-                    const b = el.getBoundingClientRect();
-                    if (lines.some((l) => b.right > l.left && b.left < l.right && b.bottom > l.top && b.top < l.bottom)) hits.push(`${el.getAttribute('class')} @${t}ms`);
+const COFFEE_AT: ReadonlyArray<readonly [string, number]> = [['A', 0.5], ['B', 1.5], ['C', 2.5], ['E', 3.5], ['F', 4.5], ['G', 5.5], ['H', 6.5], ['I', 7.5], ['J', 8.5]];
+const COFFEE_SETUPS = [
+    { lang: 'cs', width: 390, theme: 'dark' },
+    { lang: 'cs', width: 1440, theme: 'light' },
+    { lang: 'de', width: 390, theme: 'light' },
+    { lang: 'de', width: 1440, theme: 'dark' },
+] as const;
+for (const [variant, at] of COFFEE_AT) {
+    test(`The coffee animation ${variant} never covers the text above or below the button`, async ({ browser }) => {
+        test.setTimeout(90_000);
+        for (const setup of COFFEE_SETUPS) {
+            const page = await browser.newPage({ viewport: { width: setup.width, height: 900 }, reducedMotion: 'no-preference' });
+            await page.addInitScript((r) => { Math.random = () => r; }, at / 9);
+            await seedSetting(page, 'language', setup.lang);
+            await seedSetting(page, 'theme', setup.theme);
+            await openApp(page);
+            // The phone's toolbar hides the logo: About opens from the menu there, the same dialog.
+            await page.evaluate(() => window.Strom.UI.showAboutDialog());
+            const wrap = page.locator('#about-modal .about-coffee-wrap');
+            await expect(wrap).toHaveAttribute('data-acf', variant, { timeout: 5000 });
+            const covered = await wrap.evaluate((w) => {
+                const support = w.closest('.about-support')!;
+                const lines = [...support.querySelectorAll('p')].flatMap((p) => {
+                    const range = document.createRange();
+                    range.selectNodeContents(p);
+                    return [...range.getClientRects()];
+                });
+                const anims = document.getAnimations().filter((a) => a.effect instanceof KeyframeEffect && w.contains(a.effect.target));
+                anims.forEach((a) => a.pause());
+                const hits: string[] = [];
+                for (let t = 0; t <= 3600; t += 25) {
+                    anims.forEach((a) => { a.currentTime = t; });
+                    for (const el of w.querySelectorAll<Element>('.acf-added')) {
+                        if (getComputedStyle(el).opacity === '0') continue;
+                        const b = el.getBoundingClientRect();
+                        if (!b.width || !b.height) continue;
+                        if (lines.some((l) => b.right > l.left && b.left < l.right && b.bottom > l.top && b.top < l.bottom)) hits.push(`${el.getAttribute('class')} @${t}ms`);
+                    }
                 }
-            }
-            return hits;
-        });
-        expect(covered).toEqual([]);
+                return hits;
+            });
+            expect(covered, `${setup.lang} ${setup.width} ${setup.theme}`).toEqual([]);
+            await page.close();
+        }
     });
 }
 

@@ -2237,12 +2237,13 @@
         .about-coffee-wrap { position: relative; display: inline-flex; isolation: isolate; }
         .about-coffee-wrap > .about-coffee { position: relative; z-index: 1; }
         .about-coffee-wrap .acf-fx { position: absolute; pointer-events: none; overflow: visible; }
-        .acf-heart-up { left: 17px; top: calc(50% - 18.75px); width: 10px; height: 10px; z-index: 2; opacity: 0; color: var(--heart); }
+        .acf-heart-up { left: 17px; top: calc(50% - 15px); width: 10px; height: 10px; z-index: 2; opacity: 0; color: var(--heart); }
         .acf-mini { width: 7px; height: 7px; color: var(--heart); opacity: 0; z-index: 2; }
         .acf-mini.acf-m1 { left: 19px; top: calc(50% - 16.75px); }
         .acf-mini.acf-m2 { left: 24px; top: calc(50% - 14.75px); }
-        .acf-leaf { left: 19px; top: calc(50% - 46.75px); width: 9px; height: 9px; z-index: 2; opacity: 0; color: var(--primary); }
-        /* C, I and J stay at the button's height (beside it, behind it): the paragraph above is only 8px away. */
+        .acf-leaf { left: 19px; top: calc(50% - 13.75px); width: 9px; height: 9px; z-index: 2; opacity: 0; color: var(--primary); }
+        /* Every variant stays at the button's height (on it, beside it, behind it): the paragraph above is only
+           8px away. What rises from the cup (A, B, E, F, G) floats off to the left, beside the button. */
         .acf-guy { right: 12px; top: calc(50% - 14px); width: 20px; height: 28px; z-index: 0; color: var(--primary); }
         .acf-guy .acf-beat { transform-origin: 10px 7px; transform-box: view-box; }
         .about-coffee-cup .acf-face, .about-coffee-cup .acf-bean { opacity: 0; }
@@ -2251,7 +2252,7 @@
         .about-coffee-cup .acf-lid { fill: var(--surface); stroke: none; }
         @media (hover: hover) { .about-coffee:hover .about-coffee-cup .acf-lid { fill: var(--hover-bg); } }
         .about-coffee-cup .acf-bean { transform-box: view-box; }
-        .acf-spark { width: 2px; height: 2px; border-radius: 50%; background: var(--heart); opacity: 0; left: 21px; top: calc(50% - 22.75px); z-index: 2; }
+        .acf-spark { width: 2px; height: 2px; border-radius: 50%; background: var(--heart); opacity: 0; left: 4px; top: calc(50% - 11.5px); z-index: 2; }
         .acf-spark-a { --acf-to: translate(-5px, -3px); } .acf-spark-b { --acf-to: translate(5px, -3px); }
         .acf-spark-c { --acf-to: translate(-4px, 3px); } .acf-spark-d { --acf-to: translate(4px, 3px); }
         .acf-dog-peek { right: 12px; top: calc(50% - 11px); width: 22px; height: 22px; z-index: 0; }
@@ -2262,25 +2263,27 @@
         .acf-dog-run { left: -40px; top: calc(50% - 8.5px); width: 26px; height: 19px; z-index: 0; opacity: 0; }
         .acf-dog-run .acf-dog { display: block; width: 100%; height: 100%; }
         .acf-dog-run .acf-tail { transform-box: fill-box; transform-origin: 100% 100%; }
-        .about-coffee-wrap[data-acf="G"] .acf-m1 { left: 18.5px; top: calc(50% - 15.75px); }
+        .about-coffee-wrap[data-acf="E"] .acf-m1, .about-coffee-wrap[data-acf="F"] .acf-m1 { top: calc(50% - 12px); }
+        .about-coffee-wrap[data-acf="F"] .acf-m2 { top: calc(50% - 10px); }
+        .about-coffee-wrap[data-acf="G"] .acf-m1 { left: 18.5px; top: calc(50% - 12px); }
         .about-coffee-wrap[data-acf="I"] .acf-m1 { left: auto; right: -30px; top: calc(50% + 2px); }
         .about-coffee-wrap[data-acf="J"] .acf-m1 { left: auto; right: -50px; top: calc(50% + 2px); }
         @keyframes acf-heart-up {
-            0%   { opacity: 0; transform: translate(0, 5px) scale(.2); }
-            22%  { opacity: 1; transform: translate(0, -3px) scale(1.2); }
-            32%  { transform: translate(0, -4px) scale(.92); }
-            42%  { transform: translate(0, -5px) scale(1.08); }
-            70%  { opacity: 1; transform: translate(2px, -13px) scale(1); }
-            100% { opacity: 0; transform: translate(-1px, -22px) scale(.85); }
+            0%   { opacity: 0; transform: translate(0, 4px) scale(.2); }
+            22%  { opacity: 1; transform: translate(0, -1px) scale(1.2); }
+            32%  { transform: translate(-3px, -1px) scale(.92); }
+            42%  { transform: translate(-7px, -2px) scale(1.08); }
+            70%  { opacity: 1; transform: translate(-24px, -1px) scale(1); }
+            100% { opacity: 0; transform: translate(-36px, 0) scale(.85); }
         }
         @keyframes acf-steam { 0%, 100% { transform: none; opacity: 1; } 45% { transform: translateY(-1.6px); opacity: .25; } }
         @keyframes acf-leaf-fall {
-            0%   { opacity: 0; transform: translate(9px, -4px) rotate(-40deg); }
+            0%   { opacity: 0; transform: translate(-46px, -1px) rotate(-40deg); }
             12%  { opacity: 1; }
-            35%  { transform: translate(-6px, 12px) rotate(28deg); }
-            62%  { transform: translate(5px, 26px) rotate(-18deg); }
-            84%  { opacity: 1; transform: translate(0, 36px) rotate(5deg) scale(.75); }
-            100% { opacity: 0; transform: translate(0, 40px) rotate(0) scale(.3); }
+            35%  { transform: translate(-30px, 2px) rotate(28deg); }
+            62%  { transform: translate(-13px, -2px) rotate(-18deg); }
+            84%  { opacity: 1; transform: translate(0, 4px) rotate(5deg) scale(.75); }
+            100% { opacity: 0; transform: translate(0, 7px) rotate(0) scale(.3); }
         }
         @keyframes acf-cup-bounce { 0%, 100% { transform: none; } 40% { transform: translateY(1px) scale(1.12, .88); } 70% { transform: translateY(-1px) scale(.96, 1.05); } }
         @keyframes acf-peek {
@@ -2303,7 +2306,15 @@
             100% { opacity: 0; transform: translateY(-13px) scale(.8); }
         }
         @keyframes acf-wiggle { 0%, 100% { transform: none; } 15% { transform: rotate(-11deg); } 30% { transform: rotate(10deg); } 45% { transform: rotate(-8deg); } 60% { transform: rotate(6deg); } 75% { transform: rotate(-2deg); } }
-        @keyframes acf-bubble { 0% { opacity: 0; transform: translateY(3px) scale(.3); } 20% { opacity: 1; transform: translateY(-1px) scale(1); } 62% { opacity: 1; transform: translateY(-9px) scale(1.15); } 70%, 100% { opacity: 0; transform: translateY(-10px) scale(1.7); } }
+        /* E, F: a small heart pops at the cup's rim and floats off to the left. */
+        @keyframes acf-micro-side {
+            0%   { opacity: 0; transform: translate(0, 3px) scale(.2); }
+            25%  { opacity: 1; transform: translate(-2px, -1px) scale(1.25); }
+            38%  { transform: translate(-5px, -1px) scale(.95); }
+            75%  { opacity: 1; transform: translate(-18px, -3px) scale(1); }
+            100% { opacity: 0; transform: translate(-26px, -4px) scale(.8); }
+        }
+        @keyframes acf-bubble { 0% { opacity: 0; transform: translate(0, 3px) scale(.3); } 20% { opacity: 1; transform: translate(-3px, -1px) scale(1); } 62% { opacity: 1; transform: translate(-16px, -2px) scale(1.15); } 70%, 100% { opacity: 0; transform: translate(-18px, -2px) scale(1.7); } }
         @keyframes acf-spark { 0%, 62% { opacity: 0; transform: none; } 68% { opacity: 1; } 100% { opacity: 0; transform: var(--acf-to); } }
         @keyframes acf-bean-hop {
             0%   { opacity: 1; transform: translateY(7px); }
@@ -2329,12 +2340,12 @@
         @keyframes acf-run-x { 0% { left: -40px; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { left: calc(100% + 14px); opacity: 0; } }
         @keyframes acf-hop-y { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-5px) rotate(-4deg); } }
         @keyframes acf-wag { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-28deg); } }
-        /* A: the steam trembles and a heart rises from it. */
+        /* A: the steam trembles and a heart rises from it, floating off beside the button. */
         .about-coffee-wrap[data-acf="A"] .about-coffee-steam { animation: acf-steam 1.3s ease-in-out both; }
         .about-coffee-wrap[data-acf="A"] .about-coffee-steam:nth-child(2) { animation-delay: .12s; }
         .about-coffee-wrap[data-acf="A"] .about-coffee-steam:nth-child(3) { animation-delay: .24s; }
         .about-coffee-wrap[data-acf="A"] .acf-heart-up { animation: acf-heart-up 2.1s cubic-bezier(.3,.7,.4,1) .55s both; }
-        /* B: a leaf falls into the cup, the cup bounces, a heart. */
+        /* B: a leaf flutters in from beside the button into the cup, the cup bounces, a heart. */
         .about-coffee-wrap[data-acf="B"] .about-coffee-cup { transform-origin: 50% 90%; animation: acf-cup-bounce .38s ease-out 1.38s both; }
         .about-coffee-wrap[data-acf="B"] .acf-leaf { animation: acf-leaf-fall 1.5s ease-in-out both; }
         .about-coffee-wrap[data-acf="B"] .acf-heart-up { animation: acf-heart-up 1.9s cubic-bezier(.3,.7,.4,1) 1.55s both; }
@@ -2344,13 +2355,13 @@
         /* E: the cup winks. */
         .about-coffee-wrap[data-acf="E"] .acf-face { animation: acf-face-in 2.2s ease both; }
         .about-coffee-wrap[data-acf="E"] .acf-eye { animation: acf-blink 2.2s ease both; }
-        .about-coffee-wrap[data-acf="E"] .acf-m1 { animation: acf-micro 1.4s ease-out .9s both; }
+        .about-coffee-wrap[data-acf="E"] .acf-m1 { animation: acf-micro-side 1.4s ease-out .9s both; }
         /* F: the cup wiggles happily. */
         .about-coffee-wrap[data-acf="F"] .about-coffee-cup { transform-origin: 50% 90%; animation: acf-wiggle 1.2s ease-in-out .3s both; }
         .about-coffee-wrap[data-acf="F"] .acf-face { animation: acf-face-in 2.1s ease both; }
-        .about-coffee-wrap[data-acf="F"] .acf-m1 { animation: acf-micro 1.3s ease-out .7s both; }
-        .about-coffee-wrap[data-acf="F"] .acf-m2 { animation: acf-micro 1.3s ease-out 1.05s both; }
-        /* G: a heart bubble rises from the steam and pops. */
+        .about-coffee-wrap[data-acf="F"] .acf-m1 { animation: acf-micro-side 1.3s ease-out .7s both; }
+        .about-coffee-wrap[data-acf="F"] .acf-m2 { animation: acf-micro-side 1.3s ease-out 1.05s both; }
+        /* G: a heart bubble rises from the steam, drifts beside the button and pops. */
         .about-coffee-wrap[data-acf="G"] .acf-m1 { animation: acf-bubble 1.7s ease-out both; }
         .about-coffee-wrap[data-acf="G"] .acf-spark { animation: acf-spark 1.7s ease-out both; }
         /* H: a coffee bean peeks out of the cup. */
