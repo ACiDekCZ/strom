@@ -1,6 +1,7 @@
 import { test, expect, Page, Route } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { fakeBridge, links, openResearch, poll, BRIDGE } from './research-bridge.js';
+import { seedSetting } from './helpers.js';
 
 /**
  * The house page (spec 030 §3, K7.1): opened from the Houses window ("House page ›"), the research's
@@ -55,13 +56,22 @@ function result(): Record<string, unknown> {
     };
 }
 
-async function setup(page: Page, opts: { state?: string; empty?: boolean; recent?: boolean } = {}): Promise<FakeHouses> {
+interface FakeMap {
+    location?: Record<string, unknown>;
+    maps?: Record<string, unknown>[];
+    layers?: Record<string, unknown>[];
+}
+
+async function setup(page: Page, opts: { state?: string; empty?: boolean; recent?: boolean; map?: FakeMap } = {}): Promise<FakeHouses> {
     await page.clock.setFixedTime(new Date('2027-03-20T10:30:00Z'));
     const houses: FakeHouses = { confirms: [] };
     const listRow = row(opts.state ? { state: opts.state } : {});
+    const full = (): Record<string, unknown> => ({ ...result(), ...(opts.map?.location ? { location: opts.map.location } : {}),
+        ...(opts.map?.maps ? { maps: opts.map.maps } : {}) });
     await fakeBridge(page, {
         features: FEATURES, links: LINKS,
-        statusExtra: { houses: { on: false, rev: 'r1', counts: { done: 1, running: 0, queued: 0, waiting: 0, held: 0 } } },
+        statusExtra: { houses: { on: false, rev: 'r1', counts: { done: 1, running: 0, queued: 0, waiting: 0, held: 0 },
+            ...(opts.map?.layers ? { layers: opts.map.layers } : {}) } },
     });
     await page.route(u => `${u.origin}${u.pathname}` === `${BRIDGE}/houses`, async (route: Route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ rev: 'r1', houses: [listRow] }) });
@@ -71,13 +81,13 @@ async function setup(page: Page, opts: { state?: string; empty?: boolean; recent
         if (route.request().method() === 'POST' && path === 'confirm') {
             houses.confirms.push(JSON.parse(route.request().postData() ?? 'null'));
             await route.fulfill({ status: 200, contentType: 'application/json',
-                body: JSON.stringify({ house: result(), head: 'a1b2c3d4e5f6', parent: '9b8c7d6e5f40' }) });
+                body: JSON.stringify({ house: full(), head: 'a1b2c3d4e5f6', parent: '9b8c7d6e5f40' }) });
             return;
         }
         const body = opts.empty
             ? { ...listRow, numbers: [], timeline: [], holders: [], residents: [], maps: [], passed: [], manual: [], unknown: [],
                 archiveOnly: [], sensitive: [], same: [], materials: [], persons: [] }
-            : result();
+            : full();
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     });
     await openResearch(page);
@@ -104,6 +114,31 @@ async function placeFamily(page: Page, recent = false): Promise<void> {
 }
 
 const pageWin = (page: Page) => page.locator('#house-page-modal');
+/** Today's tiles and the research's layer answered here: nothing reaches a map server. */
+async function stubMapServers(page: Page): Promise<string[]> {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    const asked: string[] = [];
+    await page.route(/^https:\/\/(tile\.openstreetmap\.org|ortho\.example\.org|aerial\.example\.org)\//, route => {
+        asked.push(route.request().url());
+        return route.fulfill({ status: 200, contentType: 'image/png', body: png });
+    });
+    await seedSetting(page, 'mapTiles', true);
+    return asked;
+}
+
+const ORTHO_LAYER = {
+    id: 'cz-ortho', kind: 'ortho', label: 'Ortofoto (dnes)', type: 'wms', url: 'https://ortho.example.org/wms', layers: '0',
+    format: 'image/jpeg', attribution: '© Zeměměřický ústav Brodek', license: 'CC BY 4.0', bbox: [12, 48.5, 19, 51],
+};
+const HOUSE_MAP: FakeMap = {
+    location: { lat: 49.6118, lon: 15.2251, certainty: 'medium', how: 'old-map', confirmed: null, sources: [] },
+    maps: [
+        { id: 'm1', kind: 'cadastre', manual: true, sheet: 'list 2', url: 'https://archiv.example.org/skica/belokamen' },
+        { id: 'm2', kind: 'ortho', layer: 'cz-ortho' },
+    ],
+    layers: [ORTHO_LAYER],
+};
+
 const houseRow = (page: Page) => page.locator(`#houses-modal .house-row[data-house="${KEY}"]`);
 
 async function openFromHouses(page: Page): Promise<void> {
@@ -241,6 +276,81 @@ test.describe('The house page', () => {
         await expect(win.locator('#hp-sec-timeline')).toContainText('Jan Fíšek');
         await expect(win.locator('.hp-state')).toHaveCount(0);
     });
+
+    test('the map: today with the point, the research\'s layer as tiles with its attribution, the maps to open by hand, Confirm location', async ({ page }) => {
+        const asked = await stubMapServers(page);
+        const houses = await setup(page, { map: HOUSE_MAP });
+        await openFromHouses(page);
+        const map = pageWin(page).locator('#hp-sec-map');
+        await expect(map).toBeVisible();
+        await expect(map.locator('.hmap-layer')).toHaveText(['Today', 'Orthophoto today']);
+        await expect(map.locator('.hmap-layer[aria-checked="true"]')).toHaveText('Today');
+        await expect(map.locator('.hpt.main')).toHaveText('16');
+        await expect(map.locator('.hmap-attr')).toContainText('OpenStreetMap');
+        await expect(map.locator('.hmap-tiles img').first()).toHaveAttribute('data-tile-url', /tile\.openstreetmap\.org\/17\//);
+        await expect(map.locator('.hmap-pos-t')).toHaveText('Location uncertain (the number may have changed)');
+        const manual = map.locator('.hmap-man a');
+        await expect(manual).toHaveText('Cadastral map, list 2 ↗');
+        await expect(manual).toHaveAttribute('href', 'https://archiv.example.org/skica/belokamen');
+        // The research's layer: WMS tiles in Web Mercator, its attribution whole with the licence.
+        await map.locator('.hmap-layer', { hasText: 'Orthophoto today' }).click();
+        await expect(map.locator('.hmap-layer[aria-checked="true"]')).toHaveText('Orthophoto today');
+        await expect(map.locator('.hmap-attr')).toHaveText('© Zeměměřický ústav Brodek · CC BY 4.0');
+        await expect(map.locator('.hmap-tiles img').first()).toHaveAttribute('src', /^https:\/\/ortho\.example\.org\/wms\?SERVICE=WMS&.*CRS=EPSG:3857&BBOX=/);
+        await expect.poll(() => asked.some(u => u.startsWith('https://ortho.example.org/wms?'))).toBe(true);
+        // Zoom: one step out asks for tiles of zoom 16.
+        await map.locator('.hmap-zout').click();
+        await expect(map.locator('.hmap-tiles img').first()).toHaveAttribute('src', /BBOX=/);
+        // Confirm location: into the tree and to the research.
+        await map.locator('[data-hmap-act="confirm"]').click();
+        await expect(map.locator('.hmap-pos-t')).toHaveText('Location confirmed');
+        await expect(map.locator('[data-hmap-act="confirm"]')).toHaveCount(0);
+        await expect.poll(() => houses.confirms).toEqual([{ house: KEY, what: 'location' }]);
+        const stored = await page.evaluate(() => Object.values((window.Strom.DataManager.getData() as { houses?: Record<string, { location?: unknown }> }).houses ?? {})
+            .map(h => h.location).filter(Boolean));
+        expect(stored).toEqual([{ lat: 49.6118, lng: 15.2251, how: 'confirmed' }]);
+    });
+
+    test('Move the point: dragged, Saved into the tree and to the research, Undo back; Cancel leaves it', async ({ page }) => {
+        await stubMapServers(page);
+        const houses = await setup(page, { map: HOUSE_MAP });
+        await openFromHouses(page);
+        const map = pageWin(page).locator('#hp-sec-map');
+        const pin = map.locator('.hpt');
+        await map.locator('[data-hmap-act="move"]').click();
+        await expect(pin).toHaveClass(/drag/);
+        await expect(map.locator('.hmap-move-hint')).toHaveText('The point can be dragged to the house.');
+        // Cancel after a drag: nothing stored, the line as it was.
+        let box = (await pin.boundingBox())!;
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 + 10, { steps: 4 });
+        await page.mouse.up();
+        await map.locator('[data-hmap-act="cancel"]').click();
+        await expect(pin).not.toHaveClass(/drag/);
+        await expect(map.locator('.hmap-pos-t')).toHaveText('Location uncertain (the number may have changed)');
+        const houseData = () => page.evaluate(() => Object.values((window.Strom.DataManager.getData() as { houses?: Record<string, { location?: { lat: number; lng: number; how: string } }> }).houses ?? {}).map(h => h.location).filter(Boolean));
+        expect(await houseData()).toEqual([]);
+        // Move, drag 40 px right and 20 px down (a touch's pointer events alike), Save.
+        await map.locator('[data-hmap-act="move"]').click();
+        box = (await pin.boundingBox())!;
+        const x = box.x + box.width / 2, y = box.y + box.height / 2;
+        await pin.dispatchEvent('pointerdown', { pointerId: 7, pointerType: 'touch', clientX: x, clientY: y, isPrimary: true, bubbles: true });
+        await pin.dispatchEvent('pointermove', { pointerId: 7, pointerType: 'touch', clientX: x + 40, clientY: y + 20, isPrimary: true, bubbles: true });
+        await pin.dispatchEvent('pointerup', { pointerId: 7, pointerType: 'touch', clientX: x + 40, clientY: y + 20, isPrimary: true, bubbles: true });
+        await map.locator('[data-hmap-act="save"]').click();
+        await expect(map.locator('.hmap-pos-t')).toHaveText('Location placed by hand');
+        const [moved] = await houseData();
+        expect(moved!.how).toBe('manual');
+        // 40 px east and 20 px south at zoom 17: east and south of the research's point by a few tens of metres.
+        expect(moved!.lng).toBeGreaterThan(15.2251 + 0.0002);
+        expect(moved!.lat).toBeLessThan(49.6118 - 0.00005);
+        await expect.poll(() => houses.confirms).toEqual([{ house: KEY, what: 'location', lat: moved!.lat, lon: moved!.lng }]);
+        // Undo: the research's point again.
+        await page.evaluate(() => window.Strom.DataManager.undo());
+        await expect(map.locator('.hmap-pos-t')).toHaveText('Location uncertain (the number may have changed)');
+        expect(await houseData()).toEqual([]);
+    });
 });
 
 test.describe('The house page on a phone', () => {
@@ -264,5 +374,25 @@ test.describe('The house page on a phone', () => {
         expect(sizes.wide).toEqual([]);
         await win.locator('.pp-more').click();
         await expect(win.locator('.pp-menu [data-hp-menu="save"]')).toBeVisible();
+    });
+
+    test('390 px: the map on the whole width, 240 px high, the layer switch under it, nothing wider than the screen', async ({ page }) => {
+        await stubMapServers(page);
+        await setup(page, { map: HOUSE_MAP });
+        await page.evaluate(k => window.Strom.UI.openHousePage(k), KEY);
+        const map = pageWin(page).locator('#hp-sec-map');
+        await expect(map.locator('.hmap')).toBeVisible();
+        const box = (await map.locator('.hmap').boundingBox())!;
+        expect(Math.round(box.height)).toBe(240);
+        expect(Math.round(box.x)).toBe(0);
+        expect(Math.round(box.width)).toBe(390);
+        const seg = (await map.locator('.hmap-layers').boundingBox())!;
+        expect(seg.y).toBeGreaterThan(box.y + box.height - 1);
+        const sizes = await page.evaluate(() => {
+            const body = document.querySelector('#house-page-modal .pp-body') as HTMLElement;
+            return { doc: document.documentElement.scrollWidth, body: body.scrollWidth, client: body.clientWidth };
+        });
+        expect(sizes.doc).toBeLessThanOrEqual(390);
+        expect(sizes.body).toBeLessThanOrEqual(sizes.client);
     });
 });

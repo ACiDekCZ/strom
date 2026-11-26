@@ -49,9 +49,9 @@ describe('house page — app', () => {
         const data = dataWithSources();
         const html = buildHousePage(data, houseOf(data, HOUSE_ID), fullResearch(), 'app', opts);
         const keys = housePageSections(html, 'en').map(s => s.key);
-        expect(keys).toEqual(['sum', 'numbers', 'timeline', 'people', 'look', 'unknown', 'passed', 'sources']);
-        // No map until §4 fills the hook, no tree-only residents beside the research's.
-        expect(html).not.toContain('id="hp-sec-map"');
+        expect(keys).toEqual(['sum', 'numbers', 'timeline', 'people', 'look', 'map', 'unknown', 'passed', 'sources']);
+        // The map of the point placed by hand (§4); no tree-only residents beside the research's.
+        expect(html).toContain('id="hp-sec-map"');
         expect(html).not.toContain('id="hp-sec-treeResidents"');
         expect(html).toContain('told by Kvido Stranný');
         expect(mapHtml({ mode: 'app', lang: 'en', house: houseOf(data, HOUSE_ID), research: null, location: null, layers: [] })).toBe('');
@@ -63,7 +63,7 @@ describe('house page — app', () => {
         Object.assign(r, { holders: [], residents: [], timeline: [], location: undefined });
         const html = buildHousePage(data, houseOf(data, HOUSE_ID), r, 'app', { ...opts, research: true, state: 'queued' });
         const keys = housePageSections(html, 'en').map(s => s.key);
-        expect(keys).toEqual(['sum', 'numbers', 'timeline', 'treeResidents']);
+        expect(keys).toEqual(['sum', 'numbers', 'timeline', 'treeResidents', 'map']);
         expect(html).toContain('The house history is in the research queue');
         expect(html).not.toContain('id="hp-sec-people"');
         expect(html).not.toContain('id="hp-sec-sources"');

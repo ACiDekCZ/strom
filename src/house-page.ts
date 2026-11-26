@@ -38,6 +38,7 @@ import { safeHttpUrl } from './validation.js';
 import { asciiSlug } from './filenames.js';
 import { createdWithStromHtml, personPageDocumentShell } from './person-page.js';
 import { HOUSE_PAGE_CSS, HOUSE_PAGE_FILE_TOKENS } from './house-page-css.js';
+import { houseMapHtml, type HouseMapInput } from './house-map.js';
 
 export type HousePageMode = 'app' | 'file';
 
@@ -66,24 +67,11 @@ export interface HousePageOptions {
     app?: HousePageApp;
 }
 
-/** What the map section (§4) gets: the house, what the mode may show of its location, the layers. */
-export interface HouseMapInput {
-    mode: HousePageMode;
-    lang: Language;
-    house: TreeHouse;
-    research: HouseResearch | null;
-    /** The point the page may show: the app's always (a person's first), the file's only under K3.3; null none. */
-    location: { lat: number; lng: number } | null;
-    layers: readonly LiveHouseLayer[];
-}
+export type { HouseMapInput } from './house-map.js';
 
-/**
- * The map section's body (§4, the map of the house): '' = no section. The
- * map of part 2 (S5) fills it; its heading, id and entry in the contents
- * come from the page.
- */
-export function mapHtml(_input: HouseMapInput): string {
-    return '';
+/** The map section's body (§4, the map of the house, src/house-map.ts): '' = no section. */
+export function mapHtml(input: HouseMapInput): string {
+    return houseMapHtml(input);
 }
 
 /** A section of the page: its key, its id and the contents' label. */
@@ -747,7 +735,13 @@ export function buildHousePage(data: StromData, house: TreeHouse, research: Hous
     const location = c.out ? c.out.location
         : data.houses?.[house.id]?.location ? { lat: data.houses[house.id]!.location!.lat, lng: data.houses[house.id]!.location!.lng }
             : research?.location ? { lat: research.location.lat, lng: research.location.lon } : null;
-    const map = mapHtml({ mode, lang: opts.lang, house, research, location, layers: opts.layers ?? [] });
+    const townGeo = data.places?.[house.townKey];
+    const map = mapHtml({
+        mode, lang: opts.lang, house, research, location, layers: opts.layers ?? [],
+        town: townGeo ? { lat: townGeo.lat, lng: townGeo.lon } : null,
+        how: c.out ? undefined : data.houses?.[house.id]?.location?.how,
+        canEdit: !!opts.app?.canEdit, hasResearch: !!opts.research,
+    });
     const parts = result
         ? [heroHtml(c), summaryHtml(c), numbersHtml(c), timelineHtml(c), peopleHtml(c), lookHtml(c),
             map ? section('map', c.P.sec.map, map) : '', unknownHtml(c), passedHtml(c), sourcesHtml(c)]

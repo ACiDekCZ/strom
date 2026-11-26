@@ -27,6 +27,7 @@ import { houseStateHtml, withRevealed } from './house-state-ui.js';
 import { houseMaterialError } from './house-material-ui.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { runBusy } from './busy.js';
+import { mountHouseMap, resetHouseMapState } from './house-map-ui.js';
 import { uiModule } from './module.js';
 
 export const HOUSE_PAGE_ID = 'house-page-modal';
@@ -135,6 +136,7 @@ export const housePageMethods = uiModule({
         const was = page;
         if (was) window.removeEventListener('strom:user-change', was.userChange);
         page = null;
+        resetHouseMapState();
         this.dialogStack = this.dialogStack.filter(d => d !== HOUSE_PAGE_ID);
         overlay?.remove();
         if (!was?.parent) return;
@@ -230,6 +232,12 @@ export const housePageMethods = uiModule({
         const top = scroller.scrollTop;
         scroller.innerHTML = `<div class="pp-layout">${toc}${body}</div>`;
         scroller.scrollTop = top;
+        mountHouseMap(scroller, {
+            houseId: house.id,
+            onSave: (p) => { void this.saveHousePoint(house, p, 'manual'); },
+            onConfirm: () => { void this.saveHousePoint(house, null, 'confirmed'); },
+            redraw: () => this.renderHousePage(),
+        });
         if (page.editingName) this.startHouseNameEdit();
     },
 
@@ -363,6 +371,35 @@ export const housePageMethods = uiModule({
             void this.loadHouseStates();
             this.renderHousePage();
         }
+    },
+
+    /**
+     * The point of the house (§4): a moved point (`manual`) or the research's
+     * point confirmed (`confirmed`) into the tree (one undo step), and to the
+     * research (`/houses/confirm {what: 'location'}`) when it knows the house.
+     */
+    async saveHousePoint(house: TreeHouse, point: { lat: number; lng: number } | null, how: 'manual' | 'confirmed'): Promise<void> {
+        if (DataManager.isReadOnly()) return;
+        const research = this.housePageResearch(house);
+        const at = point ?? (research?.location ? { lat: research.location.lat, lng: research.location.lon } : null);
+        if (!at) return;
+        const user = DataManager.getData().houses?.[house.id];
+        const next: HouseUserData = { ...(user ?? {}), location: { lat: at.lat, lng: at.lng, how } };
+        DataManager.setHousesUserData({ [house.id]: next }, houseTitle(house));
+        this.renderHousePage();
+        const b = this.houseResearchBridge();
+        const row = b ? this.houseResearchRow(house) : null;
+        if (!b || !row || !houseFeature(b.features, 'house.confirm')) return;
+        const body = how === 'manual'
+            ? { house: row.key as HouseId, what: 'location' as const, lat: at.lat, lon: at.lng }
+            : { house: row.key as HouseId, what: 'location' as const };
+        const r: HouseWriteResult = await confirmHouse(b.base, body, b.features);
+        if (!r.ok) {
+            this.showToast(houseMaterialError(r, () => (r.held ? this.researchWriteHeldText(r.held, false).toast : '')), 6000);
+            return;
+        }
+        if (r.house) read.set(r.house.key, { rev: this.houseStatesRev(), house: r.house });
+        if (overlayEl()) this.renderHousePage();
     },
 
     /** The name after the farm written in place: Enter or leaving the field saves, Escape leaves it as it was. */
