@@ -17,7 +17,7 @@ export async function expectFits(page: Page, what: string): Promise<void> {
 
 export async function sampleTree(page: Page): Promise<void> {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 }
 
@@ -26,7 +26,7 @@ export async function phoneScreens(page: Page): Promise<void> {
     await openApp(page);
     await expect(page.locator('#empty-state')).toBeVisible();
     await expectFits(page, 'empty state');
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await expectFits(page, 'tree');
     // The minimap needs the control block, which a phone does not have.

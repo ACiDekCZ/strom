@@ -11,7 +11,7 @@ import { openApp, card } from './helpers.js';
 async function sampleOverview(page: Page): Promise<Locator> {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.locator('#toolbar-focus-count:visible, #focus-person-count:visible').first().click();
     const dialog = page.locator('#tree-overview-modal .modal.tov');

@@ -109,7 +109,7 @@ for (const vp of [
 test('B16-2: with the zoom buttons off the control card follows the minimap', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     // Zoomed in until the tree overflows: the minimap shows.
     for (let i = 0; i < 4; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());

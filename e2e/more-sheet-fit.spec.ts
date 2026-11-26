@@ -32,7 +32,7 @@ for (const width of [360, 390]) {
         for (const lang of ['cs', 'de', 'pl']) {
             test(`${lang}: every tile keeps its name inside, the tiles of a row do not overlap`, async ({ page }) => {
                 await openApp(page);
-                await page.getByRole('button', { name: 'Try a sample tree' }).click();
+                await page.getByRole('button', { name: 'Try the small sample' }).click();
                 await expect(page.locator('.person-card').first()).toBeVisible();
                 await page.evaluate((l) => (window as unknown as { Strom: { UI: { setLanguage(l: string): void } } }).Strom.UI.setLanguage(l), lang);
                 await page.locator('#bb-view-more').tap();

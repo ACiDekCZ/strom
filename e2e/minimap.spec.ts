@@ -8,7 +8,7 @@ import { openApp, card, settleLayout } from './helpers.js';
 test.describe('Minimap', () => {
     test('shows when zoomed in, navigates on click, hides via settings', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
 
         const panel = page.locator('#minimap-panel');
@@ -36,7 +36,7 @@ test.describe('Minimap', () => {
     // glides builds on where that zoom is heading, not on the scale reached so far.
     test('quick zoom presses add up while the zoom still glides', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         const scale = () => page.evaluate(() => window.Strom.ZoomPan.getTransform().scale);
         const s0 = await scale();
@@ -52,7 +52,7 @@ test.describe('Minimap', () => {
     test('dragging the frame stops at the tree on all four sides', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 850 });
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         const scale = () => page.evaluate(() => window.Strom.ZoomPan.getTransform().scale);
         const s0 = await scale();
@@ -108,7 +108,7 @@ test.describe('Minimap', () => {
     test('stays docked in the control block and is never orphaned at the top-left', async ({ page }) => {
         await page.setViewportSize({ width: 1200, height: 850 });
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         for (let i = 0; i < 6; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
         // The zoom has landed (the canvas drops its moving hint at the end).
@@ -162,7 +162,7 @@ test.describe('Minimap', () => {
         test(`the canvas is not cut by its panel @${width}px`, async ({ page }) => {
             await page.setViewportSize({ width, height: 850 });
             await openApp(page);
-            await page.getByRole('button', { name: 'Try a sample tree' }).click();
+            await page.getByRole('button', { name: 'Try the small sample' }).click();
             await expect(card(page, 'Johan')).toBeVisible();
             for (let i = 0; i < 4; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
             const panel = page.locator('#minimap-panel');

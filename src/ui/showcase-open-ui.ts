@@ -10,6 +10,11 @@
  * What did not work is said in one dialog with the small sample (the Berg
  * family) as its way out; the open tree never changes then.
  *
+ * A showcase file opened or dropped (§4) is told by its header and goes the
+ * same steps, said in the "Opening the sample" toast. A standalone file
+ * (embedded mode) never downloads: it links to the file on the web and
+ * opens a downloaded one.
+ *
  * Nothing here talks to a research or its bridge: the tree's research tie
  * has no bridge address, sends nothing (`sendMode: 'off'`), and the file's
  * links of the research are never noted as handled by this computer.
@@ -29,10 +34,11 @@ import { startupPerson } from '../default-person.js';
 import { LAST_FOCUSED } from '../model-values.js';
 import { sampleMarkOf, type ShowcaseFile, type ShowcaseLang } from '../showcase-format.js';
 import {
-    downloadShowcase, fetchShowcaseVersion, formatShowcaseMb, isQuotaError, newerShowcaseVersion, showcaseExportId,
-    showcaseFileUrl, showcaseOfferedKey, showcasePercent, showcaseRoomNeeded, type ShowcaseDownloadDeps, type ShowcaseErrorKind,
-    type ShowcaseProgress,
+    downloadShowcase, fetchShowcaseVersion, formatShowcaseMb, isQuotaError, newerShowcaseVersion, readShowcaseText, readShowcaseValue,
+    SHOWCASE_DOWNLOAD_BYTES, showcaseExportId, showcaseFileUrl, showcaseLangParam, showcaseOfferedKey, showcasePercent,
+    showcaseRoomNeeded, showcaseWebFileUrl, type ShowcaseDownloadDeps, type ShowcaseErrorKind, type ShowcaseProgress,
 } from '../showcase-download.js';
+import { formatTreeSize } from '../format.js';
 import { runTreeSwitch } from './tree-switch-busy.js';
 import { activatedElement } from './busy.js';
 import { showProgressToast, type ProgressStep } from './toast.js';
@@ -142,7 +148,113 @@ export function keepShowcaseSettings(next: StromData, previous: StromData | null
     return out;
 }
 
+/** The showcase of the UI's language (its data's language; English for any other). */
+export function showcaseLangOfUi(): ShowcaseLang {
+    return showcaseLangParam(getCurrentLanguage()) ?? 'en';
+}
+
+/** The New tree row's second line: the download's size, or (a standalone file) that it opens from a downloaded file. */
+export function showcaseTryDesc(embedded: boolean): string {
+    return embedded ? strings.sample.tryDescEmbedded : strings.sample.tryDesc(formatShowcaseMb(SHOWCASE_DOWNLOAD_BYTES, getCurrentLanguage()));
+}
+
+/** What a showcase file read gives: the file, or why it cannot be opened. */
+type ShowcaseRead = { ok: true; file: ShowcaseFile } | { ok: false; kind: 'broken' | 'newerFormat' };
+
 export const showcaseOpenMethods = uiModule({
+    /**
+     * "Try the sample with research" (New tree, the empty start): the
+     * showcase of the UI's language from the web; a standalone file does not
+     * download it (showShowcaseEmbedded).
+     */
+    tryShowcase(): void {
+        if (DataManager.isReadOnly()) return;
+        this.closeMobileMenu();
+        if (document.getElementById('new-tree-menu-modal')?.classList.contains('active')) this.closeNewTreeMenu();
+        if (this.appMode === 'embedded') void this.showShowcaseEmbedded();
+        else void this.openShowcaseFromUrl(showcaseLangOfUi());
+    },
+
+    /**
+     * A standalone file (§4): the showcase is not downloaded. The dialog
+     * links to its file on the web (a new window), opens the small sample,
+     * or (primary) a downloaded showcase file.
+     */
+    async showShowcaseEmbedded(): Promise<void> {
+        const s = strings.sample;
+        const url = showcaseWebFileUrl(showcaseLangOfUi());
+        const pick = await this.showChoice(s.embeddedText, s.embeddedTitle, [
+            { id: 'small', label: s.openSmall },
+            { id: 'file', label: s.embeddedOpen },
+        ], undefined, {
+            cancelLabel: strings.buttons.close,
+            link: { label: s.embeddedLink, run: () => { window.open(url, '_blank', 'noopener'); } },
+        });
+        if (pick === 'small') await this.loadDemoTree();
+        else if (pick === 'file') this.pickShowcaseFile();
+    },
+
+    /** The file picker for a downloaded showcase file (.json); the file chosen opens as a showcase. */
+    pickShowcaseFile(): void {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.hidden = true;
+        input.addEventListener('change', () => {
+            const file = input.files?.[0];
+            input.remove();
+            if (file) void this.openShowcaseFromFile(file);
+        }, { once: true });
+        input.addEventListener('cancel', () => input.remove(), { once: true });
+        document.body.appendChild(input);
+        input.click();
+    },
+
+    /** A showcase file opened or dropped (§4): read, then the steps of openShowcaseFile; a failure has no Try again. */
+    openShowcaseFromFile(file: File): Promise<ShowcaseOpenResult> {
+        return this.openShowcaseRead(file.name, file.size, async () => readShowcaseText(await file.text()));
+    },
+
+    /** A showcase file read already as JSON (the JSON import found its header). */
+    openShowcaseFromJson(parsed: unknown, name: string, size: number): Promise<ShowcaseOpenResult> {
+        return this.openShowcaseRead(name, size, async () => readShowcaseValue(parsed));
+    },
+
+    /**
+     * "Opening the sample" with the file's name and size and a bar of
+     * unknown share (Cancel while it is read), then openShowcaseFile. A file
+     * that cannot be opened is said in the §3 dialog, without Try again.
+     */
+    async openShowcaseRead(name: string, size: number, read: () => Promise<ShowcaseRead>): Promise<ShowcaseOpenResult> {
+        if (busy || DataManager.isReadOnly() || DataManager.isViewMode()) return { done: 'cancelled' };
+        let stopped = false;
+        const sizeText = formatTreeSize(size, getCurrentLanguage());
+        const toast = showProgressToast({ title: strings.sample.opening, cancel: () => { stopped = true; toast.close(); } },
+            { ...(name ? { step: name } : {}), size: sizeText, percent: null });
+        toast.el.classList.add('showcase-opening-toast');
+        let got: ShowcaseRead;
+        try {
+            got = await read();
+        } catch (err) {
+            console.warn('The showcase file could not be read', err);
+            got = { ok: false, kind: 'broken' };
+        }
+        if (stopped) return { done: 'cancelled' };
+        if (!got.ok) {
+            toast.close();
+            const failure: ShowcaseFailure = { kind: got.kind };
+            void this.showShowcaseError(failure);
+            return { done: 'failed', failure };
+        }
+        // From here the tree is made: no Cancel any more.
+        toast.update({ cancel: false });
+        try {
+            return await this.openShowcaseFile(got.file, { el: null });
+        } finally {
+            toast.close();
+        }
+    },
+
     /**
      * `?demo=<lang>` (§2): a showcase of that language opened before is only
      * switched to (then its version asked); else its file downloaded with
@@ -152,9 +264,15 @@ export const showcaseOpenMethods = uiModule({
     async openShowcaseFromUrl(lang: ShowcaseLang): Promise<void> {
         if (busy || DataManager.isReadOnly() || DataManager.isViewMode()) return;
         const existing = TreeManager.findTreeByExportId(showcaseExportId(lang));
+        const embedded = this.appMode === 'embedded';
         if (existing) {
             await this.switchToShowcase(existing.id);
-            if (DataManager.getCurrentTreeId() === existing.id) void this.checkShowcaseVersion(existing.id);
+            if (!embedded && DataManager.getCurrentTreeId() === existing.id) void this.checkShowcaseVersion(existing.id);
+            return;
+        }
+        // A standalone file does not download it (§4): its file from the web, or the small sample.
+        if (embedded) {
+            await this.showShowcaseEmbedded();
             return;
         }
         busy = true;

@@ -237,7 +237,7 @@ test('a pan zoomed out to 45 % gives nothing in the canvas a layer of its own (n
 
 test('expanded mode: a multi-marriage person shows all partners inline', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('#empty-state')).toBeHidden();
 
     // Erik married twice; focusing him lays out both wives inline.
@@ -286,7 +286,7 @@ test.describe('mobile', () => {
 
 test('focus back/forward buttons walk history in both directions', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     const back = page.locator('#focus-back-btn');
     const fwd = page.locator('#focus-forward-btn');
@@ -326,7 +326,7 @@ test('focus back/forward buttons walk history in both directions', async ({ page
 
 test('the very first navigation counts the default focus (back works after one step)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     // Fresh tree: no history yet.
     await expect(page.locator('#focus-back-btn')).toBeHidden();

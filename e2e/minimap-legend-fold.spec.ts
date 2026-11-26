@@ -13,7 +13,7 @@ import { openApp, card } from './helpers.js';
 
 async function sample(page: Page): Promise<void> {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 }
 

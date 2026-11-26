@@ -18,7 +18,7 @@ async function openMain(page: Page, context: BrowserContext): Promise<string> {
     await context.route('**://nominatim.openstreetmap.org/**', r => r.abort());
     await page.setViewportSize({ width: 1400, height: 900 });
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     // Every "select" on the windows' channel, as the main window's page hears it.
     await page.evaluate(() => {

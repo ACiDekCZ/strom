@@ -347,7 +347,7 @@ test.describe('the compact custom card (1 line, Equal) is drawn as in 3.10.0-bet
         await seedSetting(page, 'cardDensity', 'custom');
         await seedSetting(page, 'cardFields', { lines: 1, height: 'view', on: PRE_AGE_ON });
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         await page.evaluate(() => document.fonts.ready);
         await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);

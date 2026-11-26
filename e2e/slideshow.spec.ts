@@ -11,7 +11,7 @@ const PAST_ONE_STOP_MS = 10_000;
 test('slideshow spotlights each stop, hides the chrome and is keyboard driven', async ({ page }) => {
     await page.clock.install();
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.startSlideshow());
@@ -55,7 +55,7 @@ test('slideshow spotlights each stop, hides the chrome and is keyboard driven', 
 
 test('slideshow started from the fan view runs in Family and restores the fan on exit', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     // Enter a standalone view (fan) — it draws into its own container and the

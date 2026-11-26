@@ -284,7 +284,7 @@ test.describe('Timeline: the history row', () => {
 
     test('a tree without a research: no row, no extra height', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await timelineView(page);
         await expect(page.locator('#timeline-container .tl-hist-row, #timeline-container .tl-rows')).toHaveCount(0);
     });

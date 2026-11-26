@@ -8,7 +8,7 @@ import { openApp, card } from './helpers.js';
  */
 test('branch colours toggle adds card classes and a legend', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     // Colours default ON, the legend box defaults OFF (opt-in in settings).
@@ -44,7 +44,7 @@ test('branch colours toggle adds card classes and a legend', async ({ page }) =>
 /** Settings > Tree view (spec 112, R1): five shapes with previews, the tint beside every one ("no shape" too) and remembered. */
 test('the lineage markers\' settings: shapes, previews, the tint with no shape (spec 112)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.showSettingsDialog());
     const group = page.locator('#branch-marker-setting');
@@ -104,7 +104,7 @@ test('the lineage markers\' settings: shapes, previews, the tint with no shape (
 /** The legend's lineage part (spec 112 §3): the signs in the chosen shape and the "no marker" line. */
 test('the legend draws the lines\' signs in the chosen shape (spec 112)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
     const legend = page.locator('#branch-legend');
@@ -158,7 +158,7 @@ test('the legend draws the lines\' signs in the chosen shape (spec 112)', async 
 
 test('the legend can be hidden separately while stripes stay on', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     const legend = page.locator('#branch-legend');
@@ -174,7 +174,7 @@ test('the legend can be hidden separately while stripes stay on', async ({ page 
 
 test('the branch stripe follows the card\'s rounded corners, also on the focused card (T06)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     const striped = page.locator('.person-card.branch-paternal, .person-card.branch-maternal, .person-card.branch-descendant');
     await expect.poll(() => striped.count()).toBeGreaterThan(0);
@@ -212,7 +212,7 @@ test('the branch stripe follows the card\'s rounded corners, also on the focused
 /** Lineage markers (spec 112): the chosen shape on <body>, the tag's letter, the tint, the words for a screen reader. */
 test('the marker shape, the tint and the lineage words follow the setting (spec 112)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     const marked = page.locator('#tree-canvas .person-card.branch-descendant').first();
     await expect(marked).toBeVisible();
@@ -279,7 +279,7 @@ test('the marker shape, the tint and the lineage words follow the setting (spec 
 /** The Timeline's sign before the name and the Table's Lineage column follow the marker setting (spec 112 §3). */
 test('the Timeline and the Table show the lineage sign in the chosen shape (spec 112)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     // Timeline: the legend's sign before the names of the marked people; the focus has an empty slot.
@@ -321,7 +321,7 @@ test('the Timeline and the Table show the lineage sign in the chosen shape (spec
 /** The poster draws the chosen marker and tint (spec 112 §3); the print has one grey frame and the print colours (R6). */
 test('the poster and the print carry the lineage markers (spec 112)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => { window.Strom.UI.setBranchMarker('tag'); window.Strom.UI.setBranchTint(true); });
 
@@ -368,7 +368,7 @@ for (const vp of [{ name: 'desktop', width: 1280, height: 800 }, { name: 'tablet
         test(`the legend never covers back / forward (${vp.name})`, async ({ page }) => {
             const phone = vp.name === 'phone';
             await openApp(page);
-            await page.getByRole('button', { name: 'Try a sample tree' }).click();
+            await page.getByRole('button', { name: 'Try the small sample' }).click();
             await expect(card(page, 'Johan')).toBeVisible();
             await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
             const legend = page.locator('#tree-legend');

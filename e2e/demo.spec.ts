@@ -5,7 +5,7 @@ test('empty state offers a demo tree that loads with a focus, a hint, the Regist
     await openApp(page);
     await expect(page.locator('#empty-state')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
 
     // The sample (the Berg family) loads as a new tree.
     await expect(page.locator('#empty-state')).toBeHidden();
@@ -40,7 +40,7 @@ test('empty state offers a demo tree that loads with a focus, a hint, the Regist
 test('the sample keeps a card density the user already chose', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.setCardDensity('compact'));
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe('compact');
 });
@@ -56,7 +56,7 @@ test('the sample opens on the Register card and leaves the Custom fields as they
     await page.reload();
     await expect(page.locator('html')).not.toHaveClass(/app-loading/);
     const before = await page.evaluate(() => JSON.parse(localStorage.getItem('strom-settings') ?? '{}').cardFields);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.Strom.SettingsManager.getCardDensity())).toBe('register');
     // The Register lines, not the saved Custom ones (marriage only).

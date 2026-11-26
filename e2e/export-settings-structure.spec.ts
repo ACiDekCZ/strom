@@ -69,7 +69,7 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
 
 test('one Export…: whole tree by default, the view disables what cannot do it, remembered; view + JSON = the shown people', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     const shown = await page.evaluate(() => [...window.Strom.TreeRenderer.getVisiblePersonIds()].sort());
     const total = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons).length);

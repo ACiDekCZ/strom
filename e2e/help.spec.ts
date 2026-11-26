@@ -239,7 +239,7 @@ test.describe('How Strom works on a phone', () => {
 
     test('More offers it between Settings and About; it fills the screen, the search field leads the contents @smoke', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(page.locator('.person-card').first()).toBeVisible();
         await page.locator('#bb-view-more').tap();
         const tiles = page.locator('.bottom-sheet-pair:has(#sheet-help) .bottom-sheet-item');

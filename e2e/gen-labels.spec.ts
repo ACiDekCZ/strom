@@ -3,7 +3,7 @@ import { openApp, createFirstPerson, card } from './helpers.js';
 
 test('generation labels survive zooming out a step or two', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
     // (The topmost band's label may be legitimately hidden when it would land
     // on that band's cards under the toolbar — see the line-mode test below.)
@@ -27,7 +27,7 @@ test('line mode: band names sit on the boundary rules and never collide with car
     // between two generation rows, so it can never land on a card.
     await page.setViewportSize({ width: 390, height: 844 });
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
 
     // The overlay runs in line mode (the shipped default) and shows labels.
@@ -93,7 +93,7 @@ test('no left-fade veil: the focus card at the left edge keeps full opacity', as
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/strom.html');
     await expect(page.locator('.toolbar')).toBeVisible();
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
 
     // Focus the first root person and enter the descendants view (mobile tab).
@@ -266,7 +266,7 @@ test('a band name lies over a connector line with a halo, beneath the cards: the
 test('the halo covers a band name whole, word gaps included: a line under the name never shows between its words (P4)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
     await expect(page.locator('#gen-labels.gen-labels--line')).toBeAttached();
     await expect(page.locator('#gen-labels:not(.panning) .gen-label:visible').first()).toBeVisible();

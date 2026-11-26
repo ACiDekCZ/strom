@@ -196,7 +196,7 @@ test.describe('actions menu "Tree:" submenu', () => {
     test('Family book, Poster…, Slideshow and Settings open from their new places', async ({ page }) => {
         await openApp(page);
         // The fly-through needs at least two people.
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(page.locator('.person-card').first()).toBeVisible();
         const dropdown = page.locator('#actions-menu-dropdown');
         const viaFamily = async (id: string) => {

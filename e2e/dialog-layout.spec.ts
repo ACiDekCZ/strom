@@ -536,7 +536,7 @@ for (const width of [1440, 1024, 390]) {
     test(`${width}px: the export dialog's Spacing row sits under the paper, its options fit in en/cs/de/pl`, async ({ page }) => {
         await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(page.locator('.person-card').first()).toBeVisible();
         let counted = 0;
         for (const lang of ['en', 'cs', 'de', 'pl'] as const) {

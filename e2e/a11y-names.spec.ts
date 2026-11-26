@@ -126,7 +126,7 @@ test.describe('computer', () => {
         await seedSetting(page, 'mapTiles', true);
         await openApp(page);
         await allNamed(page, 'empty start');
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         await allNamed(page, 'sample tree');
 
@@ -149,7 +149,7 @@ test.describe('phone', () => {
 
     test('the tree, the person sheet and its pages', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         await allNamed(page, 'phone tree');
         await card(page, 'Johan').tap();
@@ -165,7 +165,7 @@ test.describe('tablet', () => {
 
     test('the tree and the person sheet', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         await allNamed(page, 'tablet tree');
         await card(page, 'Johan').tap();

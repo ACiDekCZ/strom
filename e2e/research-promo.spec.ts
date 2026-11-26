@@ -164,10 +164,10 @@ test.describe('welcome screen offer', () => {
             await expect(offer).toContainText('Research with an AI agent, or the free Strom archive on disk');
             // Content stays left-aligned even where the column is centred.
             expect(await offer.evaluate(el => getComputedStyle(el).textAlign)).toBe('left');
-            // Sits between "I have data elsewhere" and the demo link.
+            // Sits between "I have data elsewhere" and the sample links (with research, the small one).
             const order = await page.locator('#empty-state .empty-state-text:not(.empty-state-locked) .empty-state-actions > button')
                 .evaluateAll(els => els.map(e => e.className));
-            expect(order).toEqual(['primary', 'ghost', 'research-offer', 'link']);
+            expect(order).toEqual(['primary', 'ghost', 'research-offer', 'link', 'link']);
             // A new user meets the news here: the one-time card is never due.
             await expect.poll(async () => (await readSettings(page)).whatsNew30Shown).toBe(true);
             await offer.click();

@@ -182,7 +182,7 @@ test('the tree name opens the tree list as a sheet: the trees, the open one mark
 /** The sample tree: a focus person with ancestors and descendants. */
 async function sample(page: Page): Promise<void> {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('#focus-controls')).toBeVisible();
 }
 
@@ -327,7 +327,7 @@ test('a sheet closed by Escape gives the focus back to what opened it', async ({
 
 test('a standalone file: its banner sits under the person row, never over it (open steppers too)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('#focus-controls')).toBeVisible();
     await page.evaluate(() => {
         document.body.classList.add('embedded-mode');
@@ -346,7 +346,7 @@ test('a standalone file: its banner sits under the person row, never over it (op
 
 test('back and forward stand over the bottom bar, never half under it (fan, family, tablet)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
     // Another person focused: there is a way back.
     await page.evaluate(() => {

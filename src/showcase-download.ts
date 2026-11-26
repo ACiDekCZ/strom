@@ -7,7 +7,7 @@
  * (src/ui/showcase-open-ui.ts) says it all.
  */
 
-import { compareSampleVersion, parseShowcaseFile, SHOWCASE_LANGS, type ShowcaseFile, type ShowcaseLang } from './showcase-format.js';
+import { compareSampleVersion, looksLikeShowcaseText, parseShowcaseFile, SHOWCASE_LANGS, type ShowcaseFile, type ShowcaseLang } from './showcase-format.js';
 import type { TreeSampleMark } from './types.js';
 
 /** Why a showcase did not open (§3); `cancelled`: the person stopped the download (nothing said but the toast). */
@@ -42,6 +42,20 @@ export function showcaseExportId(lang: ShowcaseLang): string {
 export function showcaseFileUrl(lang: ShowcaseLang): string {
     return `/demo/${lang}/strom-ukazka-${lang}.json`;
 }
+
+/** Where the web keeps the showcase file (a standalone file links there: it does not download it itself, §4). */
+export const SHOWCASE_WEB_ORIGIN = 'https://stromapp.info';
+
+/** The showcase file's address on the web, for a standalone file's link (opened in a new window). */
+export function showcaseWebFileUrl(lang: ShowcaseLang): string {
+    return `${SHOWCASE_WEB_ORIGIN}${showcaseFileUrl(lang)}`;
+}
+
+/**
+ * About how big the showcase's download is (the New tree row says it before
+ * anything is fetched; the file's header has the exact size).
+ */
+export const SHOWCASE_DOWNLOAD_BYTES = 7_450_000;
 
 /** The address of the showcase's version beside its file. */
 export function showcaseVersionUrl(lang: ShowcaseLang): string {
@@ -114,6 +128,24 @@ export function readShowcaseText(text: string): { ok: true; file: ShowcaseFile }
     } catch {
         return { ok: false, kind: 'broken' };
     }
+    return readShowcaseValue(parsed);
+}
+
+/**
+ * A file's first bytes say it is a showcase (its header comes first): a
+ * file dropped or dragged is told before it is read whole. False when it
+ * cannot be read.
+ */
+export async function fileLooksLikeShowcase(file: Blob): Promise<boolean> {
+    try {
+        return looksLikeShowcaseText(await file.slice(0, 4096).text());
+    } catch {
+        return false;
+    }
+}
+
+/** A showcase's JSON already parsed (a file opened as JSON), read as readShowcaseText reads its text. */
+export function readShowcaseValue(parsed: unknown): { ok: true; file: ShowcaseFile } | { ok: false; kind: 'broken' | 'newerFormat' } {
     const read = parseShowcaseFile(parsed);
     if (read.ok) return read;
     // Downloaded as the showcase and no showcase at all: an unknown file.

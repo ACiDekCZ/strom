@@ -20,7 +20,7 @@ async function openMain(page: Page, context: BrowserContext): Promise<string> {
     await context.route('**://nominatim.openstreetmap.org/**', r => r.abort());
     await page.setViewportSize({ width: 1400, height: 900 });
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     // Every new centre of the main window, and every choice on the windows' channel.
     await page.evaluate(() => {

@@ -18,7 +18,7 @@ const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width 
 async function sampleWithBack(page: Page): Promise<void> {
     await page.clock.install();
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
     await page.evaluate(() => {
         const S = window.Strom;
@@ -181,7 +181,7 @@ async function offerAndToast(page: Page): Promise<void> {
     // The sample tree's hint (3 s, the offer stepped aside under it) runs on Playwright's clock.
     await page.clock.install();
     await openApp(page, { tourOffer: true });
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await page.clock.runFor(3500);
     const offer = page.locator('.tour-offer');
     await expect(offer).toBeVisible();

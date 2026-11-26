@@ -13,13 +13,13 @@ test('Android phone: the main screens fit; a card opens its sheet; no minimap; t
 test.describe('Android phone held sideways', () => {
     const { defaultBrowserType: _browser, ...sideways } = devices['Pixel 7 landscape'];
     test.use(sideways);
-    test('the empty state scrolls beside the side bar and under the header: Try a sample tree can be reached and tapped', async ({ page }) => {
+    test('the empty state scrolls beside the side bar and under the header: Try the small sample can be reached and tapped', async ({ page }) => {
         await openApp(page);
         const empty = page.locator('#empty-state');
         await expect(empty).toBeVisible();
         // Taller than the space: it scrolls (by the user's finger as by the wheel), not the tree.
         await empty.evaluate(el => { el.scrollTop = el.scrollHeight; });
-        const demo = page.getByRole('button', { name: 'Try a sample tree' });
+        const demo = page.getByRole('button', { name: 'Try the small sample' });
         const box = (await demo.boundingBox())!;
         // Sideways the bar is a side bar on the left (4a of the phone round).
         const bar = (await page.locator('.bottom-bar').boundingBox())!;

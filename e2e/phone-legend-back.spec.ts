@@ -15,7 +15,7 @@ const FLOATING = ['#tree-legend', '#fan-legend-chip', '#focus-back-btn', '#focus
 
 async function sampleWithBack(page: Page): Promise<void> {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
     await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
     await page.evaluate(() => {
@@ -131,7 +131,7 @@ for (const [label, viewport] of [['computer 1440', { width: 1440, height: 900 }]
 
         test('the family view: back and forward come above the legend, which does not move', async ({ page }) => {
             await openApp(page);
-            await page.getByRole('button', { name: 'Try a sample tree' }).click();
+            await page.getByRole('button', { name: 'Try the small sample' }).click();
             await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
             await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
             const legend = page.locator('#tree-legend');
@@ -167,7 +167,7 @@ for (const [label, viewport] of [['computer 1440', { width: 1440, height: 900 }]
 
         test('the fan: back comes above the legend card, which does not move, open or folded', async ({ page }) => {
             await openApp(page);
-            await page.getByRole('button', { name: 'Try a sample tree' }).click();
+            await page.getByRole('button', { name: 'Try the small sample' }).click();
             await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
             await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
             const legend = page.locator('#fan-legend');

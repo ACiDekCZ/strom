@@ -422,7 +422,7 @@ for (const vp of [
  */
 test('the serif is embedded as "Strom Serif" and no face is declared under the reserved name "Source"', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('#empty-state')).toBeHidden();
     await page.evaluate(() => document.fonts.ready);
 

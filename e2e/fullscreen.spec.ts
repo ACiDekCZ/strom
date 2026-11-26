@@ -94,7 +94,7 @@ test.describe('phone', () => {
     test('a slideshow leaves full screen on when it was on before the show', async ({ page }) => {
         await stubFullscreen(page, true);
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         // Not on before: the show turns it on and its end off.
         await page.evaluate(() => window.Strom.UI.startSlideshow());

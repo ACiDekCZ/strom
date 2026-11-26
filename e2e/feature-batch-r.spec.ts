@@ -13,7 +13,7 @@ import { openApp, createFirstPerson, card } from './helpers.js';
 /** Load the built-in sample tree (the Berg family) from the empty state. */
 async function loadSample(page: Page): Promise<void> {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('#empty-state')).toBeHidden();
     await expect(card(page, 'Johan')).toBeVisible();
 }

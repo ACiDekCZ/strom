@@ -168,7 +168,7 @@ test('garbage GEDCOM import does not crash the app', async ({ page }) => {
 
 test('demo tree can be exported and re-imported with the same person count', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('#empty-state')).toBeHidden();
     const demoCount = await personCount(page);
     expect(demoCount).toBeGreaterThan(3);
@@ -339,7 +339,7 @@ test('plain GEDCOM import clears stale manager intent: the guide offers the open
 
 test('make a tree from the current view creates a separate tree of the shown people', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
     const shown = await page.evaluate(() => window.Strom.TreeRenderer.getVisiblePersonIds().size);

@@ -9,11 +9,11 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-    downloadShowcase, fetchShowcaseVersion, formatShowcaseMb, isQuotaError, newerShowcaseVersion, readShowcaseText,
-    showcaseFetchFailure, showcaseFileUrl, showcaseLangParam, showcasePercent, showcaseRoomShort, showcaseSizeFromPrefix,
+    downloadShowcase, fetchShowcaseVersion, fileLooksLikeShowcase, formatShowcaseMb, isQuotaError, newerShowcaseVersion, readShowcaseText,
+    readShowcaseValue, showcaseFetchFailure, showcaseWebFileUrl, showcaseFileUrl, showcaseLangParam, showcasePercent, showcaseRoomShort, showcaseSizeFromPrefix,
     type ShowcaseDownloadDeps,
 } from '../showcase-download.js';
-import { keepShowcaseSettings, showcaseErrorText, showcaseProgressStep, showcaseTreeData } from '../ui/showcase-open-ui.js';
+import { keepShowcaseSettings, showcaseErrorText, showcaseLangOfUi, showcaseProgressStep, showcaseTreeData, showcaseTryDesc } from '../ui/showcase-open-ui.js';
 import { setLanguage } from '../strings.js';
 import type { PersonId, StromData, TreeSampleMark } from '../types.js';
 
@@ -211,5 +211,34 @@ describe('the showcase tree', () => {
         expect(kept.tableViews).toHaveLength(1);
         expect(kept.lastFocusPersonId).toBeUndefined();
         expect(keepShowcaseSettings(next, { ...prev, defaultPersonId: 'p_gone' as PersonId }).defaultPersonId).toBeUndefined();
+    });
+});
+
+describe('a showcase file opened or dropped (§4)', () => {
+    it('its first bytes say it, before the whole file is read', async () => {
+        expect(await fileLooksLikeShowcase(new Blob([FIXTURE]))).toBe(true);
+        expect(await fileLooksLikeShowcase(new Blob(['\ufeff' + FIXTURE]))).toBe(true);
+        expect(await fileLooksLikeShowcase(new Blob([JSON.stringify({ persons: {}, partnerships: {} })]))).toBe(false);
+        // The header later in the file: told only once read whole (the JSON import's check).
+        expect(await fileLooksLikeShowcase(new Blob([JSON.stringify({ tree: null, kind: 'strom-showcase' })]))).toBe(false);
+    });
+
+    it('read as parsed JSON the same as from its text', () => {
+        const fromText = readShowcaseText(FIXTURE);
+        const fromValue = readShowcaseValue(JSON.parse(FIXTURE));
+        expect(fromValue.ok).toBe(true);
+        expect(fromValue).toEqual(fromText);
+        expect(readShowcaseValue({ kind: 'strom-showcase', format: 2 })).toEqual({ ok: false, kind: 'newerFormat' });
+        expect(readShowcaseValue({ kind: 'strom-showcase', format: 1 })).toEqual({ ok: false, kind: 'broken' });
+    });
+
+    it('a standalone file links to the file on the web and says it does not download it', () => {
+        expect(showcaseWebFileUrl('de')).toBe('https://stromapp.info/demo/de/strom-ukazka-de.json');
+        setLanguage('cs');
+        expect(showcaseLangOfUi()).toBe('cs');
+        expect(showcaseTryDesc(false)).toMatch(/^Vymyšlená rodina s výzkumem jen k prohlížení · stáhne se \d+,\d MB$/);
+        expect(showcaseTryDesc(true)).toContain('(.json)');
+        setLanguage('en');
+        expect(showcaseTryDesc(false)).toMatch(/· \d+\.\d MB download$/);
     });
 });

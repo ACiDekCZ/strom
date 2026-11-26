@@ -37724,7 +37724,9 @@
                         </span>
                         <span class="research-offer-arrow" aria-hidden="true">&#8250;</span>
                     </button>
-                    <button class="link" onclick="window.Strom.UI.loadDemoTree()"><span data-i18n="demo.tryDemo"></span><span class="es-arrow" aria-hidden="true"> &rarr;</span></button>
+                    <!-- The showcase with its research (spec 143 §4): downloaded, or in a standalone file opened from a downloaded file. -->
+                    <button class="link" onclick="window.Strom.UI.tryShowcase()"><span data-i18n="sample.tryTitle"></span><span class="es-arrow" aria-hidden="true"> &rarr;</span></button>
+                    <button class="link" onclick="window.Strom.UI.loadDemoTree()"><span data-i18n="demo.tryDemoSmall"></span><span class="es-arrow" aria-hidden="true"> &rarr;</span></button>
                 </div>
             </div>
             <!-- Locked local data (body.data-locked): no add/demo offers, only Unlock. -->
@@ -40310,10 +40312,18 @@
                         <span class="option-desc" data-i18n="treeManager.fromJsonDesc"></span>
                     </span>
                 </button>
+                <!-- The showcase with its research (spec 143 §4); its second line (the download's size,
+                     or a standalone file's own way) is set when the menu opens. -->
+                <button class="menu-option" id="new-tree-showcase-option" onclick="window.Strom.UI.tryShowcase()">
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="sample.tryTitle"></span>
+                        <span class="option-desc" id="new-tree-showcase-desc"></span>
+                    </span>
+                </button>
                 <button class="menu-option" onclick="window.Strom.UI.loadDemoTree()">
                     <span class="option-text">
-                        <span class="option-title" data-i18n="demo.tryDemo"></span>
-                        <span class="option-desc" data-i18n="demo.tryDemoDesc"></span>
+                        <span class="option-title" data-i18n="demo.tryDemoSmall"></span>
+                        <span class="option-desc" data-i18n="demo.tryDemoSmallDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.startGedcomImportFromManager()">

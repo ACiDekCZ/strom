@@ -292,8 +292,8 @@ test.describe('mobile: descendants framing (no left clip)', () => {
         await page.goto('/strom.html');
         await expect(page.locator('.toolbar')).toBeVisible();
 
-        // Real user path: the empty-state "Try a sample tree" link.
-        await page.locator('#empty-state button.link').click();
+        // Real user path: the empty-state "Try the small sample" link (the last one, below the showcase's).
+        await page.locator('#empty-state button.link').last().click();
         await expect(page.locator('.person-card').first()).toBeVisible();
 
         // Focus the root (Peter), then enter Potomci via the actual mobile

@@ -6,7 +6,7 @@ import { openApp, card, createFirstPerson } from './helpers.js';
  */
 test('fan view shows ancestor sectors and clicking one refocuses', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     await page.locator('#view-mode-fan').click();
@@ -31,7 +31,7 @@ test('fan view shows ancestor sectors and clicking one refocuses', { tag: '@smok
 
 test('fan view: the generations stepper changes the ring count and is remembered (3-10)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await page.locator('#view-mode-fan').click();
 
     const stepper = page.locator('#fan-gen-stepper');
@@ -95,7 +95,7 @@ test('fan view: empty ancestor slot offers adding a parent', async ({ page }) =>
 
 test('Kekule numbers are off by default, drawn when enabled, always in the tooltip (K9)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
     await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
@@ -182,7 +182,7 @@ async function sectorPoint(page: Page, name: string): Promise<{ x: number; y: nu
 
 async function openFan(page: Page): Promise<void> {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
     await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();

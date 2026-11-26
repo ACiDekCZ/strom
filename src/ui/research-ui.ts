@@ -62,7 +62,7 @@ import {
 } from '../research-link.js';
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
-import { showcaseLangParam } from '../showcase-download.js';
+import { fileLooksLikeShowcase, showcaseLangParam } from '../showcase-download.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink, type ResearchLinkMarkParams } from '../research-link.js';
 import { deviceEventSource, isDeviceTunnelled } from '../device/device-bridge.js';
@@ -136,7 +136,7 @@ import { completeStatus, statusAskUrl } from '../status-parts.js';
 import { expandedData } from '../image-expand.js';
 import { exportGedcomWithImages, gedcomText, type GedcomWithImages } from '../ged-export-images.js';
 import { looksLikeGedcom } from './file-pick.js';
-import { dragLooksLikeJson, dropRoute, isJsonFileName } from '../drop-route.js';
+import { draggedFile, dragLooksLikeJson, dropRoute, isJsonFileName } from '../drop-route.js';
 import type { DropInto } from '../tree-drop.js';
 import { createSha256 } from '../sha256.js';
 import { localIsoDay } from '../import-origin.js';
@@ -2336,6 +2336,8 @@ export const researchUiMethods = uiModule({
         let dropCancelled = false;
         // One JSON file dragged: a tree for the guide, never material (K10.2).
         let jsonDrag = false;
+        // ...and its header readable while dragged says a showcase (spec 143 §4): the overlay says it opens as a sample.
+        let showcaseDrag = false;
         const zoneAt = (e: DragEvent): 'read' | 'add' => (!this.batchAvailable() || e.clientX < window.innerWidth / 2 ? 'read' : 'add');
         const overlay = (show: boolean): void => {
             let node = document.getElementById('drop-overlay');
@@ -2369,6 +2371,10 @@ export const researchUiMethods = uiModule({
                 zones.appendChild(zone('read', t.dropRead, t.dropReadSub, true));
                 if (this.batchAvailable()) zones.appendChild(zone('add', t.dropAdd, t.dropAddSub, false));
                 node.appendChild(zones);
+            } else if (box && showcaseDrag) {
+                box.innerHTML = '';
+                box.appendChild(el('div', 'drop-overlay-title', strings.sample.dropTitle));
+                box.appendChild(el('div', 'drop-overlay-sub', strings.sample.dropSub));
             } else if (box && this.batchAvailable() && !jsonDrag) {
                 // A tree linked to a research that takes batches: other files go there as material.
                 box.innerHTML = '';
@@ -2391,6 +2397,16 @@ export const researchUiMethods = uiModule({
                     dropCancelled = false;
                     readZones = !modalOpen() && this.readDropOffered(e.dataTransfer);
                     jsonDrag = dragLooksLikeJson(e.dataTransfer?.items);
+                    showcaseDrag = false;
+                    // Most browsers keep a dragged file closed until it is dropped: then today's text stays.
+                    const dragged = jsonDrag ? draggedFile(e.dataTransfer) : null;
+                    if (dragged) {
+                        void fileLooksLikeShowcase(dragged).then(yes => {
+                            if (!yes || depth === 0 || dropCancelled) return;
+                            showcaseDrag = true;
+                            if (!modalOpen()) overlay(true);
+                        });
+                    }
                 }
                 depth++;
                 if (!modalOpen() && !dropCancelled) overlay(true);
@@ -2419,6 +2435,7 @@ export const researchUiMethods = uiModule({
             });
             window.addEventListener('drop', (e) => {
                 depth = 0;
+                showcaseDrag = false;
                 overlay(false);
                 if (!hasFiles(e) || onFileInput(e)) return;
                 // A place inside a dialog took the files itself.

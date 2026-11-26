@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { dragLooksLikeJson, dropRoute, isJsonFileName, jsonDropKind } from '../drop-route.js';
+import { draggedFile, dragLooksLikeJson, dropRoute, isJsonFileName, jsonDropKind } from '../drop-route.js';
+import { isMultiTreeBackup } from '../backup-formats.js';
 
 describe('dropRoute', () => {
     it('one .ged or one .json opens the guide, with or without a batch', () => {
@@ -53,6 +54,17 @@ describe('jsonDropKind', () => {
         expect(jsonDropKind({ kind: 'strom-changes', formatVersion: 2, baseExportId: 'x' })).toBe('app-file');
     });
 
+    it('a showcase file is told by its header (spec 143 §4), even one that cannot be read further', () => {
+        const header = { kind: 'strom-showcase', format: 1, lang: 'cs', exportId: 'showcase-cs', sampleVersion: '3.33.0', asOf: '2026-11-01T09:00:00Z' };
+        expect(jsonDropKind({ ...header, tree: { format: 'ged', text: '0 HEAD' }, research: null })).toBe('showcase');
+        expect(jsonDropKind({ kind: 'strom-showcase', format: 9 })).toBe('showcase');
+        // Never a backup of all trees to restore (its header values are no trees).
+        expect(isMultiTreeBackup(header)).toBe(false);
+        expect(isMultiTreeBackup({ kind: 'strom-showcase', t1: { name: 'x', data: { persons: {} } } })).toBe(false);
+        // A tree that has a "kind" of its own stays a tree.
+        expect(jsonDropKind({ kind: 'other', persons: {}, partnerships: {} })).toBe('tree');
+    });
+
     it('anything else is no file of the app', () => {
         for (const v of [undefined, null, 1, 'text', [], {}, { persons: [] }, { notes: 'x' }]) expect(jsonDropKind(v)).toBe('other');
     });
@@ -66,5 +78,17 @@ describe('dragLooksLikeJson', () => {
         expect(dragLooksLikeJson([{ kind: 'file', type: 'application/json' }, { kind: 'file', type: 'image/jpeg' }])).toBe(false);
         expect(dragLooksLikeJson([{ kind: 'string', type: 'text/plain' }, { kind: 'file', type: 'application/json' }])).toBe(true);
         expect(dragLooksLikeJson(null)).toBe(false);
+    });
+});
+
+describe('draggedFile', () => {
+    it('the one file dragged, when the browser opens it before the drop', () => {
+        const blob = new Blob(['{}'], { type: 'application/json' });
+        expect(draggedFile({ items: [{ kind: 'file', getAsFile: () => blob }] })).toBe(blob);
+        // Most browsers keep it closed until the drop.
+        expect(draggedFile({ items: [{ kind: 'file', getAsFile: () => null }] })).toBeNull();
+        expect(draggedFile({ items: [{ kind: 'file', getAsFile: () => { throw new Error('protected'); } }] })).toBeNull();
+        expect(draggedFile({ items: [{ kind: 'file', getAsFile: () => blob }, { kind: 'file', getAsFile: () => blob }] })).toBeNull();
+        expect(draggedFile(null)).toBeNull();
     });
 });

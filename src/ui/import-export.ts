@@ -16,6 +16,8 @@ import { noteExportAll } from '../research-device.js';
 import { DataManager, auditPersonName, storedTreeForExport, storedTreeWithRefs } from '../data.js';
 import { confirmMemoryForImport } from './memory-limit-ui.js';
 import { jsonDropKind } from '../drop-route.js';
+import { isShowcaseFile } from '../showcase-format.js';
+import { fileLooksLikeShowcase } from '../showcase-download.js';
 import type { DropInto } from '../tree-drop.js';
 import { TreeManager } from '../tree-manager.js';
 import { sanitizeResearchField } from '../research-link.js';
@@ -1310,10 +1312,17 @@ export const importExportMethods = uiModule({
      * to this tree; an encrypted one asks its password first); a backup of
      * all trees or a change packet goes the JSON import's way. Anything else
      * is material for a research that takes batches (`batch`), otherwise
-     * said unreadable; nothing changes.
+     * said unreadable; nothing changes. A showcase file (spec 143 §4, told
+     * by its header) opens as a sample tree of its own.
      */
     async importDroppedJson(file: File, opts: { batch: boolean; into?: DropInto }): Promise<void> {
         if (!(await confirmMemoryForImport(file.size, file.name))) return;
+        // Its first bytes say it: "Opening the sample" at once, before the whole file is read.
+        if (await fileLooksLikeShowcase(file)) {
+            this.pendingOpenFileHandle = null;
+            await this.openShowcaseFromFile(file);
+            return;
+        }
         let text = '';
         let parsed: unknown;
         try {
@@ -1375,6 +1384,16 @@ export const importExportMethods = uiModule({
                 this.showValidationDialog({ valid: false, errors: ['validation.invalidJson'], warnings: [] });
                 return;
             }
+        }
+
+        // A showcase file (spec 143 §4, told by its header, not its name):
+        // a sample tree of its own, whatever tree the import was meant for.
+        if (isShowcaseFile(parsed)) {
+            const name = this.jsonImportFileName ?? '';
+            this.jsonImportFileName = null;
+            this.pendingOpenFileHandle = null;
+            await this.openShowcaseFromJson(parsed, name, content.length);
+            return;
         }
 
         // A change packet (collaboration diff) is reconstructed against a local

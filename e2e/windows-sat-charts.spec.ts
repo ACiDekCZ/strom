@@ -51,7 +51,7 @@ async function openMain(page: Page, context: BrowserContext): Promise<string> {
     });
     await page.setViewportSize({ width: 1400, height: 900 });
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     return page.evaluate(() => window.Strom.DataManager.getCurrentTreeId() as string);
 }

@@ -7,7 +7,7 @@ import { openApp, card } from './helpers.js';
  */
 test('timeline view: life-bars from the gender tokens, no zoom controls, the wheel scrolls it (no tree zoom), a bar refocuses, back to the family tree', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await expect(page.locator('.zoom-controls')).toBeVisible();
 

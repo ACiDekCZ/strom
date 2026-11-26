@@ -80,6 +80,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         tryDemo: 'Wypróbuj drzewo przykładowe',
         tryDemoDesc: 'Zmyślona rodzina, która pokazuje, wszystko, co może zawierać drzewo',
         tryDemoSmall: 'Wypróbuj mały przykład',
+        tryDemoSmallDesc: 'Zmyślona rodzina, która pokazuje, wszystko, co może zawierać drzewo · także bez sieci',
         treeName: 'Przykład: ród Bergów',
         hint: 'Kliknięcie karty otwiera akcje. To zwykłe drzewo – można je usunąć w zarządzaniu drzewami.',
         noResearch: 'Drzewo przykładowe służy do wypróbowania aplikacji i nigdy nie zostaje połączone z badaniem. Badanie zaczyna się od prawdziwego drzewa rodzinnego.',

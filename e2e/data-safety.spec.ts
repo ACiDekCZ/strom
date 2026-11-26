@@ -133,7 +133,7 @@ test.describe('Local encryption', () => {
         await expect(empty).toBeVisible();
         await expect(empty).toContainText('The data is locked — unlock to continue');
         await expect(empty.getByRole('button', { name: 'Add first person' })).toBeHidden();
-        await expect(empty.getByRole('button', { name: /Try a sample tree/ })).toBeHidden();
+        await expect(empty.getByRole('button', { name: /Try the small sample/ })).toBeHidden();
         const emptyUnlock = page.locator('#empty-state-unlock-btn');
         await expect(emptyUnlock).toBeVisible();
         await expect(emptyUnlock).toHaveText('Unlock');

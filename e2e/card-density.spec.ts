@@ -26,7 +26,7 @@ async function overlapCount(page: Page): Promise<number> {
 
 async function sampleTree(page: Page): Promise<void> {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
 }

@@ -17,7 +17,7 @@ async function sampleTree(page: Page, density = 'normal', fields?: unknown): Pro
     await seedSetting(page, 'cardDensity', density);
     if (fields) await seedSetting(page, 'cardFields', fields);
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 }
 

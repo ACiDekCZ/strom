@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
 async function sampleWithOffer(page: import('@playwright/test').Page): Promise<void> {
     await page.clock.install();
     await openApp(page, { tourOffer: true });
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('body > .toast.show')).toBeVisible();
     await page.clock.runFor(3500);
     await expect(page.locator('.tour-offer')).toBeVisible();
@@ -256,7 +256,7 @@ test.describe('the tour from How Strom works, computer', () => {
 
     test('the contents offer the app tour next to the glossary; it closes the help and shows all eight steps', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         // About no longer starts it: Close is its only button.
         await page.locator('.app-logo').click();
@@ -292,7 +292,7 @@ test.describe('the tour from How Strom works, phone', () => {
 
     test('More → How Strom works → App tour: every step but the hover-only card buttons, each at its target', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         await page.locator('#bb-view-more').tap();
         await page.locator('#sheet-help').tap();

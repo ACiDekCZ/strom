@@ -125,7 +125,7 @@ for (const width of [1280, 1440]) {
     test(`generation labels never overlap the focus chip or toolbar at ${width} px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 860 });
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(page.locator('.person-card').first()).toBeVisible();
         await expect(page.locator('#focus-controls')).toBeVisible();
 

@@ -232,7 +232,7 @@ test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family
 
 test('More: Family book, Poster…, Slideshow, Settings and Import… are all within reach on a phone', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
     const more = async () => {
         await page.locator('#bb-view-more').tap();

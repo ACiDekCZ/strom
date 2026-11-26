@@ -102,7 +102,7 @@ test('newer data embedded in an HTML file opens read-only, its import disabled',
 
 test('a browser database left by a newer app: this build still starts, opens it as it is and keeps the trees', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
     // A newer build upgrades the database (as 3.9 did to one of 3.8.1): this
     // tab's connection closes, and the reload opens it with a lower version.
@@ -122,7 +122,7 @@ test('a browser database left by a newer app: this build still starts, opens it 
 
 test('3.9 keeps the browser database at version 5: an older build (3.8.x, an older exported file) still opens it', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
     const dbs = await page.evaluate(async () => (await indexedDB.databases()).map(d => ({ name: d.name, version: d.version })));
     expect(dbs).toContainEqual({ name: 'strom-db', version: 5 });

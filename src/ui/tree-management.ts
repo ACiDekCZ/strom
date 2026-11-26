@@ -67,6 +67,7 @@ import { forgetTreeMaterials } from './materials-ui.js';
 import { updateDefaultFocusButtons } from './default-focus.js';
 import { inDeviceMode, deviceTreesNotHere } from './device-mode-ui.js';
 import { deviceTreeTextHtml } from './device-start-ui.js';
+import { showcaseTryDesc } from './showcase-open-ui.js';
 
 /** Room (px) a row menu needs beside ⋯ to show a useful part of its rows. */
 const TREE_MENU_MIN_ROOM = 240;
@@ -1521,6 +1522,8 @@ export const treeManagementMethods = uiModule({
         if (introEl) {
             introEl.style.display = showIntro ? 'block' : 'none';
         }
+        const showcaseDesc = document.getElementById('new-tree-showcase-desc');
+        if (showcaseDesc) showcaseDesc.textContent = showcaseTryDesc(this.appMode === 'embedded');
 
         document.getElementById('new-tree-menu-modal')?.classList.add('active');
     },

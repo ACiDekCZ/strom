@@ -13,6 +13,7 @@
 
 import { StromData, AuditLog } from './types.js';
 import { EncryptedData, isEncrypted } from './crypto.js';
+import { isShowcaseFile } from './showcase-format.js';
 
 export interface BackupTreeEntry {
     name: string;
@@ -29,6 +30,8 @@ export type BackupTrees = Record<string, BackupTreeEntry>;
 export function isMultiTreeBackup(value: unknown): value is BackupTrees {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
     if (isEncrypted(value)) return false;
+    // A showcase file (spec 143) opens as a sample tree, never as trees to restore.
+    if (isShowcaseFile(value)) return false;
     const obj = value as Record<string, unknown>;
     // A single tree has top-level persons; a backup never does.
     if ('persons' in obj) return false;

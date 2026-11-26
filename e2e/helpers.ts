@@ -464,7 +464,7 @@ export async function importJsonAsNewTree(page: Page, filePath: string, treeName
  */
 export async function controlCardComesBack(page: Page): Promise<void> {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     // WebKit on a loaded machine (the whole suite in parallel) takes longer than 5 s to draw the sample tree.
     await expect(card(page, 'Johan')).toBeVisible({ timeout: 15000 });
     const block = page.locator('.control-block');

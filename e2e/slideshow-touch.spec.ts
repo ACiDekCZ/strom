@@ -14,7 +14,7 @@ const apart = (a: Box, b: Box) => a.x + a.width <= b.x || b.x + b.width <= a.x |
 async function start(page: Page): Promise<void> {
     await page.clock.install();
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.startSlideshow());
     await expect(page.locator('body')).toHaveClass(/slideshow-mode/);

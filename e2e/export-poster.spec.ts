@@ -127,7 +127,7 @@ test('poster SVG applies the living-privacy filter', async ({ page }) => {
 
 test('fan view: poster downloads an SVG containing fan sectors', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     await page.locator('#view-mode-fan').click();
@@ -154,7 +154,7 @@ test('fan view: poster downloads an SVG containing fan sectors', async ({ page }
 
 test('fan view: the two-way poster names ancestors and descendants (1031)', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.locator('#view-mode-fan').click();
     await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
@@ -169,7 +169,7 @@ test('fan view: the two-way poster names ancestors and descendants (1031)', asyn
 
 test('timeline view: poster downloads an SVG containing timeline bars', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('timeline'));
@@ -203,7 +203,7 @@ test('timeline view: tiled print decodes its tiles (no blank sheets)', async ({ 
     // width/height attributes → invalid XML → the tile <img> never decoded, so
     // the print preview showed blank sheets. Assert the tile image loads.
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('timeline'));
@@ -238,7 +238,7 @@ test('timeline view: tiled print decodes its tiles (no blank sheets)', async ({ 
 
 test('map view: poster export is honestly blocked and buttons are disabled', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
@@ -256,7 +256,7 @@ test('map view: poster export is honestly blocked and buttons are disabled', asy
 
 test('tiled print fires only after the tile image is decoded, adds an assembly guide and skips blank sheets', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
     // Capture the state at the moment print() is invoked (empty-pages fix).
     await page.evaluate(() => {
@@ -313,7 +313,7 @@ test.describe('poster spacing (1110)', () => {
 
     test('remembered at once, the screen untouched, a dense image lower than a normal one', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         const gens = await page.evaluate(() => new Set([...window.Strom.TreeRenderer.getPosterLayout().positions.values()].map(p => p.y)).size);
         expect(gens).toBeGreaterThanOrEqual(3);
@@ -353,7 +353,7 @@ test.describe('poster spacing (1110)', () => {
 
     test('each option names the sheets its print takes, as the guide page counts them; none when both take as many', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         await page.evaluate(() => window.Strom.UI.showPosterDialog());
         const modal = page.locator('#poster-modal');
@@ -412,7 +412,7 @@ test.describe('poster spacing (1110)', () => {
 
     test('the fan and the timeline lay out their own way: no spacing row', async ({ page }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         await page.locator('#view-mode-fan').click();
         await expect(page.locator('#fan-container .fan-svg')).toBeVisible();

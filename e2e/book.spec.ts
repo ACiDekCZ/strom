@@ -577,7 +577,7 @@ test.describe('family book: phone, German', () => {
 test.describe('family book: the content', () => {
     test('the sample tree: the book in a new window with its structure', async ({ page, context }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(page.locator('#empty-state')).toBeHidden();
         // From the export menu.
         await page.evaluate(() => window.Strom.UI.showExportDialog());
@@ -628,7 +628,7 @@ test.describe('family book: the content', () => {
 
     test('a childless couple\'s story is a subchapter after the main-line partner\'s chapter (spec 027, 1031)', async ({ page, context }) => {
         await openApp(page);
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(page.locator('#empty-state')).toBeHidden();
         // A second, childless marriage of a parent from the first chapter, with a story of its own.
         await page.evaluate(() => {

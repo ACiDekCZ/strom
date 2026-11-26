@@ -37,7 +37,7 @@ async function openImplexFan(page: Page): Promise<void> {
 
 async function openSampleFan(page: Page): Promise<void> {
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
     await expect(focusDisc(page)).toContainText('Johan');

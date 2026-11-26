@@ -9,7 +9,7 @@ import { openApp, card } from './helpers.js';
  */
 test('desktop: the sample tree offers no tour, the help has no tour link', async ({ page }) => {
     await openApp(page, { tourOffer: true });
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.getByRole('button', { name: 'Try the small sample' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await expect(page.locator('.toast')).toBeVisible();
     await expect(page.locator('.tour-offer')).toHaveCount(0);
@@ -25,7 +25,7 @@ test.describe('phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
     test('390: no tour offer, no tour link under More → How Strom works', async ({ page }) => {
         await openApp(page, { tourOffer: true });
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await page.getByRole('button', { name: 'Try the small sample' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         await expect(page.locator('.tour-offer')).toHaveCount(0);
         await page.locator('#bb-view-more').tap();

@@ -10,6 +10,7 @@ import { isGedcomFileName } from './research-link.js';
 import { isMultiTreeBackup } from './backup-formats.js';
 import { isChangePacket } from './share-diff.js';
 import { isEncrypted } from './crypto.js';
+import { isShowcaseFile } from './showcase-format.js';
 
 /** A file name taken as a Strom tree (JSON). */
 export function isJsonFileName(name: unknown): boolean {
@@ -40,12 +41,14 @@ export function dropRoute(names: readonly string[], opts: { batch: boolean }): D
  * What a dropped .json holds:
  * - 'tree': one tree (or an encrypted file, a tree once opened): the import guide;
  * - 'app-file': an "Export all" backup or a change packet: the JSON import's own way;
+ * - 'showcase': a showcase file (spec 143 §4, told by its header): it opens as a sample tree of its own;
  * - 'other': not a file of the app (material for a research that takes batches, else unreadable).
  */
-export type JsonDropKind = 'tree' | 'app-file' | 'other';
+export type JsonDropKind = 'tree' | 'app-file' | 'showcase' | 'other';
 
 export function jsonDropKind(parsed: unknown): JsonDropKind {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 'other';
+    if (isShowcaseFile(parsed)) return 'showcase';
     if (isEncrypted(parsed)) return 'tree';
     if (isChangePacket(parsed) || isMultiTreeBackup(parsed)) return 'app-file';
     const persons = (parsed as { persons?: unknown }).persons;
@@ -59,4 +62,19 @@ export function jsonDropKind(parsed: unknown): JsonDropKind {
 export function dragLooksLikeJson(items: ArrayLike<{ kind: string; type: string }> | null | undefined): boolean {
     const files = Array.from(items ?? []).filter(i => i.kind === 'file');
     return files.length === 1 && files[0].type.toLowerCase() === 'application/json';
+}
+
+/**
+ * The one file dragged, when the browser lets it be read before the drop
+ * (most keep it closed until then: null). Its first bytes can then say a
+ * showcase (spec 143 §4).
+ */
+export function draggedFile(dt: { items?: ArrayLike<{ kind: string; getAsFile?: () => Blob | null }> } | null | undefined): Blob | null {
+    const files = Array.from(dt?.items ?? []).filter(i => i.kind === 'file');
+    if (files.length !== 1) return null;
+    try {
+        return files[0].getAsFile?.() ?? null;
+    } catch {
+        return null;
+    }
 }
