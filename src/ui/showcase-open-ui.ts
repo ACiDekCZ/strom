@@ -360,6 +360,9 @@ export const showcaseOpenMethods = uiModule({
         }
         // Set inside `go` (TypeScript does not see the callback assign it).
         const end = outcome as ShowcaseOpenResult;
+        // Said once the switch has ended: from this toast on the tree takes edits and a dropped file
+        // (inside `go` the switch's edit lock still stood for its last moments, refusing them).
+        if (end.done === 'opened') this.showToast(strings.sample.opened, 6000, { title: strings.sample.openedTitle });
         if (end.done === 'failed') void this.showShowcaseError(end.failure, end.failure.kind === 'offline' || end.failure.kind === 'server' ? opts.retry : undefined);
         return end;
     },
@@ -367,7 +370,7 @@ export const showcaseOpenMethods = uiModule({
     /**
      * The showcase's tree made and opened: its data as a new tree, marked a
      * sample, tied to its research to be read only, focused on its default
-     * person, said in a toast. Anything failing deletes the tree again and
+     * person (said in a toast by openShowcaseFile once the switch ended). Anything failing deletes the tree again and
      * opens the tree that was open.
      */
     async createShowcaseTree(file: ShowcaseFile): Promise<ShowcaseOpenResult> {
@@ -400,7 +403,6 @@ export const showcaseOpenMethods = uiModule({
         TreeRenderer.resetFocusHistory();
         this.refreshSearch();
         this.updateUrlTreeParam(treeId);
-        this.showToast(strings.sample.opened, 6000, { title: strings.sample.openedTitle });
         return { done: 'opened', treeId };
     },
 

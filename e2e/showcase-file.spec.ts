@@ -93,6 +93,40 @@ test.describe('in the app', () => {
         expect(foreign).toEqual([]);
     });
 
+    test('once "The sample is open." says so, the tree takes a dropped file: no switch still holds edits', async ({ page }) => {
+        // The moment the toast is drawn, the same file is dropped again: it is taken (only switched to,
+        // nothing made), never refused as "being switched" (the toast came inside the switch's last moments).
+        await page.evaluate((body) => {
+            const w = window as unknown as { __locked: string[]; __droppedAtToast: boolean };
+            w.__locked = [];
+            w.__droppedAtToast = false;
+            new MutationObserver(() => {
+                for (const t of document.querySelectorAll('.toast[data-kind="edit-lock"]')) {
+                    const text = t.textContent ?? '';
+                    if (!w.__locked.includes(text)) w.__locked.push(text);
+                }
+                if (w.__droppedAtToast) return;
+                const opened = Array.from(document.querySelectorAll('.toast')).some(t => t.textContent?.includes('The sample is open.'));
+                if (!opened) return;
+                w.__droppedAtToast = true;
+                const dt = new DataTransfer();
+                dt.items.add(new File([body], 'strom-ukazka-cs.json', { type: 'application/json' }));
+                window.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+            }).observe(document.body, { childList: true, subtree: true, characterData: true });
+        }, FIXTURE);
+        await watchOpeningToast(page);
+        await dropFile(page, 'stazeno.json', FIXTURE);
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __droppedAtToast: boolean }).__droppedAtToast)).toBe(true);
+        // The second drop is read ("Opening the sample" with its name) and done.
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __opening: string[] }).__opening
+            .some(t => t.includes('strom-ukazka-cs.json')))).toBe(true);
+        await expect(page.locator('.showcase-opening-toast')).toHaveCount(0);
+        expect(await page.evaluate(() => (window as unknown as { __locked: string[] }).__locked)).toEqual([]);
+        // One sample tree, the one open: the second drop only switched.
+        expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().filter(t => t.sample?.exportId === 'showcase-cs').length)).toBe(1);
+        expect(await activeTreeName(page)).toBe(NAME);
+    });
+
     test('a showcase file that cannot be opened says so and offers the small sample, without Try again', async ({ page }) => {
         const before = await treeCount(page);
         const newer = JSON.stringify({ ...JSON.parse(FIXTURE), format: 2 });
