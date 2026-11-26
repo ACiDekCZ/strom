@@ -47,6 +47,41 @@ test('The coffee cup in About has still steam, with or without reduced motion', 
 });
 
 /**
+ * A moment after About opens, the cup plays one of nine small animations once
+ * (about-coffee-anim.ts, unit-tested there): the decorations are aria-hidden,
+ * let clicks through and never move the button; they are gone afterwards and
+ * the cup is the same static icon again. Reduced motion: nothing plays.
+ */
+test('The coffee cup in About plays one small animation a moment after opening, none with reduced motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openApp(page);
+    await page.locator('.app-logo').click();
+    const wrap = page.locator('#about-modal .about-coffee-wrap');
+    const link = wrap.locator('a.about-coffee');
+    const cupAtRest = await link.locator('.about-coffee-cup').evaluate((el) => el.outerHTML);
+    await expect(wrap).toHaveAttribute('data-acf', /^[A-CE-J]$/, { timeout: 5000 });
+    const during = await link.boundingBox();
+    const fx = await wrap.evaluate((w) => [...w.querySelectorAll<Element>('.acf-added')].map((el) => ({
+        hidden: !!el.closest('[aria-hidden="true"]'),
+        passes: !el.classList.contains('acf-fx') || getComputedStyle(el).pointerEvents === 'none',
+    })));
+    expect(fx.length).toBeGreaterThan(0);
+    expect(fx.every((f) => f.hidden && f.passes)).toBe(true);
+    // Played once, then cleared: the same button, the same static cup.
+    await expect(wrap).not.toHaveAttribute('data-acf', /./, { timeout: 6000 });
+    await expect(wrap.locator('.acf-added')).toHaveCount(0);
+    expect(await link.boundingBox()).toEqual(during);
+    expect(await link.locator('.about-coffee-cup').evaluate((el) => el.outerHTML)).toBe(cupAtRest);
+
+    await page.evaluate(() => window.Strom.UI.closeAboutDialog());
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.locator('.app-logo').click();
+    await page.waitForTimeout(2500);
+    await expect(wrap).not.toHaveAttribute('data-acf', /./);
+    await expect(wrap.locator('.acf-added')).toHaveCount(0);
+});
+
+/**
  * What's new: About opens the same "What's new" dialog as after an update
  * (its "All changes ↗" leads on to the changelog on GitHub), over About. The
  * link keeps the changelog's address in the UI language at the section of the

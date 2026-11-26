@@ -11,6 +11,7 @@ import { renderMergeRulesSetting } from './merge-rules-settings.js';
 import { initClosedPopups } from './closed-popups.js';
 import { initSheetSlide } from './sheet-slide.js';
 import { initKeyboardAccess } from './keyboard-access.js';
+import { startAboutCoffee, stopAboutCoffee } from './about-coffee-anim.js';
 import { syncTreeLegendLift } from './legend-lift.js';
 import { syncBranchLegend, syncBranchMarkerSetting } from './branch-marker-ui.js';
 import { DataManager, auditPersonName } from '../data.js';
@@ -149,6 +150,8 @@ export const miscMethods = uiModule({
         this.updateAboutStats();
 
         modal.classList.add('active');
+        // A small surprise on the coffee button, a moment after opening.
+        startAboutCoffee();
     },
 
     updateAboutStats(): void {
@@ -294,6 +297,7 @@ export const miscMethods = uiModule({
     },
 
     closeAboutDialog(): void {
+        stopAboutCoffee();
         document.getElementById('about-modal')?.classList.remove('active');
     },
 
