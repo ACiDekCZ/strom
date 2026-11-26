@@ -281,6 +281,7 @@ function kickerOf(page: SetPage): string {
         case 'persons': return F.selKicker;
         case 'ancestors': return F.ancKicker;
         case 'rodTimeline': return F.tlKicker;
+        case 'house': return strings.houses.integration.colHouse;
         default: return F.winTitle;
     }
 }

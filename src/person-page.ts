@@ -60,6 +60,7 @@ import { type DerivedParticipation, derivedParticipations, derivedRoleLabel, der
 import { cleanEmails } from './person-contact.js';
 import { houseOfAddress, personHouses, treeHouseIndex, type PersonHouse, type TreeHouseIndex } from './person-houses.js';
 import type { HouseId } from './types.js';
+import { houseOutputs, type HouseOutputs } from './house-events.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -233,6 +234,8 @@ export interface ProtectedPersonPageTree {
     rodLabels: ReadonlyMap<RodId, string>;
     /** The protected tree's houses (spec 030 §12), worked out at the first page that asks (treeHouseIndex). */
     houseIndex?: TreeHouseIndex;
+    /** Its houses with history as outputs show them and their events (spec 030 §13), at the first page that asks. */
+    houseOutputs?: HouseOutputs;
 }
 
 /** One person's page, ready to render. */
@@ -699,6 +702,17 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
     };
     page.counts = countGroups(page);
     return page;
+}
+
+/** The protected tree's houses with history as outputs show them and their events (spec 030 §13), once per tree. */
+export function protectedHouseOutputs(prot: ProtectedPersonPageTree, now: Date): HouseOutputs {
+    if (prot.houseOutputs) return prot.houseOutputs;
+    return (prot.houseOutputs = houseOutputs(prot.tree, protectedHouseIndex(prot).houses, now));
+}
+
+/** The protected tree's houses and the house of each address (spec 030 §12), once per tree. */
+export function protectedHouseIndex(prot: ProtectedPersonPageTree): TreeHouseIndex {
+    return prot.houseIndex ?? (prot.houseIndex = treeHouseIndex(prot.tree));
 }
 
 /** Of an ancestor only what the fan draws: names, dates, sex and the links to the known parents. */

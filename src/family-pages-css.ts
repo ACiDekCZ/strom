@@ -17,6 +17,7 @@ import { PAGE_SET_SEARCH_JS } from './family-pages-search.js';
 import { rodTimelineScript } from './rod-timeline-wire.js';
 import { SEL_DARK_DECLS } from './ui/sel-css.js';
 import { HISTORY_KINDS } from './history.js';
+import { HOUSE_PAGE_CSS } from './house-page-css.js';
 
 /** The lineage bars' colour (light / dark), next to the person page's tokens. */
 const LIGHT_EXTRA = '--rod-bar: #9fb8a6; --sp-frame: #d0c6b2; --tint: #f1ece1; --hist: #f3e3cf;';
@@ -160,6 +161,11 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 .sp-clip-img { width: 100%; aspect-ratio: var(--pp-ar, 5 / 2); border-radius: 6px; border: 1px solid var(--border); background-size: contain; object-fit: contain; }
 .sp-clip-cap { font-size: 12.5px; color: var(--text-light); }
 .sp-res, .sp-src { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.sp-houses-note { font-family: inherit; font-size: 12.5px; font-weight: 400; color: var(--text-light); }
+.sp-houses-t { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+.sp-houses-t th { padding: 4px 12px 6px 0; text-align: left; font-size: 12.5px; font-weight: 600; color: var(--text-light); border-bottom: 1px solid var(--divider); }
+.sp-houses-t td { padding: 8px 12px 8px 0; vertical-align: baseline; border-bottom: 1px solid var(--divider); overflow-wrap: anywhere; }
+.sp-houses-t td + td, .sp-houses-t th + th { white-space: nowrap; }
 .sp-src { font-size: 14px; color: var(--text-light); }
 .sp-kids-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .sp-kidcard { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border: 1px solid var(--divider); border-radius: var(--r-lg, 8px); min-width: 0; overflow-wrap: anywhere; }
@@ -196,6 +202,8 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 /* Phone: 16 px margins, a smaller heading, cards under each other, the breadcrumb only "‹ the page above". */
 @media (max-width: 640px) {
   .pp-file.sp-file { padding: 16px 16px 28px; }
+  .sp-houses-t { font-size: 14px; }
+  .sp-houses-t td, .sp-houses-t th { padding-right: 8px; }
   .sp-h1 { font-size: 29px; }
   .sp-cards, .sp-partners { grid-template-columns: minmax(0, 1fr); }
   .sp-charts { grid-template-columns: minmax(0, 1fr); }
@@ -596,7 +604,8 @@ export function ensureFamilyPagesAppCss(doc: Document = document): void {
     if (doc.getElementById('family-pages-css')) return;
     const style = doc.createElement('style');
     style.id = 'family-pages-css';
-    style.textContent = FAMILY_PAGES_APP_CSS;
+    // A set's house pages (spec 030 §13): the house page's rules (all under .hp).
+    style.textContent = FAMILY_PAGES_APP_CSS + HOUSE_PAGE_CSS;
     doc.head.appendChild(style);
 }
 

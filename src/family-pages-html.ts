@@ -29,7 +29,7 @@ import {
 } from './book-blocks.js';
 import {
     PERSON_PAGE_ALL_GROUPS, PersonPageContext, PersonPageGroups, buildPersonPageBody, coupleChapterData, coupleChapterHtml, createdWithStromHtml,
-    personPageDocumentShell, prefixPageIds, preparePersonPageData, PersonPageOptions, safeImage, shownExcerpt,
+    personPageDocumentShell, prefixPageIds, preparePersonPageData, PersonPageOptions, protectedHouseIndex, protectedHouseOutputs, safeImage, shownExcerpt,
 } from './person-page.js';
 import {
     PageSet, PageSetIndexKind, SetPage, SetPlaceRow, familyFirstNames, familyIndexLetter, familyIndexSort, familyTitle, indexLetter, indexPageOf,
@@ -37,6 +37,9 @@ import {
     personIndexSort, surnameFirst, ZIP_PICK_LINES,
 } from './family-pages.js';
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
+import { HOUSE_PAGE_CSS, HOUSE_PAGE_FILE_TOKENS } from './house-page-css.js';
+import { buildHousePage } from './house-page.js';
+import { houseOfAddress } from './person-houses.js';
 import { FamilyTogetherEvent, familyTogetherEvents, familyTogetherLineHtml, sharedIndexOf } from './shared-with-line.js';
 import { RodPickerItem, rodPickKey, rodPickerHtml, rodPickerItems } from './rod-picker.js';
 import { pluralTemplates, searchPageSetIndex } from './family-pages-search.js';
@@ -146,6 +149,68 @@ function pageLink(r: Render, slug: string, html: string, cls = 'pp-link', attrs 
         : `<button type="button" class="${cls}"${attrs} data-sp-open="${esc(pageSetAppTarget(page))}">${html}</button>`;
 }
 
+/**
+ * A house of the tree (spec 030 §13): a link to its page when the set has one
+ * (an anchor in the file, a button in the window), else the text alone.
+ */
+function houseLinkHtml(r: Render, id: string, html: string, title = ''): string {
+    const slug = r.set.houseSlug?.get(id);
+    return slug ? pageLink(r, slug, html, 'pp-link sp-house-link', title ? ` title="${esc(title)}"` : '') : html;
+}
+
+/** The house with a page in the set an address is (null: none). */
+function setHouseOf(r: Render, place: string | undefined, address: string | undefined): string | null {
+    if (!r.set.houseSlug?.size || !address?.trim()) return null;
+    const id = houseOfAddress(protectedHouseIndex(r.set.protectedTree), place, address);
+    return id && r.set.houseSlug.has(id) ? id : null;
+}
+
+/** A house's page in the set (spec 030 §13): the house page of a saved file (houseOutputFilter), its ids under the page's slug. */
+function housePageHtml(r: Render, page: SetPage): string {
+    const prot = r.set.protectedTree;
+    const shown = protectedHouseOutputs(prot, r.set.options.now).houses.find(h => h.house.id === page.id);
+    if (!shown) return '';
+    const body = buildHousePage(prot.tree, shown.house, null, 'file', { lang: r.set.options.lang, now: r.set.options.now });
+    return prefixPageIds(body, page.slug, new Set(r.set.bySlug.keys()));
+}
+
+/**
+ * The houses of a line (spec 030 §13): the houses with a page in the set its
+ * people lived at, as outputs show them — house | period | generations.
+ */
+function housesSectionHtml(r: Render, rod: Rod): string {
+    if (!r.set.houseSlug?.size) return '';
+    const I = r.S.houses.integration;
+    const people = new Set<PersonId>([...rod.memberIds, ...rod.spouses.map(s => s.personId)]);
+    const rows = protectedHouseOutputs(r.set.protectedTree, r.set.options.now).houses
+        .filter(h => r.set.houseSlug!.has(h.house.id) && h.facts.some(f => people.has(f.personId)));
+    if (!rows.length) return '';
+    const body = rows.map(h => `<tr><td>${houseLinkHtml(r, h.house.id, esc(`${h.house.ref.town} ${h.house.text}`))}</td>`
+        + `<td>${h.period ? (h.period.from === h.period.to ? h.period.from : `${h.period.from}–${h.period.to}`) : ''}</td>`
+        + `<td>${h.generations}</td></tr>`).join('');
+    return `<section class="sp-block sp-houses"><h2 class="sp-h2">${esc(I.sectionTitle)} <span class="sp-houses-note">${esc(I.sectionNote)}</span></h2>`
+        + `<table class="sp-houses-t"><thead><tr><th>${esc(I.colHouse)}</th><th>${esc(I.colPeriod)}</th><th>${esc(I.colGens)}</th></tr></thead>`
+        + `<tbody>${body}</tbody></table></section>`;
+}
+
+/** The index of houses (spec 030 §13): the houses with a page in the set by town — house | period | generations. */
+function housesIndexHtml(r: Render): string {
+    const I = r.S.houses.integration;
+    const lang = r.set.options.lang;
+    const rows = protectedHouseOutputs(r.set.protectedTree, r.set.options.now).houses.filter(h => r.set.houseSlug?.has(h.house.id));
+    if (!rows.length) return emptyIndex(r);
+    const towns = new Map<string, typeof rows>();
+    for (const h of [...rows].sort((a, b) => a.house.ref.town.localeCompare(b.house.ref.town, lang))) {
+        const list = towns.get(h.house.ref.town) ?? towns.set(h.house.ref.town, []).get(h.house.ref.town)!;
+        list.push(h);
+    }
+    return [...towns].map(([town, list]) => `<div class="sp-ix-group"><h2 class="sp-ix-letter">${esc(town)}</h2><ul class="sp-ix-list">`
+        + list.map(h => `<li class="sp-ix-row">${houseLinkHtml(r, h.house.id, esc(h.house.text), `${town} ${h.house.text}`)}`
+            + `${h.period ? ` <span class="sp-ix-y">${h.period.from === h.period.to ? h.period.from : `${h.period.from}–${h.period.to}`}</span>` : ''}`
+            + ` <span class="sp-ix-t">${esc(r.S.houses.integration.colGens)} ${h.generations}</span></li>`).join('')
+        + '</ul></div>').join('');
+}
+
 /** A tab's label holding the width of its bold cut (the one selection indicator, src/ui/sel-css.ts). */
 function selLabel(text: string): string {
     return `<span class="sel-l" data-label="${esc(text)}">${esc(text)}</span>`;
@@ -221,7 +286,7 @@ function drawnSlug(r: Render, slug: string): string {
 /** "Index of this line" (§1.7): People · Families · Surnames · Places · Map of places. */
 function teaserHtml(r: Render, branch: boolean): string {
     const F = r.S.familyPages;
-    const links = (['persons', 'families', 'surnames', 'places'] as const)
+    const links = (['persons', 'families', 'surnames', 'places', 'houses'] as const)
         .map(k => [drawnSlug(r, r.set.indexSlug[k]), F.idxTabs[k]] as const)
         .concat([[drawnSlug(r, r.set.mapSlug), F.map] as const])
         .filter(([slug]) => !!slug)
@@ -234,7 +299,7 @@ function teaserHtml(r: Render, branch: boolean): string {
 function rodPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     const rod = rodOf(r, page.id);
     if (!rod) return '';
-    return `${rodOverviewHtml(rod, ctx, { title: page.title })}${rodLineageHtml(rod, ctx)}${teaserHtml(r, false)}`;
+    return `${rodOverviewHtml(rod, ctx, { title: page.title })}${rodLineageHtml(rod, ctx)}${housesSectionHtml(r, rod)}${teaserHtml(r, false)}`;
 }
 
 function branchPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
@@ -682,7 +747,7 @@ function treeHubHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     }
 
     // The indexes (§1.6).
-    const links = (['persons', 'families', 'surnames', 'places'] as const)
+    const links = (['persons', 'families', 'surnames', 'places', 'houses'] as const)
         .map(k => [drawnSlug(r, set.indexSlug[k]), F.idxTabs[k]] as const)
         .concat([[map, F.map] as const])
         .filter(([slug]) => !!slug)
@@ -997,7 +1062,10 @@ function marriageHtml(r: Render, ctx: BookCtx, u: Partnership, slug: string): st
     const fact = (k: string, v: string): void => { if (v) facts.push(`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`); };
     if (isWedding(u)) {
         fact(P.date, u.startDate ? formatFlexDate(u.startDate, r.set.options.lang) : '');
-        fact(P.place, [u.startPlace?.trim(), u.address?.trim()].filter(Boolean).join(', '));
+        const place = [u.startPlace?.trim(), u.address?.trim()].filter(Boolean).join(', ');
+        // The address of a house with a page in the set leads to it (spec 030 §13).
+        const house = setHouseOf(r, u.startPlace, u.address);
+        if (place) facts.push(`<dt>${esc(P.place)}</dt><dd>${house ? houseLinkHtml(r, house, esc(place)) : esc(place)}</dd>`);
         const witnesses = (u.participants ?? []).filter(x => x.role === 'witness').map(x => {
             const linked = x.personId ? realIn(tree, x.personId) : undefined;
             const who = linked ? shownNameOrEmpty(linked) : (x.name ?? '').trim();
@@ -1039,10 +1107,12 @@ function residenceHtml(r: Render, u: Partnership): string {
     const rows = sortCoupleEvents(u.events ?? []).filter(e => e.type === 'residence').map(e => {
         const where = [e.place?.trim(), e.address?.trim()].filter(Boolean).join(' ');
         const when = e.date ? formatFlexDate(e.date, r.set.options.lang) : '';
-        return [where, when].filter(Boolean).join(' · ');
+        // The address of a house with a page in the set leads to it (spec 030 §13).
+        const house = where ? setHouseOf(r, e.place, e.address) : null;
+        return [where ? (house ? houseLinkHtml(r, house, esc(where)) : esc(where)) : '', esc(when)].filter(Boolean).join(' · ');
     }).filter(Boolean);
     if (!rows.length) return '';
-    return `<section class="sp-block"><h2 class="sp-h2">${esc(r.S.familyPages.fam.residence)}</h2>${rows.map(x => `<p class="sp-res">${esc(x)}</p>`).join('')}</section>`;
+    return `<section class="sp-block"><h2 class="sp-h2">${esc(r.S.familyPages.fam.residence)}</h2>${rows.map(x => `<p class="sp-res">${x}</p>`).join('')}</section>`;
 }
 
 function childCardHtml(r: Render, ctx: BookCtx, c: Person): string {
@@ -1168,7 +1238,7 @@ function barHtml(r: Render, page: SetPage | null): string {
     const home = intro ? pageLink(r, intro.slug, esc(intro.title), 'sp-fbar-home') : '';
     const menuItems: [string, string][] = [
         [set.introSlug, F.start],
-        ...(['persons', 'families', 'surnames', 'places'] as const).map(k => [drawnSlug(r, set.indexSlug[k]), F.idxTabs[k]] as [string, string]),
+        ...(['persons', 'families', 'surnames', 'places', 'houses'] as const).map(k => [drawnSlug(r, set.indexSlug[k]), F.idxTabs[k]] as [string, string]),
         [map, F.map],
     ];
     const menu = menuItems.filter(([slug]) => !!slug)
@@ -1499,7 +1569,7 @@ function personsLetterHtml(r: Render, page: SetPage, items: { id: PersonId; e: {
 function indexPageHtml(r: Render, page: SetPage): string {
     const F = r.S.familyPages;
     const kind = page.id as PageSetIndexKind;
-    const tabs = (['persons', 'families', 'surnames', 'places'] as const).map(k => {
+    const tabs = (['persons', 'families', 'surnames', 'places', 'houses'] as const).map(k => {
         const slug = drawnSlug(r, r.set.indexSlug[k]);
         if (!slug) return '';
         // The selection indicator's tab (src/ui/sel-css.ts), its label holding the bold cut's width.
@@ -1511,6 +1581,7 @@ function indexPageHtml(r: Render, page: SetPage): string {
     if (kind === 'persons') body = personsIndexHtml(r, page);
     else if (kind === 'families') body = familiesIndexHtml(r, page);
     else if (kind === 'surnames') body = surnamesIndexHtml(r);
+    else if (kind === 'houses') body = housesIndexHtml(r);
     else body = placesIndexHtml(r, page);
     // A page of a split index carries its letter in the heading (1102 §7.4).
     return `<header class="sp-head"><h1 class="sp-h1">${esc(page.letter !== undefined ? page.title : F.index)}</h1></header>`
@@ -1626,6 +1697,17 @@ function tlRowHtml(r: Render, ctx: BookCtx, e: RodTimelineEvent): string {
             + `<div class="sp-tl-b"><span class="sp-tl-k">${historyKindSvg(h.kind, 12)}${esc(F.tlHist(kind))}</span><span class="sp-tl-t"><span${lang}>${esc(h.text)}</span>${esc(years)}${where}</span></div></li>`;
     }
     const who = e.personId ? personLinkHtml(r, ctx, e.personId) : '';
+    if (e.kind === 'house' && e.house) {
+        // A house's event (spec 030 §13): one sentence, the person and the house linked.
+        const h = e.house;
+        const I = r.S.houses.integration;
+        const text = h.kind === 'marriedIn' ? I.marriedIn('\u0000', '\u0001', h.sex)
+            : h.kind === 'left' ? I.left('\u0000', '\u0001', h.to ?? '', h.sex) : I.last('\u0000', '\u0001', h.sex);
+        const sentence = esc(text).replace('\u0000', () => who || '?')
+            .replace('\u0001', () => houseLinkHtml(r, h.houseId, esc(h.house), `${h.town} ${h.house}`));
+        return `<li class="sp-tl-row sp-tl-row--house" data-k="${chip}"><span class="sp-tl-y">${e.year}</span>`
+            + `<div class="sp-tl-b"><span class="sp-tl-k">${esc(F.tlEv.house)}</span><span class="sp-tl-t">${sentence}</span></div></li>`;
+    }
     const parts: string[] = [];
     if (e.kind === 'marriage') {
         let t = `${ROD_TIMELINE_SYMBOLS.marriage} ${e.partnerId ? personLinkHtml(r, ctx, e.partnerId) : '?'}`;
@@ -1675,7 +1757,7 @@ function rodTimelinePageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
             + `<button type="button" role="radio" data-tl-c="" aria-checked="true">${esc(F.tlAll)}</button>`
             + tl.centuries.map(c => `<button type="button" role="radio" data-tl-c="${c.c}" aria-checked="false">${esc(F.tlCenturyShort(c.c))}</button>`).join('')
             + `</div>` : '';
-    const kinds = ROD_TIMELINE_CHIPS.filter(k => k !== 'hist' || tl.history);
+    const kinds = ROD_TIMELINE_CHIPS.filter(k => (k !== 'hist' || tl.history) && (k !== 'houses' || tl.events.some(e => e.kind === 'house')));
     const chips = `<div class="sp-tl-chips" role="group" aria-label="${esc(F.tlKindsLabel)}">`
         + kinds.map(k => {
             // The kind's symbol (history: the symbol of "other"); decorative, the chip's name is its text.
@@ -1770,6 +1852,7 @@ function personPageOpts(r: Render, page: SetPage): PersonPageOptions {
         now: set.options.now, toc: false,
         links: {
             mode: 'set', personSlug: set.personSlug, familySlug: set.familySlug, rodSlug: set.rodSlug,
+            ...(set.houseSlug?.size ? { houseSlug: set.houseSlug } : {}),
             // The whole tree: a small line's row leads to its block on "Other families" (spec 026 P3 §2.2).
             ...(set.otherAnchor.size && drawnSlug(r, set.otherSlug) ? { rodAnchor: set.otherAnchor, rodAnchorLabel: r.S.familyPages.otherRow } : {}),
         },
@@ -1782,6 +1865,7 @@ function personPageOpts(r: Render, page: SetPage): PersonPageOptions {
 /** One page's content inside its section (the breadcrumbs, the blocks, the footer). */
 function pageInnerHtml(r: Render, page: SetPage): string {
     const crumbs = crumbsHtml(r, page);
+    if (page.kind === 'house') return `${crumbs}${housePageHtml(r, page)}`;
     if (page.kind === 'person') {
         const o = personPageOpts(r, page);
         const ctx = { ...(r.opts.personContext?.(o.personId) ?? {}), protected: r.set.protectedTree };
@@ -1825,6 +1909,7 @@ function fileTocHtml(r: Render, pages: readonly SetPage[]): string {
     row(F.tocRods, pages.filter(p => (p.kind === 'rod' || p.kind === 'other' || p.kind === 'rodTimeline') && p.slug !== r.set.introSlug));
     row(F.tocFams, pages.filter(p => p.kind === 'family'));
     row(F.tocPers, pages.filter(p => p.kind === 'person'));
+    row(r.S.houses.integration.index, pages.filter(p => p.kind === 'house'));
     row(F.tocIdx, pages.filter(p => p.kind === 'index' || p.kind === 'map'));
     return `<nav class="sp-toc-file" aria-label="${esc(F.tocTitle)}"><h2 class="sp-toc-h">${esc(F.tocTitle)}</h2>${rows.join('')}</nav>`;
 }
@@ -1832,6 +1917,11 @@ function fileTocHtml(r: Render, pages: readonly SetPage[]): string {
 /** The search index for the file's script (§0.7): JSON that never closes its <script> early. */
 function searchIndexJson(set: PageSet): string {
     return jsonForScript(set.searchIndex);
+}
+
+/** The set's rules: the house page's too when it has a house page (spec 030 §13). */
+function setCss(set: PageSet): string {
+    return set.houseSlug?.size ? FAMILY_PAGES_CSS + HOUSE_PAGE_FILE_TOKENS + HOUSE_PAGE_CSS : FAMILY_PAGES_CSS;
 }
 
 function assemble(r: Render, pages: readonly SetPage[], sections: readonly string[]): string {
@@ -1843,7 +1933,7 @@ function assemble(r: Render, pages: readonly SetPage[], sections: readonly strin
         + `<div class="sp-results" id="sp-results" aria-live="polite" hidden></div>${sections.join('')}`
         + `<p class="sp-print-foot">${esc(r.S.familyPages.printFoot(fileName))}</p>`;
     return personPageDocumentShell(set.options.lang, intro?.title ?? fileName, body, r.opts.fontCss ?? '', '', {
-        css: FAMILY_PAGES_CSS,
+        css: setCss(set),
         mainClass: 'pp-file sp-file',
         beforeMain: barHtml(r, null),
         afterMain: `<script type="application/json" id="sp-index">${searchIndexJson(set)}</script>`
@@ -2019,7 +2109,7 @@ export async function buildPageSetFilesAsync(set: PageSet, opts: PageSetHtmlOpti
         await emit({ path, data: img.bytes });
     }
     // The styles live in the files' folder: an image is one folder up.
-    const css = `${personPageFileCss(opts.fontCss ?? '', FAMILY_PAGES_CSS)}\n`
+    const css = `${personPageFileCss(opts.fontCss ?? '', setCss(set))}\n`
         + set.images.css(n => files.has(n) ? `../${files.get(n)}` : '');
     await emit({ path: `${folders.files}/styl.css`, data: css });
     await emit({ path: `${folders.files}/skript.js`, data: [PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, PLACES_MAP_SCRIPT, fanZoomInlineScript(), PAGE_SET_SCRIPT].join(';\n') });

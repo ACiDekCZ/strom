@@ -259,7 +259,7 @@ function joinedInto(user: Readonly<Record<HouseId, HouseUserData>> | undefined, 
  * the two). The count is the deepest level (1 for people without a parent or a
  * partner among them).
  */
-function generationsOf(data: StromData, people: ReadonlySet<PersonId>): number {
+export function generationsOf(data: StromData, people: ReadonlySet<PersonId>): number {
     if (people.size === 0) return 0;
     const level = new Map<PersonId, number>();
     for (const id of people) level.set(id, 1);

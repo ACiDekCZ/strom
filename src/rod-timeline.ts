@@ -23,14 +23,15 @@ import { placeKey, townOfPlace } from './places.js';
 import { Rod, RodId, RodPlaceSpan, placeSpans, rodGenerations } from './lineage.js';
 import { NOT_RESIDENCE_EVENT_TYPES } from './events.js';
 import { HISTORY_KINDS, HistoryKind, HistoryPayload, HistoryScope, PersonHistoryEnv, effectiveHidden, matchHistoryPlace, pickHistoryText } from './history.js';
-import { ProtectedPersonPageTree } from './person-page.js';
+import { ProtectedPersonPageTree, protectedHouseOutputs } from './person-page.js';
+import type { HouseLifeEvent } from './house-events.js';
 import { countryIdAt } from './map-context.js';
 import { Language } from './strings.js';
 
-export type RodTimelineKind = 'birth' | 'marriage' | 'death' | 'move' | 'emigration' | 'history';
-/** The chips of the page (§5.2): moves and emigration share one. */
-export type RodTimelineChip = 'birth' | 'marriage' | 'death' | 'move' | 'hist';
-export const ROD_TIMELINE_CHIPS: readonly RodTimelineChip[] = ['birth', 'marriage', 'death', 'move', 'hist'];
+export type RodTimelineKind = 'birth' | 'marriage' | 'death' | 'move' | 'emigration' | 'house' | 'history';
+/** The chips of the page (§5.2): moves and emigration share one; the houses' events (spec 030 §13) have theirs. */
+export type RodTimelineChip = 'birth' | 'marriage' | 'death' | 'move' | 'houses' | 'hist';
+export const ROD_TIMELINE_CHIPS: readonly RodTimelineChip[] = ['birth', 'marriage', 'death', 'move', 'houses', 'hist'];
 
 /**
  * The symbol of a chip's kind, the same the rows draw before a marriage's partner and a move's place (and the person
@@ -38,11 +39,11 @@ export const ROD_TIMELINE_CHIPS: readonly RodTimelineChip[] = ['birth', 'marriag
  * "other" (each kind of history event has its symbol, `historyKindSvg`).
  */
 export const ROD_TIMELINE_SYMBOLS: Readonly<Record<RodTimelineChip, string>> = {
-    birth: '*', marriage: '⚭', death: '†', move: '→', hist: '',
+    birth: '*', marriage: '⚭', death: '†', move: '→', houses: '⌂', hist: '',
 };
 
 export function rodTimelineChip(kind: RodTimelineKind): RodTimelineChip {
-    return kind === 'history' ? 'hist' : kind === 'emigration' ? 'move' : kind;
+    return kind === 'history' ? 'hist' : kind === 'emigration' ? 'move' : kind === 'house' ? 'houses' : kind;
 }
 
 export interface RodTimelineHistory {
@@ -79,6 +80,8 @@ export interface RodTimelineEvent {
     /** A death: the age in years when the birth year is known. */
     age?: number;
     history?: RodTimelineHistory;
+    /** A house's event (spec 030 §13): a marriage into a house, a leaving, the last of a house. */
+    house?: HouseLifeEvent;
 }
 
 export interface RodTimelineGeneration {
@@ -414,6 +417,12 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
             }
         }
         if (regionNames.size >= 2) for (const [h, id] of regionOf) h.region = regionNames.get(id);
+    }
+
+    // The houses' events of the line's people (spec 030 §13), as the set's outputs show the houses.
+    const ofLine = new Set<PersonId>([...members, ...spouses]);
+    for (const h of protectedHouseOutputs(prot, input.now).events) {
+        if (ofLine.has(h.personId)) events.push({ kind: 'house', year: h.year, sort: h.year + 0.5, personId: h.personId, house: h });
     }
 
     events.sort((a, b) => a.sort - b.sort || (a.kind === 'history' ? -1 : 0) - (b.kind === 'history' ? -1 : 0));

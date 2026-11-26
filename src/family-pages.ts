@@ -12,7 +12,7 @@
  */
 
 import { personMedia, personMediaCount } from './media.js';
-import { Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
+import { HouseId, Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
 import { personSourceIds } from './model-values.js';
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang, Language } from './strings.js';
@@ -31,14 +31,15 @@ import {
 } from './lineage.js';
 import { BookSelectionSpec, lineageSpec } from './book-model.js';
 import { sortRods } from './rods-overview.js';
-import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree, type PersonPageOptions } from './person-page.js';
+import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree, protectedHouseOutputs, type PersonPageOptions } from './person-page.js';
+import { housePageTitle } from './house-page.js';
 import { ImageChoice, ImageRegistry, RegistryImageKind, SHRINK_CLIP_PX, SHRINK_PHOTO_PX } from './image-registry.js';
 import type { HistoryPayload, PersonHistoryEnv } from './history.js';
 
-export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other' | 'persons' | 'ancestors' | 'rodTimeline';
+export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other' | 'persons' | 'ancestors' | 'rodTimeline' | 'house';
 
-/** The four indexes (spec 026 §3.5). */
-export type PageSetIndexKind = 'persons' | 'families' | 'surnames' | 'places';
+/** The indexes (spec 026 §3.5), the houses' after the places (spec 030 §13, only in a set with a house page). */
+export type PageSetIndexKind = 'persons' | 'families' | 'surnames' | 'places' | 'houses';
 
 export interface PageCrumb { slug: string; label: string }
 
@@ -46,7 +47,7 @@ export interface SetPage {
     slug: string;
     kind: PageKind;
     /**
-     * What the page is about: a lineage's id ('rod', 'rodTimeline'), a union's ('family'), a
+     * What the page is about: a lineage's id ('rod', 'rodTimeline'), a union's ('family'), a house's ('house'), a
      * person's ('person', 'branch' and 'ancestors': the starting person), the index's kind
      * ('index'); none for the hub, the tree and the map.
      */
@@ -161,6 +162,8 @@ export interface PageSet {
     rodSlug: Map<RodId, string>;
     /** The lines' timeline pages (1102 §5). */
     rodTimelineSlug: Map<RodId, string>;
+    /** The pages of the houses with history (spec 030 §13); none: a set built before houses or without one. */
+    houseSlug?: Map<HouseId, string>;
     /** Slugs of the indexes and of the map ('' for a page the set does not have). */
     indexSlug: Record<PageSetIndexKind, string>;
     /** The indexes split by letters (1102 §7.4), their letters in order; [] for an index on one page. */
@@ -195,7 +198,7 @@ export const PAGE_SET_ANCESTOR_GENERATIONS = 4;
 /** Fixed slugs (§0.6): the same in every language, stable between saves. */
 export const PAGE_SET_HUB_SLUG = 'uvod';
 export const PAGE_SET_INDEX_SLUGS: Record<PageSetIndexKind, string> = {
-    persons: 'rejstrik-osoby', families: 'rejstrik-rodiny', surnames: 'rejstrik-prijmeni', places: 'rejstrik-obce',
+    persons: 'rejstrik-osoby', families: 'rejstrik-rodiny', surnames: 'rejstrik-prijmeni', places: 'rejstrik-obce', houses: 'rejstrik-domy',
 };
 export const PAGE_SET_MAP_SLUG = 'mapa-obci';
 export const PAGE_SET_OTHER_SLUG = 'dalsi-rodiny';
@@ -681,13 +684,27 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         pages.push({ slug, kind: 'person', id, title: nameOf(tree, id), crumbs, ...(under ? { under } : {}) });
     }
 
-    // The indexes and the map.
-    const indexSlug = {} as Record<PageSetIndexKind, string>;
+    // The houses with history the set's people lived at (spec 030 §13), as outputs show them (houseOutputFilter).
     const startCrumb: PageCrumb = whole ? introCrumb : { slug: intro.slug, label: F.start };
-    const indexLetters: Record<PageSetIndexKind, PageSetIndexLetter[]> = { persons: [], families: [], surnames: [], places: [] };
+    const houseSlug = new Map<HouseId, string>();
+    const housePages: SetPage[] = [];
+    for (const { house, facts } of protectedHouseOutputs(prot, options.now).houses) {
+        if (!facts.some(f => personSlug.has(f.personId))) continue;
+        const slug = uniqueSlug(['dum', asciiSlug(house.ref.town), asciiSlug(house.text)].filter(Boolean).join('-'), used);
+        houseSlug.set(house.id, slug);
+        const title = housePageTitle(tree, house, lang);
+        const page: SetPage = { slug, kind: 'house', id: house.id, title, crumbs: [startCrumb, { slug, label: title }] };
+        housePages.push(page);
+        pages.push(page);
+    }
+
+    // The indexes and the map.
+    const indexSlug = { houses: '' } as Record<PageSetIndexKind, string>;
+    const indexLetters: Record<PageSetIndexKind, PageSetIndexLetter[]> = { persons: [], families: [], surnames: [], places: [], houses: [] };
     const letterKeys = indexLetterKeys({ protectedTree: prot, selection: sel, personSlug, familySlug, options });
-    for (const k of ['persons', 'families', 'surnames', 'places'] as const) {
-        const keys = k === 'surnames' ? null : letterKeys[k];
+    for (const k of ['persons', 'families', 'surnames', 'places', 'houses'] as const) {
+        if (k === 'houses' && !housePages.length) continue;
+        const keys = k === 'surnames' || k === 'houses' ? null : letterKeys[k];
         if (!keys) {
             const slug = uniqueSlug(PAGE_SET_INDEX_SLUGS[k], used);
             indexSlug[k] = slug;
@@ -704,6 +721,8 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         }
         indexSlug[k] = indexLetters[k][0].slug;
     }
+    // A house page stands under the index of houses.
+    for (const p of housePages) p.crumbs.splice(1, 0, { slug: indexSlug.houses, label: F.indexTitle.houses });
     let mapSlug = '';
     if (options.map) {
         mapSlug = uniqueSlug(PAGE_SET_MAP_SLUG, used);
@@ -718,7 +737,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
 
     const out: PageSet = {
         spec, options, history: opts.history ?? null, selection: sel, protectedTree: prot, rodIds, rodLabels: labels,
-        pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, rodTimelineSlug, indexSlug, indexLetters, minimalIds, mapSlug,
+        pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, rodTimelineSlug, houseSlug, indexSlug, indexLetters, minimalIds, mapSlug,
         introSlug: intro.slug, otherSlug, otherRodIds: small.map(r => r.id), otherAnchor, otherPersonIds, images, searchIndex: [], treeName: ctx.treeName?.trim() ?? '',
     };
     out.searchIndex = buildSearchIndex(out, rods);
@@ -979,7 +998,7 @@ export function estimatePageSetSize(set: PageSet, opts: { clips?: ImageChoice; p
     let text = SHELL_BYTES + set.searchIndex.length * SEARCH_ENTRY_BYTES;
     for (const page of set.pages) {
         switch (page.kind) {
-            case 'person': text += PERSON_PAGE_BYTES; break;
+            case 'person': case 'house': text += PERSON_PAGE_BYTES; break;
             case 'family': text += FAMILY_PAGE_BYTES; break;
             case 'rod': case 'branch': case 'hub': case 'tree': case 'persons': case 'ancestors': {
                 const rod = page.kind === 'rod' && page.id ? set.protectedTree.lineages.rods.get(page.id as RodId) : undefined;
@@ -1114,6 +1133,7 @@ export interface PageSetFolders {
     families: string;
     persons: string;
     timelines: string;
+    houses: string;
     index: string;
     images: string;
     files: string;
@@ -1121,10 +1141,10 @@ export interface PageSetFolders {
 
 /** The folders of a set of files, in the file's language. */
 export const PAGE_SET_FOLDERS: Record<Language, PageSetFolders> = {
-    cs: { rods: 'rody', families: 'rodiny', persons: 'osoby', timelines: 'casove-osy', index: 'rejstrik', images: 'obrazky', files: '_soubory' },
-    en: { rods: 'lines', families: 'families', persons: 'people', timelines: 'timelines', index: 'index', images: 'images', files: '_files' },
-    de: { rods: 'stammlinien', families: 'familien', persons: 'personen', timelines: 'zeitleisten', index: 'register', images: 'bilder', files: '_dateien' },
-    pl: { rods: 'rody', families: 'rodziny', persons: 'osoby', timelines: 'osie-czasu', index: 'indeks', images: 'obrazy', files: '_pliki' },
+    cs: { rods: 'rody', families: 'rodiny', persons: 'osoby', timelines: 'casove-osy', houses: 'domy', index: 'rejstrik', images: 'obrazky', files: '_soubory' },
+    en: { rods: 'lines', families: 'families', persons: 'people', timelines: 'timelines', houses: 'houses', index: 'index', images: 'images', files: '_files' },
+    de: { rods: 'stammlinien', families: 'familien', persons: 'personen', timelines: 'zeitleisten', houses: 'haeuser', index: 'register', images: 'bilder', files: '_dateien' },
+    pl: { rods: 'rody', families: 'rodziny', persons: 'osoby', timelines: 'osie-czasu', houses: 'domy', index: 'indeks', images: 'obrazy', files: '_pliki' },
 };
 
 export function pageSetFolders(set: Pick<PageSet, 'options'>): PageSetFolders {
@@ -1147,6 +1167,7 @@ export function pageSetPath(set: Pick<PageSet, 'introSlug' | 'bySlug' | 'rodSlug
         case 'rodTimeline': return `${f.timelines}/${(page.id && set.rodSlug.get(page.id as RodId)) || slug}.html`;
         case 'index': return `${f.index}/${slug.replace(/^rejstrik-/, '')}.html`;
         case 'map': return `${f.index}/${slug}.html`;
+        case 'house': return `${f.houses}/${slug}.html`;
         default: return `${f.rods}/${slug}.html`;
     }
 }
