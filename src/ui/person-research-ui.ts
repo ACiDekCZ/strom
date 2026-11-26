@@ -30,7 +30,8 @@ import {
 } from '../research-hypothesis-wait.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
-import { HYPOTHESES_DECIDE_FEATURE, researchConflictRef, researchHypothesisRef, researchLinkMark } from '../research-link.js';
+import { HYPOTHESES_DECIDE_FEATURE, inShowcase, researchConflictRef, researchHypothesisRef, researchLinkMark } from '../research-link.js';
+import { sampleNoteEl, showcaseOffAttrs } from './sample-why.js';
 import { lastBridgeStatus } from './research-sync-ui.js';
 import { canDecideInApp, conflictFromEdit } from '../research-decide.js';
 import { ConflictScope } from '../research-conflict-card.js';
@@ -105,6 +106,12 @@ function hideHypothesesOffer(researchId: string): void {
 }
 
 /** HTML-escape a string for innerHTML (text and attribute values). */
+/** The showcase's quiet row (`.sample-note`: view only, `strom demo`, How to) as the first of `body` (spec 143 K4.1). */
+export function showcaseNoteFirst(body: HTMLElement | null): void {
+    if (!body || body.firstElementChild?.classList.contains('sample-note')) return;
+    body.insertBefore(sampleNoteEl(), body.childNodes[0] ?? null);
+}
+
 function esc(text: string): string {
     return text
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -341,8 +348,8 @@ export const personResearchMethods = uiModule({
                     <p class="person-research-review-note">${esc(r.review.reviewNote)}</p>` : ''}
                     ${canDecide && id ? `
                     <div class="person-research-conflict-actions">
-                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${researchActionLabel(r.decide, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>${toAgent ? `
-                        <button type="button" class="link-button person-research-agent" data-conflict="${esc(id)}" data-do="agent"
+                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide"${showcaseOffAttrs('conflict', r.decide)}>${researchActionLabel(r.decide, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>${toAgent ? `
+                        <button type="button" class="link-button person-research-agent" data-conflict="${esc(id)}" data-do="agent"${showcaseOffAttrs('conflict-agent', r.leaveToAgent)}
                             aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${researchActionLabel(r.leaveToAgent, researchLinkMark('conflict', { conflictDo: 'agent' }), { sr: false })}</button>` : ''}
                     </div>` : ''}
                 </div>`;
@@ -393,6 +400,8 @@ export const personResearchMethods = uiModule({
                 </div>
             </div>`;
         document.body.appendChild(overlay);
+        // The showcase (spec 143 K4.1): its quiet row first, only read (the subtitle says as of when).
+        if (inShowcase()) showcaseNoteFirst(overlay.querySelector<HTMLElement>('.person-research-body'));
         this.pushDialog(DIALOG_ID);
         for (const head of overlay.querySelectorAll<HTMLElement>('[data-section-help] > .person-research-section-head')) {
             head.append(helpMark(head.parentElement!.dataset.sectionHelp as HelpTopic));
@@ -554,7 +563,7 @@ export const personResearchMethods = uiModule({
         const metaHtml = this.researchHypothesisMetaHtml(h);
         const reasonHtml = this.researchHypothesisReasonHtml(h);
         const hypoId = researchHypothesisRef(h.id);
-        const linkHtml = canLink && hypoId ? `<button type="button" class="link-button person-research-hypo-link" data-hypo-do="decide">${researchActionLabel(researchHypothesisLinkLabel(h), researchLinkMark('hypothesis'))}</button>` : '';
+        const linkHtml = canLink && hypoId ? `<button type="button" class="link-button person-research-hypo-link" data-hypo-do="decide"${showcaseOffAttrs('hypothesis', researchHypothesisLinkLabel(h))}>${researchActionLabel(researchHypothesisLinkLabel(h), researchLinkMark('hypothesis'))}</button>` : '';
         const offers = h.id && offered ? this.viewLinkOffersFor(h.id) : [];
         const rows = variants.map(variant => {
             const o = offers.find(x => x.variant === variant.id);
@@ -635,6 +644,9 @@ export const personResearchMethods = uiModule({
         const catalog = DataManager.getData().sources ?? {};
         const terminal = researchLinkMark('hypothesis');
         const off = (b: HypothesisCardButton): string => b === 'off' ? ' disabled' : '';
+        // The showcase (spec 143 K4.1): its choices greyed with the terminal's mark, a click says why.
+        const showcase = inShowcase();
+        const act = (label: string, b: HypothesisCardButton): string => showcaseOffAttrs('hypothesis', label) || off(b);
         const proposal = researchHypothesisProposalParts(h);
         const rows = (h.variants ?? []).map((variant, i) => {
             const vp = plan.variants[i];
@@ -665,7 +677,7 @@ export const personResearchMethods = uiModule({
             const sources = plan.extras ? this.researchVariantSourcesHtml(variant, catalog) : null;
             const noteText = vp.note === 'stays' ? r.hypoStaysNote : vp.note === 'inTree' ? r.hypoInTreeNote : vp.note === 'noLink' ? r.hypoKeepsTree : '';
             const pickHtml = vp.pick ? `
-                        <button type="button" class="secondary prv-pick" data-hypo-pick="${esc(variant.id)}" aria-label="${esc(r.hypoPickAria(variant.id))}"${off(vp.pick)}>${researchActionLabel(r.hypoPick, terminal, { sr: false })}</button>` : '';
+                        <button type="button" class="secondary prv-pick" data-hypo-pick="${esc(variant.id)}" aria-label="${esc(r.hypoPickAria(variant.id))}"${act(r.hypoPick, vp.pick)}>${researchActionLabel(r.hypoPick, terminal, { sr: false })}</button>` : '';
             const waitHtml = vp.waiting && pending ? this.researchHypothesisWaitHtml(h, pending) : '';
             const sw = canSwitch ? this.researchVariantSwitchHtml(variant, !!o!.shown, h.id ?? '') : '';
             const cls = [o?.shown ? 'is-shown' : '', vp.tag ? 'is-chosen' : '', vp.dim ? 'is-dim' : ''].filter(Boolean).join(' ');
@@ -683,14 +695,15 @@ export const personResearchMethods = uiModule({
         if (plan.footWait && pending) underHtml += this.researchHypothesisWaitHtml(h, pending);
         const buttons: string[] = [];
         if (plan.foot) {
-            if (plan.foot.none) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="abandon"${off(plan.foot.none)}>${researchActionLabel(r.hypoNone, terminal)}</button>`);
-            if (plan.foot.leave) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="keep-open"${off(plan.foot.leave)}>${researchActionLabel(r.hypoLeave, terminal)}</button>`);
-            if (plan.foot.cancelChange) buttons.push(`<button type="button" class="link-button prh-cancel-change" data-hypo-act="change-cancel">${esc(r.hypoChangeCancel)}</button>`);
+            if (plan.foot.none) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="abandon"${act(r.hypoNone, plan.foot.none)}>${researchActionLabel(r.hypoNone, terminal)}</button>`);
+            if (plan.foot.leave) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="keep-open"${act(r.hypoLeave, plan.foot.leave)}>${researchActionLabel(r.hypoLeave, terminal)}</button>`);
+            if (plan.foot.cancelChange && !showcase) buttons.push(`<button type="button" class="link-button prh-cancel-change" data-hypo-act="change-cancel">${esc(r.hypoChangeCancel)}</button>`);
         }
         if (plan.decided) {
             const dis = plan.decided.off ? ' disabled' : '';
-            buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="change"${dis}>${esc(r.hypoChangeHere)}</button>`);
-            if (plan.decided.reopen && !inDeviceMode()) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="reopen"${dis}>${researchActionLabel(r.hypoReopen, terminal)}</button>`);
+            // Changing it here is no main action of the showcase: not drawn there.
+            if (!showcase) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="change"${dis}>${esc(r.hypoChangeHere)}</button>`);
+            if (plan.decided.reopen && !inDeviceMode()) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="reopen"${showcaseOffAttrs('hypothesis', r.hypoReopen) || dis}>${researchActionLabel(r.hypoReopen, terminal)}</button>`);
         }
         if (buttons.length) underHtml += `
                     <div class="person-research-hypo-actions prh-choices">${buttons.join('')}</div>`;
@@ -704,7 +717,7 @@ export const personResearchMethods = uiModule({
         if (plan.link) {
             const label = open ? r.decide : plan.decided?.cannot ? r.decide : r.hypoChange;
             underHtml += `
-                    <div class="prh-more"><button type="button" class="link-button person-research-hypo-link prh-more-link" data-hypo-do="decide">${researchActionLabel(label, terminal)}</button></div>`;
+                    <div class="prh-more"><button type="button" class="link-button person-research-hypo-link prh-more-link" data-hypo-do="decide"${showcaseOffAttrs('hypothesis', label)}>${researchActionLabel(label, terminal)}</button></div>`;
         }
         return `
                 <details class="person-research-hypo${open ? '' : ' is-closed'}" data-pick="${pick}"${h.id ? ` data-hypo="${esc(h.id)}"` : ''}${open ? ' open' : ''}>
@@ -759,8 +772,8 @@ export const personResearchMethods = uiModule({
                             <span class="prv-wait-title"><span class="prv-wait-dot" aria-hidden="true"></span>${esc(long ? r.hypoWaitLong : r.hypoWait)}</span>
                             ${text ? `<span class="prv-wait-text">${esc(text)}</span>` : ''}
                             <span class="prv-wait-actions">
-                                <button type="button" class="link-button prv-wait-again">${researchActionLabel(r.hypoWaitAgain, researchLinkMark('hypothesis'))}</button>
-                                <button type="button" class="link-button prv-wait-stop">${esc(r.hypoWaitStop)}</button>
+                                <button type="button" class="link-button prv-wait-again"${showcaseOffAttrs('hypothesis', r.hypoWaitAgain)}>${researchActionLabel(r.hypoWaitAgain, researchLinkMark('hypothesis'))}</button>${inShowcase() ? '' : `
+                                <button type="button" class="link-button prv-wait-stop">${esc(r.hypoWaitStop)}</button>`}
                             </span>
                         </span>`;
     },
@@ -1072,7 +1085,8 @@ export const personResearchMethods = uiModule({
         const C = r.review;
         const state = keepStates.get(reviewKey(id));
         const busy = state === 'busy';
-        const keepOn = busy || (state !== 'readonly' && conflictKeepOffered());
+        // The showcase keeps nothing (spec 143 K4.1): no "Keep" there.
+        const keepOn = !inShowcase() && (busy || (state !== 'readonly' && conflictKeepOffered()));
         const canDecide = this.researchLinkAvailable('conflict') && this.personResearchRef(personId) !== null;
         const values = c.values.map(v => `<tr><td>${conflictValueHtml(researchValueText(c.fact, v.value))}</td><td>${this.researchConflictSourceCell(v)}</td></tr>`).join('');
         const decision = c.decision
@@ -1081,7 +1095,7 @@ export const personResearchMethods = uiModule({
                         <button type="button" class="link-button prc-keep" data-keep="${esc(id)}" data-focus="keep"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}>${busy
                             ? `<i class="busy-spin s12" aria-hidden="true"></i>${esc(C.keepBusy)}` : esc(C.keep)}</button>` : '';
         const again = canDecide ? `
-                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide" data-focus="link-decide">${researchActionLabel(C.decideAgain, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>` : '';
+                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide" data-focus="link-decide"${showcaseOffAttrs('conflict', C.decideAgain)}>${researchActionLabel(C.decideAgain, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>` : '';
         const err = state === 'readonly' ? C.keepReadonly : state === 'failed' ? strings.sources.retract.failed : '';
         const errHtml = err ? `
                         <span class="prc-keep-err" role="status">${esc(err)}</span>` : '';

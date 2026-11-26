@@ -20,7 +20,7 @@
  * keeps every old path unchanged.
  */
 
-import { showcaseResearchKnown, showcaseWhy } from '../research-link.js';
+import { inShowcase, showcaseResearchKnown, showcaseWhy } from '../research-link.js';
 import { canvasBusy } from './canvas-busy.js';
 import { researchActionLabel, researchMarkFlags, researchLinkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
@@ -722,6 +722,8 @@ export const researchSyncMethods = uiModule({
     researchConflictDecideMode(): ConflictDecideMode {
         // A device of the home network (spec 094 §4, 4.8): through its gateway when announced, never a link.
         if (inDeviceMode()) return researchDeviceAllows('conflict') ? 'bridge' : 'none';
+        // The showcase (spec 143 K4.1): never through its bridge (only read); its links drawn greyed.
+        if (inShowcase()) return this.researchLinkAvailable('conflict') ? 'link' : 'none';
         const id = this.activeResearchId();
         const status = id ? this.researchStatusOf(id) : null;
         return conflictDecideMode({ bridge: status ? { features: status.features } : null, linkAvailable: this.researchLinkAvailable('conflict') });

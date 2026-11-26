@@ -21,6 +21,7 @@ import { formatFlexDate } from '../dates.js';
 import { gedcomTagEventType } from '../ged-parser.js';
 import { factParts, factValue, importRecordOf } from '../import-origin.js';
 import { researchLinkMark } from '../research-link.js';
+import { showcaseOffAttrs } from './sample-why.js';
 import { canDecideInApp, conflictSides } from '../research-decide.js';
 import {
     conflictFact, proposalModel, revertAvailability, revertControls, revertOutcome, RevertUiState, wasRowModel, WasRowModel,
@@ -381,7 +382,9 @@ export const factOriginMethods = uiModule({
                 return `<button type="button" class="${cls}" data-decide="${which}" data-focus="choice-${which}"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}${off ? ' disabled' : ''}${described}>${busy
                     ? `<i class="busy-spin" aria-hidden="true"></i>${esc(k.busy)}` : esc(label)}</button>`;
             }
-            return `<button type="button" class="${cls}" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${described}>${researchActionLabel(label, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>`;
+            // The showcase (spec 143 K4.1): greyed with its mark, a click says why.
+            const sc = showcaseOffAttrs('conflict', label, was ? noteId : '');
+            return `<button type="button" class="${cls}" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${sc || `${off ? ' disabled' : ''}${described}`}>${researchActionLabel(label, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>`;
         };
         return `
                 <div class="prc-kind-choices">${choice('user')}${choice('research')}</div>${was ? `

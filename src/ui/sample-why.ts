@@ -15,7 +15,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { hideSampleWhy, installSampleTagBubble, showSampleWhy } from './sample-tag.js';
 import { copyPlainText } from './table-view/table-cell.js';
 import { setResearchActionLabel } from './research-open-mark.js';
-import { researchMarkNone, setShowcaseWhy, showcaseActionMark, showcaseAsOf, type ResearchActionMark, type ResearchShowcaseAction } from '../research-link.js';
+import { researchMarkNone, setShowcaseWhy, showcaseActionMark, showcaseAsOf, showcaseOff, type ResearchActionMark, type ResearchShowcaseAction } from '../research-link.js';
 
 /** The command that sets up the full research with the same made-up family. */
 export const SHOWCASE_DEMO_COMMAND = 'strom demo';
@@ -162,6 +162,23 @@ export function markShowcaseOff<T extends HTMLElement>(el: T, mark: ResearchActi
     return el;
 }
 
+function attr(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * markShowcaseOff for a control drawn as HTML: its attributes (greyed with the action's mark, `aria-disabled`,
+ * described by the bubble; never `disabled`), '' outside the showcase or for an action it does not grey.
+ * `label`: the action's name in the bubble; `describedBy`: the control's own note, described after the bubble.
+ */
+export function showcaseOffAttrs(action: ResearchShowcaseAction, label: string, describedBy = ''): string {
+    if (!showcaseOff(action)) return '';
+    installShowcaseWhy();
+    const mark = showcaseActionMark(action);
+    const ids = [SAMPLE_WHY_ID, describedBy].filter(Boolean).join(' ');
+    return ` data-showcase-off="${mark}" data-showcase-label="${attr(label)}" aria-disabled="true" aria-describedby="${attr(ids)}"`;
+}
+
 const MARK_PARTS = ['research-open-sr', 'research-ai-badge', 'research-open-mark'];
 
 /** The control's own words (without the mark and its hidden words). */
@@ -235,6 +252,7 @@ function actionLabel(action: ResearchShowcaseAction | null): { label: string; ma
             case 'send': return s.sync.sendButton;
             case 'conflict': return s.sync.decideInResearch;
             case 'conflict-agent': return s.research.leaveToAgent;
+            case 'hypothesis': return s.research.decide;
             case 'chat': return s.research.askAgent;
             case 'waiting-answer': return s.research.answer;
             case 'queue-order': return s.sample.queueOrder;

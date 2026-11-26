@@ -12,6 +12,7 @@
  */
 
 import { researchActionLabel } from './research-open-mark.js';
+import { showcaseOffAttrs } from './sample-why.js';
 import { isHelpOpen } from './help-ui.js';
 import { helpMark } from './help-mark.js';
 import { DataManager } from '../data.js';
@@ -221,7 +222,7 @@ export const conflictPanelMethods = uiModule({
             const label = n.action === 'send' ? strings.sync.barSend : n.action === 'retry' ? k.retry : n.action === 'decide' ? strings.research.decide : '';
             notice = `<div class="prc-notice prc-notice--${n.tone}" role="status">
                     <span class="prc-notice-text">${esc(text)}</span>${label ? `
-                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${researchActionLabel(label, n.action === 'decide' ? researchLinkMark('conflict', { conflictDo: 'decide' }) : 'none')}</button>` : ''}
+                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice"${n.action === 'decide' ? showcaseOffAttrs('conflict', label) : ''}>${researchActionLabel(label, n.action === 'decide' ? researchLinkMark('conflict', { conflictDo: 'decide' }) : 'none')}</button>` : ''}
                 </div>`;
         }
 
@@ -254,8 +255,11 @@ export const conflictPanelMethods = uiModule({
                     aria-label="${esc(label ?? (devices ? conflictKeepWords(devices, which) : which === 'user' ? k.keep : k.take))}"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${busy
                     ? `<i class="busy-spin s12" aria-hidden="true"></i>${esc(k.busyTag)}` : esc(label ?? (devices?.short ? conflictKeepWords(devices, which) : which === 'user' ? k.keepShort : k.takeShort))}</button>`;
             } else if (view.choices === 'links') {
+                const words = (which === 'user' ? keepLabel : takeLabel) ?? (devices ? conflictKeepWords(devices, which) : which === 'user' ? k.keepLink : k.takeLink);
+                // The showcase (spec 143 K4.1): greyed with its mark, a click says why.
+                const sc = showcaseOffAttrs('conflict', words, notes ? noteId : '');
                 choice = `<button type="button" class="prc-panel-choice" data-take="${which}" data-focus="choice-${which}"
-                    aria-label="${esc(`${(which === 'user' ? keepLabel : takeLabel) ?? (devices ? conflictKeepWords(devices, which) : which === 'user' ? k.keepLink : k.takeLink)}, ${strings.research.opensInResearchSr}`)}"${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel((which === 'user' ? keepLabel : takeLabel) ?? (which === 'user' ? k.keepShort : k.takeShort), researchLinkMark('conflict', { conflictDo: 'decide' }), { sr: false })}</button>`;
+                    aria-label="${esc(`${words}, ${strings.research.opensInResearchSr}`)}"${sc || `${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}`}>${researchActionLabel((which === 'user' ? keepLabel : takeLabel) ?? (which === 'user' ? k.keepShort : k.takeShort), researchLinkMark('conflict', { conflictDo: 'decide' }), { sr: false })}</button>`;
             }
             const was = kind === 'import' && which === 'research' ? this.originConflictWas(c) : '';
             const note = notes ? `<p class="prc-panel-note" id="${noteId}">${esc(which === 'user' ? (devices ? k.keepNoteFrom(devices.user, devices.research) : k.keepNote) : was ? o.acceptNote(was) : this.researchConflictTakeNote(c, devices))}</p>` : '';
