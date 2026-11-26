@@ -32458,6 +32458,13 @@
             min-height: 36px; border-bottom: 1px solid var(--divider); font-size: 13.5px; color: var(--text);
         }
         .gift-stp.is-now { font-weight: 600; }
+        /* A batch (§8 [58, 60]): a package not made in warning colour, "and 4 more", the folder's choice. */
+        .gift-stp.is-warn, .gift-stp.is-warn :is(.gift-stp-i, .gift-stp-k) { color: var(--warning-text); }
+        .gift-stp.is-warn .gift-stp-i { font-weight: 700; }
+        .gift-stp-more { display: flex; color: var(--text-faint); padding-left: 30px; }
+        .gift-batch-fail { color: var(--warning-text); }
+        span.gift-done-name { min-width: 0; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        .gift-modal button.gift-to-folder { align-self: flex-start; }
         .gift-stp.is-wait { color: var(--text-faint); }
         .gift-stp-i { display: inline-flex; justify-content: center; color: var(--text-light); }
         .gift-stp-t { min-width: 0; overflow-wrap: anywhere; }

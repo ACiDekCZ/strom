@@ -12911,6 +12911,7 @@ const stringsEN = {
             err: { memory: 'out of memory', failed: 'an error' },
             noneH: 'No package was created',
             saveFolder: 'Save to folder…',
+            create: 'Create packages',
         },
         /** The guide's own texts: the summary, step 1 "For whom" and step 3 "Living people". */
         guide: {
@@ -25474,6 +25475,7 @@ const stringsCZ: StringsType = {
             err: { memory: 'došla paměť', failed: 'chyba' },
             noneH: 'Žádný balíček nevznikl',
             saveFolder: 'Uložit do složky…',
+            create: 'Vytvořit balíčky',
         },
         guide: {
             stepsH: 'Kroky',
@@ -37939,6 +37941,7 @@ const stringsDE: StringsType = {
             err: { memory: 'Speicher erschöpft', failed: 'Fehler' },
             noneH: 'Kein Paket wurde erstellt',
             saveFolder: 'In Ordner speichern…',
+            create: 'Pakete erstellen',
         },
         guide: {
             stepsH: 'Schritte',

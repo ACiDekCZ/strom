@@ -547,6 +547,8 @@ export interface GiftBatchInput {
     onProgress?: (p: GiftBatchProgress) => void;
     /** Each finished package to a folder the person chose (no outer archive then). */
     onPersonZip?: (name: string, blob: Blob) => Promise<void> | void;
+    /** A person finished (made or not): its row, 0-based index. */
+    onPersonDone?: (row: GiftBatchRow, index: number) => void;
     env?: GiftPackageEnv;
 }
 
@@ -615,6 +617,7 @@ export async function buildGiftBatch(input: GiftBatchInput): Promise<GiftBatchRe
                 row.message = e instanceof Error ? e.message : String(e);
             }
             checkAbort(signal);
+            input.onPersonDone?.(row, i);
             await (env.pause ?? defaultPause)();
         }
         checkAbort(signal);

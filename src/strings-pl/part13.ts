@@ -159,6 +159,7 @@ export const plPart13: Pick<StringsType, 'giftTree'> = {
             err: { memory: 'zabrakło pamięci', failed: 'błąd' },
             noneH: 'Nie powstała żadna paczka',
             saveFolder: 'Zapisz do folderu…',
+            create: 'Utwórz paczki',
         },
         guide: {
             stepsH: 'Kroki',

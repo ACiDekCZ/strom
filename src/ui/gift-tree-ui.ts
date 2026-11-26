@@ -22,10 +22,10 @@ import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { formatTreeSize } from '../format.js';
 import { iconSvg } from '../icons.js';
 import { inferBirthUpperBounds, isLivingPerson, type PrivacyMode } from '../privacy.js';
-import { giftPersonKey, loadGiftMemory } from '../gift-memory.js';
+import { giftPersonKey, loadGiftMemory, saveGiftMemory } from '../gift-memory.js';
 import {
     buildGiftBatch, buildGiftPackage, estimateGiftSize, GiftOutOfMemory, giftBatchFileName, giftFileNames, giftNamesLabel, giftStepsFor, isAbortError,
-    type GiftPackageEnv, type GiftPackageResult, type GiftPartKey, type GiftProgress, type GiftSizeEstimate, type GiftStep,
+    type GiftBatchProgress, type GiftBatchResult, type GiftBatchRow, type GiftPackageEnv, type GiftPackageResult, type GiftPartKey, type GiftProgress, type GiftSizeEstimate, type GiftStep,
 } from '../gift-package.js';
 import { buildGiftCover, giftDefaultSalutation, giftFacts } from '../gift-cover.js';
 import { AppExporter } from '../export.js';
@@ -189,6 +189,40 @@ interface GiftRun {
     error?: string;
     /** The progress drawing waiting for the next frame. */
     frame: number;
+    /** Many packages (§8 [58, 60]): their names, progress and rows. */
+    batch?: GiftBatchRunInfo;
+}
+
+/** The making of a batch: one package after another into one ZIP, or each into a folder. */
+interface GiftBatchRunInfo {
+    names: string[];
+    /** Each package's people (step 1's numbers) while it waits. */
+    persons: number[];
+    progress: GiftBatchProgress | null;
+    /** The packages finished so far (made or not). */
+    done: GiftBatchRow[];
+    /** The folder chosen ("Save to folder…") and the files written into it. */
+    folder: FileSystemDirectoryHandle | null;
+    written: string[];
+    result: GiftBatchResult | null;
+    /** The outer archive's name (step 6). */
+    fileName: string;
+}
+
+/** Write one finished package into the chosen folder. */
+async function writeToFolder(dir: FileSystemDirectoryHandle, name: string, blob: Blob): Promise<void> {
+    const handle = await dir.getFileHandle(name, { create: true });
+    const out = await handle.createWritable();
+    try {
+        await out.write(blob);
+    } finally {
+        await out.close();
+    }
+}
+
+/** "Save to folder…" is offered where the browser lets a page write into a folder (Chrome, Edge). */
+function canSaveToFolder(): boolean {
+    return typeof (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker === 'function';
 }
 
 /** Save a Blob as a file (an `<a download>`; the URL let go once the browser has it). */
@@ -493,7 +527,7 @@ function batchTotals(u: GiftUi): { packages: number; recipients: number; couples
 /** The guide can go on: the recipients chosen with a family; a batch has at least one package. */
 function canGo(u: GiftUi): boolean {
     if (u.batch && !u.batch.edit && !giftBatchActive(u.batch).length) return false;
-    return canGo(u);
+    return giftCanProceed(u.g, u.data);
 }
 
 /** A small round portrait place with the initials (the design's avatar), framed by gender. */
@@ -725,6 +759,7 @@ export const giftTreeMethods = uiModule({
     async giftCreateAsync(): Promise<void> {
         const u = ui;
         if (!u || u.run?.phase === 'making' || !canGo(u)) return;
+        if (u.batch && !u.batch.edit) { await this.giftBatchCreate(null); return; }
         const s = u.g.settings;
         // Near the browser's limit: the question first; "Leave the photos out" makes it without them.
         const answer = await confirmMemoryForOutput({
@@ -775,6 +810,114 @@ export const giftTreeMethods = uiModule({
             if (isAbortError(e)) run.phase = 'cancelled';
             else if (e instanceof GiftOutOfMemory) { run.phase = 'oom'; run.oomPart = e.part; }
             else { run.phase = 'failed'; run.error = e instanceof Error ? e.message : String(e); }
+            this.giftRender();
+        }
+    },
+
+    /**
+     * "Create packages" for a batch (or "Save to folder…" with the folder):
+     * the memory question for the largest package first, then the making.
+     */
+    async giftBatchCreate(folder: FileSystemDirectoryHandle | null): Promise<void> {
+        const u = ui;
+        const b = u?.batch;
+        if (!u || !b || b.edit || u.run?.phase === 'making' || !canGo(u)) return;
+        const common = u.g.settings;
+        const stats = batchStats(u);
+        const rows = giftBatchActive(b);
+        const largest = rows.reduce<GiftRecipientRow | null>((m, r) => !m || (stats.get(r.key)?.bytes ?? 0) > (stats.get(m.key)?.bytes ?? 0) ? r : m, null);
+        if (largest) {
+            const s = giftBatchRowSettings(u.data, b, common, largest);
+            const answer = await confirmMemoryForOutput({ what: 'gift', canLeaveOut: s.photos, data: giftCutData(u.data, s.cut), whole: true });
+            if (ui !== u || answer === 'cancel') return;
+            if (answer === 'without') {
+                common.photos = false;
+                for (const own of b.own.values()) delete own.photos;
+            }
+        }
+        await this.giftBatchRun(folder);
+    },
+
+    /** "Save to folder…": the folder chosen, then each package written into it (no outer archive). */
+    async giftBatchToFolder(): Promise<void> {
+        const pick = (window as unknown as { showDirectoryPicker?: (o: { mode: 'readwrite' }) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
+        if (!pick || !ui?.batch) return;
+        let dir: FileSystemDirectoryHandle;
+        try {
+            dir = await pick.call(window, { mode: 'readwrite' });
+        } catch {
+            return;
+        }
+        await this.giftBatchCreate(dir);
+    },
+
+    /** Make the batch now: person by person, the progress in the pane, then the ZIP saved (or the folder filled). */
+    async giftBatchRun(folder: FileSystemDirectoryHandle | null): Promise<void> {
+        const u = ui;
+        const b = u?.batch;
+        if (!u || !b) return;
+        u.closePicker?.();
+        const common = u.g.settings;
+        const rows = giftBatchActive(b);
+        const plain = rows.map(r => giftBatchRowSettings(u.data, b, common, r));
+        const stats = batchStats(u);
+        const info: GiftBatchRunInfo = {
+            names: rows.map(r => batchRowName(u, r)), persons: rows.map(r => stats.get(r.key)?.persons ?? 0),
+            progress: null, done: [], folder, written: [], result: null,
+            fileName: b.fileName ?? giftBatchFileName(common.letter.lang, new Date().getFullYear()),
+        };
+        const run: GiftRun = {
+            phase: 'making', ctrl: new AbortController(), steps: [], progress: null, sizes: new Map(), persons: 0,
+            result: null, coverHtml: '', names: batchSourceLabel(b.source) || strings.giftTree.batch.tableH, couple: false, frame: 0, batch: info,
+        };
+        u.run = run;
+        this.giftRender();
+        const treeId = TreeManager.getActiveTreeId();
+        const treeName = (treeId ? TreeManager.getTreeMetadata(treeId)?.name : '') || strings.giftTree.title;
+        try {
+            const result = await buildGiftBatch({
+                data: u.data, items: plain.map(s => ({ settings: giftResolvedSettings(u.data, s) })), treeName,
+                lang: common.letter.lang, signal: run.ctrl!.signal,
+                onProgress: (p) => { info.progress = p; this.giftRunTick(run); },
+                onPersonDone: (row) => { info.done.push(row); this.giftRunTick(run); },
+                ...(folder ? { onPersonZip: async (name: string, blob: Blob) => { await writeToFolder(folder, name, blob); info.written.push(name); } } : {}),
+                env: giftPackageEnv(treeId, common, () => undefined),
+            });
+            if (ui !== u || u.run !== run) return;
+            run.ctrl = null;
+            info.result = result;
+            // Each package's settings stay with its person or couple (§9): the next time starts from them.
+            const at = new Date().toISOString();
+            result.rows.forEach((r, i) => {
+                if (r.ok) saveGiftMemory(u.g.treeId, giftPersonKey(rows[i].recipients), { lastAt: at, madeAt: at, settings: plain[i], cutSize: r.persons ?? 0 });
+            });
+            run.phase = result.rows.some(r => r.ok) ? 'done' : 'failed';
+            this.giftRender();
+            if (run.phase === 'done' && !folder) this.giftBatchDownload();
+        } catch (e) {
+            if (ui !== u || u.run !== run) return;
+            run.ctrl = null;
+            if (isAbortError(e)) {
+                run.phase = 'cancelled';
+                // Cancelled: nothing stays, not even the packages already in the folder.
+                if (folder) for (const name of info.written) await folder.removeEntry(name).catch(() => undefined);
+            } else {
+                run.phase = 'failed';
+                run.error = e instanceof Error ? e.message : String(e);
+            }
+            if (ui === u && u.run === run) this.giftRender();
+        }
+    },
+
+    /** Save the batch's ZIP (done at once, the file's name again, "Download again"). */
+    giftBatchDownload(): void {
+        const r = ui?.run;
+        const blob = r?.batch?.result?.blob;
+        if (!r?.batch || !blob) return;
+        try {
+            downloadBlob(blob, r.batch.fileName);
+        } catch {
+            r.phase = 'nodownload';
             this.giftRender();
         }
     },
@@ -1040,7 +1183,7 @@ export const giftTreeMethods = uiModule({
         if (prev) { prev.hidden = g.step <= 1; prev.textContent = t.guide.back; }
         if (cancel) cancel.hidden = g.step > 1;
         if (next) {
-            next.textContent = editing && g.step >= 5 ? t.batch.allRecipients : g.step >= GIFT_GUIDE_STEPS ? t.create : t.guide.next;
+            next.textContent = editing && g.step >= 5 ? t.batch.allRecipients : g.step >= GIFT_GUIDE_STEPS ? (u.batch ? t.batch.create : t.create) : t.guide.next;
             next.disabled = !can;
         }
         // While making and at its end: the run's own buttons instead of the guide's.
@@ -1455,6 +1598,11 @@ export const giftTreeMethods = uiModule({
         });
         field.appendChild(input);
         left.appendChild(field);
+        if (batch && canSaveToFolder()) {
+            const folder = button('secondary gift-to-folder', B.saveFolder, () => { void this.giftBatchToFolder(); });
+            folder.dataset.gk = 'save-folder';
+            left.appendChild(folder);
+        }
         left.appendChild(el('p', 'gift-note', R.local));
 
         const head = el('div', 'gift-cover-head');
@@ -1485,6 +1633,7 @@ export const giftTreeMethods = uiModule({
             h3.tabIndex = -1;
             box.appendChild(h3);
         };
+        if (run.batch) { this.giftRenderBatchRun(box, run, run.batch, h); return; }
 
         if (run.phase === 'making') {
             h(`${M.making} · ${run.names}`);
@@ -1583,6 +1732,107 @@ export const giftTreeMethods = uiModule({
         }
     },
 
+    /** A batch's making (§8 [58]), its end (§8 [60]) and its errors: the packages' rows, ✓ done, the one running, the waiting. */
+    giftRenderBatchRun(box: HTMLElement, run: GiftRun, info: GiftBatchRunInfo, h: (text: string) => void): void {
+        const t = strings.giftTree;
+        const M = t.make;
+        const B = t.batch;
+        const G = t.guide;
+        const language = lang();
+        const errorList = (rows: GiftBatchRow[]): string => rows.map(r => `${r.name}: ${B.err[r.error ?? 'failed']}`).join(', ');
+        const rowsList = (making: boolean): HTMLElement => {
+            const list = el('ul', 'gift-steps gift-batch-rows');
+            const n = info.names.length;
+            const now = making ? info.done.length : -1;
+            // The finished ones, the running one and the next three; the rest as "and 4 more".
+            const last = making ? Math.min(n, now + 4) : n;
+            for (let i = 0; i < last; i++) {
+                const done = info.done[i];
+                const warn = done && !done.ok;
+                const li = el('li', `gift-stp${warn ? ' is-warn' : done ? ' is-done' : i === now ? ' is-now' : ' is-wait'}`);
+                const mark = el('span', 'gift-stp-i');
+                mark.setAttribute('aria-hidden', 'true');
+                if (warn) mark.textContent = '!';
+                else if (done) mark.innerHTML = iconSvg('check', { size: 14 });
+                else if (i === now) mark.appendChild(spinEl(12));
+                else mark.textContent = '·';
+                li.append(mark, el('span', 'gift-stp-t', info.names[i]));
+                const k = el('span', 'gift-stp-k');
+                if (warn) k.textContent = B.err[done.error ?? 'failed'];
+                else if (done) k.textContent = `${done.persons ?? 0} ${G.persons(done.persons ?? 0)} · ${formatTreeSize(done.bytes ?? 0, language)}`;
+                else if (i === now && info.progress) k.textContent = t.steps[info.progress.step];
+                else k.textContent = `${info.persons[i]} ${G.persons(info.persons[i])}`;
+                li.appendChild(k);
+                list.appendChild(li);
+            }
+            if (last < n) list.appendChild(el('li', 'gift-stp is-wait gift-stp-more', B.more(n - last)));
+            return list;
+        };
+
+        if (run.phase === 'making') {
+            h(B.makingH(run.names));
+            const p = info.progress;
+            const n = info.names.length;
+            const k = Math.min(n, info.done.length + 1);
+            const part = p ? (p.stepIndex - 1 + (p.size !== undefined ? 1 : p.total ? (p.done ?? 0) / p.total : 0)) / Math.max(1, p.stepCount) : 0;
+            const share = Math.min(1, Math.max(0, (info.done.length + (info.done.length < n ? part : 0)) / Math.max(1, n)));
+            const prog = el('div', 'prog gift-prog');
+            const line = el('div', 'prog-line');
+            line.append(el('span', 'prog-t', B.personOf(k, n, info.names[k - 1] ?? '')),
+                el('span', 'prog-k', p ? `${t.steps[p.step]} · ${M.stepOf(p.stepIndex, p.stepCount)}` : ''));
+            prog.append(line, barEl(share));
+            box.appendChild(prog);
+            box.appendChild(rowsList(true));
+            box.appendChild(el('p', 'gift-note', info.folder ? B.noteFolder : B.note(info.fileName)));
+            return;
+        }
+        if (run.phase === 'cancelled') {
+            h(M.cancelledH);
+            box.appendChild(el('p', 'gift-lead', M.cancelledLead));
+            return;
+        }
+        const result = info.result;
+        if (run.phase === 'failed') {
+            h(B.noneH);
+            if (run.error) box.appendChild(el('p', 'gift-lead', M.failedLead(run.error)));
+            else if (result) box.appendChild(el('p', 'gift-lead gift-batch-fail', B.failedLine(result.rows.length, errorList(result.rows))));
+            if (result) box.appendChild(rowsList(false));
+            return;
+        }
+        if (!result) return;
+        const made = result.rows.filter(r => r.ok);
+        const bytes = info.folder ? made.reduce((n, r) => n + (r.bytes ?? 0), 0) : result.blob?.size ?? 0;
+        const size = formatTreeSize(bytes, language);
+        if (run.phase === 'nodownload') {
+            h(M.noDownloadH);
+            box.appendChild(el('p', 'gift-lead', M.noDownloadLead(size)));
+            box.appendChild(el('p', 'gift-note', M.noDownloadNote));
+            return;
+        }
+        // Done: the archive (a click saves it again) or the folder, the packages and the size.
+        h(B.doneH);
+        const file = el('div', 'gift-done-file');
+        const ic = el('span', 'gift-done-ic');
+        ic.setAttribute('aria-hidden', 'true');
+        ic.innerHTML = iconSvg(info.folder ? 'folder' : 'file', { size: 18 });
+        file.appendChild(ic);
+        if (info.folder) {
+            file.appendChild(el('span', 'gift-done-name', B.inFolder(info.folder.name)));
+        } else {
+            const name = button('gift-done-name', info.fileName, () => this.giftBatchDownload());
+            name.dataset.gk = 'done-file';
+            file.appendChild(name);
+        }
+        file.appendChild(el('span', 'gift-done-size', `${made.length} ${B.packages(made.length)} · ${size}`));
+        box.appendChild(file);
+        const failed = result.rows.filter(r => !r.ok);
+        if (failed.length) {
+            box.appendChild(el('p', 'gift-lead gift-batch-fail', B.failedLine(failed.length, errorList(failed))));
+            box.appendChild(rowsList(false));
+        }
+        box.appendChild(el('p', 'gift-note', info.folder ? B.doneFolderNote : B.doneNote));
+    },
+
     /** The footer while making and at its end (the guide's own buttons hidden meanwhile). */
     giftRunFoot(foot: HTMLElement): void {
         const u = ui!;
@@ -1597,6 +1847,29 @@ export const giftTreeMethods = uiModule({
             return b;
         };
         const closeBtn = (): void => { add('secondary', strings.buttons.close, 'run-close', () => this.closeGiftTree()); };
+        if (run.batch) {
+            const info = run.batch;
+            switch (run.phase) {
+                case 'making':
+                    host.appendChild(el('span', 'gift-run-hint', M.foot));
+                    add('secondary is-danger-text', strings.giftTree.batch.cancelAll, 'run-cancel', () => this.giftCancelRun());
+                    break;
+                case 'cancelled':
+                case 'failed':
+                case 'oom':
+                    closeBtn();
+                    add('primary', M.again, 'run-again', () => { u.run = null; void this.giftBatchRun(info.folder); });
+                    break;
+                case 'nodownload':
+                    closeBtn();
+                    add('primary', M.downloadAgain, 'run-download', () => { run.phase = 'done'; this.giftRender(); this.giftBatchDownload(); });
+                    break;
+                case 'done':
+                    add('primary', M.finish, 'run-finish', () => this.closeGiftTree());
+                    break;
+            }
+            return;
+        }
         switch (run.phase) {
             case 'making':
                 host.appendChild(el('span', 'gift-run-hint', M.foot));
