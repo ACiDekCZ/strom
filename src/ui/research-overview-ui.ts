@@ -3730,6 +3730,8 @@ export const researchOverviewMethods = uiModule({
             btn.type = 'button';
             // The first row ↓ of the section's search reaches.
             btn.dataset.row = '';
+            // A redraw of the research followed live keeps the focus on the row (keepKeyFocus).
+            btn.dataset.focusKey = `knows-row:${where}:${row.key}`;
             const hit = hitOf(row);
             const entry = row.hypo?.id ? accept?.entries.get(row.hypo.id) ?? null : null;
             let tags = row.hypo ? this.hypothesisKnowsTagsEl(row.hypo, entry) : null;

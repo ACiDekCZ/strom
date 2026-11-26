@@ -259,6 +259,10 @@ test.describe('What the research knows grouped (spec 140)', () => {
         await page.keyboard.press('ArrowDown');
         await expect(page.locator(':focus')).toHaveClass(/research-overview__knows-row/);
         await expect(page.locator(':focus')).toHaveText(/^Albín Hrotek · /);
+        // A redraw (a status of the research followed live comes at any moment) keeps the focus on that row.
+        await page.evaluate(() => window.Strom.UI.renderResearchOverview());
+        await expect(page.locator(':focus')).toHaveClass(/research-overview__knows-row/);
+        await expect(page.locator(':focus')).toHaveText(/^Albín Hrotek · /);
     });
 
     test('bulk accepting grouped: the head once over the bands, the foot once under them, a hypothesis in two groups one choice', async ({ page }) => {
