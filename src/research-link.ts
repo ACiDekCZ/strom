@@ -3300,6 +3300,12 @@ export interface LiveStatus {
      */
     census?: LiveCensus | null;
     /**
+     * `houses` (with `house` in `features`, spec 030): the house histories of this research — the setting, the
+     * revision of all houses (a new one = read `GET /houses` again) and the houses by state. Null: the feature
+     * but no valid state said; absent: a research without the feature.
+     */
+    houses?: LiveHouses | null;
+    /**
      * `intake` (with `intake.auto` in `features`, spec 130): whether the research sorts a closed batch by itself
      * (tasks of sorting for the agent). Absent: not said (an archive, a research waiting for its agent, an older
      * research) — then no switch is offered.
@@ -3472,6 +3478,41 @@ export const STORIES_HISTORY_FEATURE = 'stories.history';
  * `census` and `known=` of `GET /queue?kind=other`.
  */
 export const CENSUS_FEATURE = 'census';
+
+/**
+ * `/status.features` of the house histories (spec 030): `house` the houses' reads and `/status.houses`,
+ * `house.material` material and memories to a house (and `house` in `batch/<id>/done`), `house.confirm` a person's
+ * word on a renumbering, a point or "not the same house", `house.import` taking over one's own research in the
+ * research's terminal (a research with an agent, never an archive).
+ */
+export const HOUSE_FEATURES = ['house', 'house.material', 'house.confirm', 'house.import'] as const;
+export type HouseFeature = typeof HOUSE_FEATURES[number];
+
+/** The house tasks by their state (`/status.houses.counts`). */
+export interface LiveHouseCounts {
+    done: number;
+    running: number;
+    queued: number;
+    waiting: number;
+    held: number;
+}
+
+/** `/status.houses`: house histories on for the tree, the revision of every house and its task, the counts. */
+export interface LiveHouses {
+    on: boolean;
+    /** Changes with any house or its task: the list (`GET /houses`) is read again only on a new one. */
+    rev: string;
+    counts: LiveHouseCounts;
+}
+
+/** `/status.houses`, checked: `on` a boolean and a revision, else null (not known); counts not said are 0. */
+export function sanitizeLiveHouses(value: unknown): LiveHouses | null {
+    const r = asRecord(value);
+    if (!r || typeof r.on !== 'boolean' || typeof r.rev !== 'string' || !/^[A-Za-z0-9._-]{1,80}$/.test(r.rev)) return null;
+    const c = asRecord(r.counts) ?? {};
+    const n = (v: unknown): number => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10_000_000 ? v : 0);
+    return { on: r.on, rev: r.rev, counts: { done: n(c.done), running: n(c.running), queued: n(c.queued), waiting: n(c.waiting), held: n(c.held) } };
+}
 
 /** `/status.census`: census records on for this research, and the census tasks set aside (null: not known). */
 export interface LiveCensus {
@@ -5377,6 +5418,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
         ...(statusBooks(r.books, features) ? { books: statusBooks(r.books, features)! } : {}),
         ...(features?.includes(CENSUS_FEATURE) ? { census: sanitizeCensus(r.census) } : {}),
+        ...(features?.includes('house') ? { houses: sanitizeLiveHouses(r.houses) } : {}),
         ...(features?.includes(INTAKE_AUTO_FEATURE) && sanitizeIntakeSetting(r.intake) ? { intake: sanitizeIntakeSetting(r.intake)! } : {}),
         ...(features?.includes(SORT_CONFIRM_FEATURE) && sanitizeSortSetting(r.sort) ? { sort: sanitizeSortSetting(r.sort)! } : {}),
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),

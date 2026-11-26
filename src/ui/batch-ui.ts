@@ -39,6 +39,7 @@ import { uiModule } from './module.js';
 import { runBusy } from './busy.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { statusAskUrl } from '../status-parts.js';
+import { batchDoneHouse } from '../house-bridge.js';
 
 const DIALOG_ID = 'batch-modal';
 const UNFINISHED_KEY = 'strom-batch:';
@@ -127,6 +128,8 @@ interface Run {
     name: string;
     person: string;
     personId: string;
+    /** The house the files are material of (HouseId, spec 030): `house` of `batch/<id>/done` with `house.material`. */
+    house?: string;
     note: string;
     queue: Item[];
     index: number;
@@ -188,6 +191,8 @@ let st: {
     name: string;
     nameTouched: boolean;
     personId: string;
+    /** The house the batch is material of (opened from a house, spec 030). */
+    house?: string;
     note: string;
     search: string;
     full: Set<string>;
@@ -285,7 +290,7 @@ export const batchMethods = uiModule({
      * same for the gallery or any file. `screen` (a phone's Research screen, spec 094 K3.13 §6): the batch of that
      * research, no tree needed here — its person found through the bridge.
      */
-    showBatchDialog(opts: { personId?: string; files?: { file: File; path: string }[]; capture?: boolean; pick?: BatchPick; screen?: string } = {}): void {
+    showBatchDialog(opts: { personId?: string; files?: { file: File; path: string }[]; capture?: boolean; pick?: BatchPick; screen?: string; house?: string } = {}): void {
         if (run && !run.finished && !run.cancelled) {
             run.hidden = false;
             this.openBatchOverlay();
@@ -305,6 +310,7 @@ export const batchMethods = uiModule({
         st = {
             step: 'pick', items: [], name: resume?.name ?? '', nameTouched: !!resume, personId: opts.personId ?? resume?.personId ?? '',
             note: resume?.note ?? '', search: '', full: new Set(), collapsed: new Set(), resume, held: false,
+            ...(opts.house ? { house: opts.house } : {}),
         };
         run = null;
         this.openBatchOverlay();
@@ -1232,7 +1238,7 @@ export const batchMethods = uiModule({
         run = {
             id: resume?.id ?? newBatchId(), treeId: link.treeId, researchId: link.researchId, base: bridge.base,
             name: s.name.trim() || strings.batch.defaultName(new Date().toLocaleDateString(getCurrentLanguage())),
-            person, personId: s.personId, note: s.note.trim(), queue, index: 0, total: queue.length,
+            person, personId: s.personId, ...(s.house ? { house: s.house } : {}), note: s.note.trim(), queue, index: 0, total: queue.length,
             totalBytes: queue.reduce((sum, i) => sum + i.size, 0), doneBytes: 0, received: 0, skipped: 0, skippedAsked: 0,
             queued: new Map(), shaOf: new Map(), knownAsked: new Set(), knownOf: new Map(), refused: [],
             current: '', paused: false, lost: false, held: '', heldSeal: false, cancelled: false, finished: false, hidden: false, result: null, resume: null,
@@ -1599,7 +1605,8 @@ export const batchMethods = uiModule({
      */
     async batchClose(r: Run): Promise<CloseOutcome> {
         const body = JSON.stringify({ name: r.name, files: r.received + r.skipped + r.skippedAsked + r.queued.size + r.refused.length,
-            ...(r.person ? { person: r.person } : {}), ...(r.note ? { note: r.note } : {}) });
+            ...(r.person ? { person: r.person } : {}), ...(r.note ? { note: r.note } : {}),
+            ...batchDoneHouse(r.house, this.researchStatusOf(r.researchId)?.features) });
         const headBefore = await this.researchHeadBeforeWrite(r.researchId);
         let res: Response;
         try {
