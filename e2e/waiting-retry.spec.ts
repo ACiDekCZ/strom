@@ -133,6 +133,32 @@ async function openItem(page: Page, id: string, root = page) {
     return item;
 }
 
+/**
+ * The sentences of the rows' refusals drawn as an alert from now on. A refusal carries `role=alert` on its first
+ * drawing only (a redraw of the overview, by the status the bridge sends meanwhile, draws it without one, so it is
+ * not said twice): read on the element afterwards, the role is gone as soon as a status came in between.
+ */
+async function watchRefusalAlerts(page: Page): Promise<() => Promise<string[]>> {
+    await page.evaluate(() => {
+        const said: string[] = [];
+        const seen = new WeakSet<Element>();
+        (window as unknown as { __refusalAlerts: string[] }).__refusalAlerts = said;
+        const sel = '.research-overview__waiting-note[role="alert"]';
+        new MutationObserver((records) => {
+            for (const r of records) for (const n of r.addedNodes) {
+                if (!(n instanceof HTMLElement)) continue;
+                // Each element once: a row moved within the list is inserted again, the same sentence.
+                for (const e of [...(n.matches(sel) ? [n] : []), ...n.querySelectorAll<HTMLElement>(sel)]) {
+                    if (seen.has(e)) continue;
+                    seen.add(e);
+                    said.push(e.textContent ?? '');
+                }
+            }
+        }).observe(document.body, { childList: true, subtree: true });
+    });
+    return () => page.evaluate(() => (window as unknown as { __refusalAlerts: string[] }).__refusalAlerts);
+}
+
 const retryButton = (item: ReturnType<Page['locator']>) => item.locator('button[data-action="retry"]');
 const imagesStep = (item: ReturnType<Page['locator']>) => item.locator('.research-overview__deliver-steps [data-action="images"]');
 
@@ -249,11 +275,12 @@ test.describe('Retry with the agent at an item (spec 089)', () => {
         await openOverview(page);
         const item = await openItem(page, 'T0415');
         const note = item.locator('.research-overview__waiting-note');
+        const alerts = await watchRefusalAlerts(page);
 
         bridge.replies.push({ status: 409, body: { error: 'changed', code: 'waiting.changed', at } });
         await retryButton(item).click();
         await expect(note).toHaveText('The task now waits for something else; not returned.');
-        await expect(note).toHaveAttribute('role', 'alert');
+        await expect.poll(alerts).toEqual(['The task now waits for something else; not returned.']);
         await expect(item).toHaveClass(/is-refused/);
         await expect(note.locator('[data-action="write-retry"]')).toHaveCount(0);
         await expect(retryButton(item)).toBeEnabled();
