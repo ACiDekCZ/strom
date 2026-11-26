@@ -30,6 +30,8 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { formatRelativeDateTime, formatTreeSize } from '../format.js';
 import { pendingMergeHasTarget, pendingMergeSourceName, pendingMergeTreeId } from '../tree-row.js';
 import { treeOrigin } from './tree-origin.js';
+import { sampleTagHtml, sampleTagElement } from './sample-tag.js';
+import { formatFlexDate } from '../dates.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -189,6 +191,26 @@ export const treeManagementMethods = uiModule({
         }
     },
 
+    /** The toolbar's "Sample" tag after the open tree's name (spec 143 §1); none for another tree. */
+    setCurrentTreeTag(tree: TreeMetadata | null | undefined): void {
+        const tagEl = document.getElementById('current-tree-tag');
+        if (!tagEl) return;
+        const html = sampleTagHtml(tree);
+        if (tagEl.innerHTML !== html) tagEl.innerHTML = html;
+        tagEl.hidden = !html;
+    },
+
+    /** The switcher's list is wide (340 px): research marks, or a sample's tag beside a name. */
+    treeSwitcherWide(): boolean {
+        return this.treeSwitcherMarksShown() || TreeManager.getVisibleTrees().some(t => !!TreeManager.sampleKindOf(t.id));
+    },
+
+    /** A showcase's date as a date of the UI's language ("1. 11. 2026", "1 Nov 2026"); the ISO day when unreadable. */
+    sampleAsOfText(asOf: string): string {
+        const day = /^\d{4}-\d{2}-\d{2}/.exec(asOf)?.[0] ?? asOf;
+        return formatFlexDate(day) || day;
+    },
+
     /**
      * Update tree switcher display
      */
@@ -210,6 +232,7 @@ export const treeManagementMethods = uiModule({
             if (nameEl) {
                 nameEl.textContent = currentName || '…';
             }
+            this.setCurrentTreeTag(null);
 
             if (dropdown) {
                 let html = '';
@@ -259,6 +282,8 @@ export const treeManagementMethods = uiModule({
             // A phone's Research screen names its own tree (the tree under it may be another, or none yet).
             nameEl.textContent = this.phoneResearchTreeName() || activeTree?.name || '…';
         }
+        // A sample tree's tag after its name (spec 143 §1); not when a phone's Research screen names another tree.
+        this.setCurrentTreeTag(this.phoneResearchTreeName() ? null : activeTree);
         // A merge not sent to the tree's research yet, quietly beside the switcher (spec 134 11b).
         this.listenForMergeHold();
         const holdEl = document.getElementById('tree-switcher-hold');
@@ -302,6 +327,7 @@ export const treeManagementMethods = uiModule({
                     <span class="tree-item-check">${isActive ? iconSvg('check') : ''}</span>
                     <span class="tree-item-name" title="${this.escapeHtml(title ? `${tree.name}\n${title}` : tree.name)}">${this.escapeHtml(tree.name)}</span>
                     ${this.treeSwitcherKindHtml(tree)}
+                    ${sampleTagHtml(tree)}
                     ${this.treeHoldText(tree) ? `<span class="tree-item-hold">${this.escapeHtml(this.treeHoldText(tree))}</span>` : ''}
                     ${this.treeSwitcherMarksHtml(tree)}
                 </div>
@@ -309,7 +335,7 @@ export const treeManagementMethods = uiModule({
         }
         // The browser keeps the page from the research programs: said once, above Manage trees.
         if (this.otherResearchEnabled()) html += this.treeSwitcherBlockedHtml();
-        dropdown.classList.toggle('with-research', this.treeSwitcherMarksShown());
+        dropdown.classList.toggle('with-research', this.treeSwitcherWide());
 
         // The switcher is trees only: view/tree actions live in the ⋯ actions
         // menu (desktop) and the mobile "More" sheet (≤1024px). Import… makes a
@@ -788,9 +814,11 @@ export const treeManagementMethods = uiModule({
             { rows: trees.map(tree => {
                 const marks = this.treeSheetMarks(tree);
                 const sub = [this.treeKindLabel(tree), this.treeHoldText(tree)].filter(Boolean).join(' \u00b7 ');
+                const tag = sampleTagElement(tree);
                 return {
                     label: tree.name,
                     ...(sub ? { sub } : {}),
+                    ...(tag ? { tag } : {}),
                     active: tree.id === activeId,
                     treeId: tree.id,
                     extra: marks?.extra,
@@ -1014,6 +1042,7 @@ export const treeManagementMethods = uiModule({
             // Status as text chips; the open tree's row also has the selection's fill and line (Linka).
             const badges =
                 (isActive ? `<span class="tree-badge active-badge">${esc(s.opened)}</span>` : '') +
+                (TreeManager.sampleKindOf(tree.id) ? `<span class="tree-badge tree-badge--sample" title="${esc(strings.sample.tagTitle)}">${esc(strings.sample.tag)}</span>` : '') +
                 (tree.isLocked ? `<span class="tree-badge">${esc(s.lockedBadge)}</span>` : '') +
                 (tree.isHidden ? `<span class="tree-badge">${esc(s.hiddenBadge)}</span>` : '');
             // Every tree the same facts, all from the tree index (spec 139 §7.2): no tree's data is read here.
@@ -1023,6 +1052,8 @@ export const treeManagementMethods = uiModule({
                 esc(st.couples(tree.partnershipCount)),
                 `<span class="tree-manager-item-size">${esc(formatTreeSize(tree.sizeBytes, lang))}</span>`,
                 ...(Number.isFinite(edited) ? [esc(strings.treeActions.edited(formatRelativeDateTime(edited, lang)))] : []),
+                // The showcase's data is as of its snapshot ("as of 1 Nov 2026").
+                ...(tree.sample ? [esc(strings.sample.asOf(this.sampleAsOfText(tree.sample.asOf)))] : []),
             ].join(' · ');
             const pending = (underTree.get(tree.id) ?? []).map(session => `
                 <div class="tree-manager-item-pending" data-session-id="${esc(session.id)}">

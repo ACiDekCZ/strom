@@ -2557,6 +2557,20 @@ export interface SavedMergeRule {
 /** Branded type for Tree IDs */
 export type TreeId = string & { readonly __brand: 'TreeId' };
 
+/** The language of a showcase's data (its places, captions, research texts); never the UI's. */
+export type SampleLang = 'cs' | 'en' | 'de' | 'pl';
+
+/** What a showcase tree keeps of its file's header (TreeMetadata.sample, spec 143). */
+export interface TreeSampleMark {
+    /** The showcase's fixed id ("showcase-cs"), the same across its versions. */
+    exportId: string;
+    lang: SampleLang;
+    /** The showcase's version ("3.33.0"): a newer file offers an update. */
+    sampleVersion: string;
+    /** ISO time the showcase's data is as of ("as of 1 Nov 2026"). */
+    asOf: string;
+}
+
 /** Metadata for a tree (lightweight, always in memory) */
 export interface TreeMetadata {
     id: TreeId;
@@ -2580,6 +2594,13 @@ export interface TreeMetadata {
      * opened (demo-sample.ts looksLikeSampleTree).
      */
     demo?: true;
+    /**
+     * The showcase tree (spec 143): opened from a `strom-showcase` file
+     * (src/showcase-format.ts), from the web or a file. Its research is for
+     * viewing only. The mark, not the name, gives it the "Sample" tag, and its
+     * `exportId` finds it again: a second opening only switches to it.
+     */
+    sample?: TreeSampleMark;
     /**
      * The data version of the stored record (written with every save, put
      * right at every read). Above STROM_DATA_VERSION: a newer app saved the

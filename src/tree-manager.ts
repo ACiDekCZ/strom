@@ -15,7 +15,7 @@ import {
     PartnershipId,
     Person,
     Partnership,
-    
+    TreeSampleMark,
     LastFocusedMarker,
 } from './types.js';
 import { generateTreeId, uniqueIdSuffix } from './ids.js';
@@ -43,7 +43,7 @@ import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from '.
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
 import { isResearchOwner, researchCopyOrigin, planSharedTieRepair, researchOriginalOf, transferResearchTie } from './research-owner.js';
-import { importOriginOf } from './tree-row.js';
+import { importOriginOf, treeSampleKind, type TreeSampleKind } from './tree-row.js';
 import { asciiSlug } from './filenames.js';
 import { browserMediaFingerprint } from './browser-media.js';
 import { looksLikeSampleTree } from './demo-sample.js';
@@ -1899,7 +1899,7 @@ class TreeManagerClass {
 
     findTreeByExportId(exportId: string): TreeMetadata | null {
         return this.index.trees.find(t =>
-            t.sourceExportId === exportId || t.lastExportId === exportId
+            t.sourceExportId === exportId || t.lastExportId === exportId || t.sample?.exportId === exportId
         ) || null;
     }
 
@@ -2136,6 +2136,32 @@ class TreeManagerClass {
         tree.demo = true;
         delete tree.researchAdoptToken;
         this.saveIndex();
+    }
+
+    /**
+     * Mark a tree as the showcase (spec 143): what it keeps of its file's
+     * header, and the showcase's export id as the tree's source, so the next
+     * opening of the same showcase finds it (findTreeByExportId) and only
+     * switches to it. An update of the showcase marks it again with its new
+     * version. Never the bundled sample (TreeMetadata.demo): that one has no
+     * research at all.
+     */
+    markSampleTree(treeId: TreeId, header: TreeSampleMark): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree || tree.demo) return;
+        tree.sample = { exportId: header.exportId, lang: header.lang, sampleVersion: header.sampleVersion, asOf: header.asOf };
+        tree.sourceExportId = header.exportId;
+        delete tree.researchAdoptToken;
+        this.saveIndex();
+    }
+
+    /**
+     * Which sample a tree is, for its "Sample" tag: the showcase (opened
+     * from a showcase file), the bundled sample of the Berg family, or none.
+     */
+    sampleKindOf(treeId: TreeId | null | undefined): TreeSampleKind | null {
+        const tree = treeId ? this.index.trees.find(t => t.id === treeId) : undefined;
+        return tree ? treeSampleKind(tree) : null;
     }
 
     /**

@@ -7,7 +7,16 @@ import { strings } from './strings.js';
 import type { StromData, TreeMetadata } from './types.js';
 
 /** What a tree is, for its row's third line (in this order of precedence). */
-export type TreeOriginKind = 'research' | 'copy' | 'fromTree' | 'import' | 'none';
+export type TreeOriginKind = 'sample' | 'research' | 'copy' | 'fromTree' | 'import' | 'none';
+
+/** Which sample a tree is (its "Sample" tag): the showcase (spec 143), the bundled Berg family, or none. */
+export type TreeSampleKind = 'showcase' | 'demo';
+
+/** The tree's sample kind by its marks (TreeMetadata.sample, TreeMetadata.demo), never by its name. */
+export function treeSampleKind(tree: Pick<TreeMetadata, 'sample' | 'demo'>): TreeSampleKind | null {
+    if (tree.sample) return 'showcase';
+    return tree.demo ? 'demo' : null;
+}
 
 export interface TreeOriginLine {
     kind: TreeOriginKind;
@@ -47,6 +56,8 @@ export function importOriginOf(data: Pick<StromData, 'imports'>): TreeMetadata['
 export function treeOriginLine(tree: TreeMetadata, ctx: TreeOriginContext): TreeOriginLine {
     const s = strings.structure;
     const none = strings.treeActions.researchNone;
+    // The showcase's research is for viewing only (spec 143 §1); the Berg sample stays "no research".
+    if (tree.sample) return { kind: 'sample', text: strings.sample.originLine };
     if (ctx.owner && tree.research?.id) {
         return { kind: 'research', text: s.research(researchShortId(tree.research.id)), researchId: tree.research.id };
     }

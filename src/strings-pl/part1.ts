@@ -1,7 +1,7 @@
 import type { StringsType } from '../strings.js';
 import { nPl, plPl } from './helpers.js';
 
-export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'mobileMenu' | 'emptyState' | 'demo' | 'book'
+export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'mobileMenu' | 'emptyState' | 'demo' | 'sample' | 'book'
     | 'memoryLimit' | 'fileCopy' | 'snapshots' | 'split' | 'splitFamilies' | 'advanced' | 'surnames' | 'lineage' | 'surnameSuggest'
     | 'fields' | 'events' | 'factStatus' | 'reliability' | 'verify' | 'origin' | 'partnerEvents' | 'sources'> = {
     toolbar: {
@@ -79,6 +79,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
     demo: {
         tryDemo: 'Wypróbuj drzewo przykładowe',
         tryDemoDesc: 'Zmyślona rodzina, która pokazuje, wszystko, co może zawierać drzewo',
+        tryDemoSmall: 'Wypróbuj mały przykład',
         treeName: 'Przykład: ród Bergów',
         hint: 'Kliknięcie karty otwiera akcje. To zwykłe drzewo – można je usunąć w zarządzaniu drzewami.',
         noResearch: 'Drzewo przykładowe służy do wypróbowania aplikacji i nigdy nie zostaje połączone z badaniem. Badanie zaczyna się od prawdziwego drzewa rodzinnego.',
@@ -125,6 +126,50 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             johanIdaStory: 'Johan i Ida pobrali się 2 czerwca 1850 w kościele w Voss, a wesele odbyło się w Øvre Strand, gospodarstwie, w którym Ida dorastała z matką Kari. Świadkami byli ojciec Johana, Peter, i nauczyciel Nils Holm.\n\nPrzejęli małe gospodarstwo poniżej Nedre Berg. Następnego lata urodził się Erik, w kwietniu 1855 bliźniaczki Hanna i Clara; Clara żyła tylko osiemnaście dni.\n\nW kwietniu 1868 wypłynęli z Erikiem i Hanną z Bergen. Matka Idy, Kari, została w Voss i już nigdy jej nie zobaczyli. Ida przez całe życie przechowywała rodzinną Biblię z Voss; przeżyła Johana o sześć lat.',
             coupleStory: 'David i Emma poznali się w szkole, w której oboje uczyli. Pobrali się w 1905 r. i wynajmowali pokój lokatorom, więc dom był zawsze pełen ludzi.',
         }
+    },
+    sample: {
+        tag: 'Przykład',
+        tagTitle: 'Zmyślona rodzina do wypróbowania. Pozostałe drzewa pozostają bez zmian; przykład można usunąć w Zarządzaniu drzewami.',
+        asOf: (date: string) => `stan na ${date}`,
+        originLine: 'badania przykładu · tylko do przeglądania',
+        downloading: 'Pobieranie przykładu',
+        downloadedOf: (doneMb: string, totalMb: string, percent: number) => `${doneMb} MB z ${totalMb} MB · ${percent}%`,
+        cancelled: 'Pobieranie przykładu anulowano. Nic się nie zmieniło.',
+        openedTitle: 'Przykład jest otwarty.',
+        opened: 'Jego badania można przeglądać; zmiany nie trafiają do żadnych badań.',
+        newerTitle: (version: string) => `Jest nowszy przykład (${version}).`,
+        newer: 'Aktualizacja zastąpi drzewo przykładu; zmiany w nim przepadną.',
+        update: 'Zaktualizuj przykład…',
+        updateTitle: 'Zaktualizować przykład?',
+        updateConfirm: (name: string, version: string) => `Drzewo „${name}” zostanie zastąpione przykładem w wersji ${version}. Zmiany wprowadzone w przykładzie przepadną. Pozostałe drzewa pozostaną bez zmian.`,
+        updateOk: 'Zaktualizuj',
+        errTitle: 'Przykład się nie pobrał',
+        errOffline: 'Nie udało się pobrać przykładu – brak połączenia. Mały przykład (rodzina Bergów) otwiera się bez sieci.',
+        errServer: (reason: string) => `Nie udało się pobrać przykładu (${reason}). Mały przykład (rodzina Bergów) można otworzyć od razu.`,
+        errSpaceTitle: 'Brak miejsca na przykład',
+        errSpace: (mb: string) => `W pamięci przeglądarki brak miejsca na przykład (potrzeba ok. ${mb} MB). Miejsce zwolni usunięcie zbędnego drzewa w Zarządzaniu drzewami. Mały przykład (rodzina Bergów) jest mniejszy.`,
+        errBrokenTitle: 'Nie można otworzyć pliku przykładu',
+        errBroken: 'Plik przykładu jest uszkodzony lub nieznany (brak nagłówka). Mały przykład (rodzina Bergów) można otworzyć od razu.',
+        errFormat: 'Przykład jest dla nowszej wersji aplikacji. Aplikacja zaktualizuje się sama przy następnym otwarciu.',
+        retry: 'Spróbuj ponownie',
+        openSmall: 'Otwórz mały przykład',
+        tryTitle: 'Wypróbuj przykład z badaniami',
+        tryDesc: (mb: string) => `Zmyślona rodzina z badaniami tylko do przeglądania · pobranie ${mb} MB`,
+        tryDescEmbedded: 'Z pobranego pliku przykładu (.json) · samodzielny plik nie pobiera',
+        embeddedTitle: 'Przykład z badaniami',
+        embeddedText: 'Samodzielny plik nie pobiera przykładu. Otwiera się z pobranego pliku przykładu albo można otworzyć mały przykład.',
+        embeddedLink: 'Pobierz plik przykładu (stromapp.info) ↗',
+        embeddedOpen: 'Otwórz pobrany plik przykładu…',
+        dropTitle: 'Upuść tutaj: otwórz przykład',
+        dropSub: 'Plik przykładu otworzy się jako osobne drzewo; pozostałe drzewa bez zmian.',
+        opening: 'Otwieranie przykładu',
+        readOnly: 'W przykładzie tylko do przeglądania – pełne badania:',
+        asOfLine: (date: string) => `Stan przykładu na ${date}`,
+        whyTitle: 'W przykładzie tylko do przeglądania',
+        whyFull: 'Pełne badania z agentem:',
+        whyWhat: (action: string, mark: string) => `W pełnych badaniach: ${action} · ${mark}`,
+        howTo: 'Jak to zrobić ↗',
+        copy: 'Kopiuj',
     },
 
     // Family book

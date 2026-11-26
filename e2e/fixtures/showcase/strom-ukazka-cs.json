@@ -1,0 +1,24 @@
+{
+  "kind": "strom-showcase",
+  "format": 1,
+  "lang": "cs",
+  "exportId": "showcase-cs",
+  "sampleVersion": "3.33.0",
+  "appVersion": "3.33.0",
+  "researchVersion": "1.38.0",
+  "asOf": "2026-11-01T09:00:00.000Z",
+  "name": "Ukázka – rod Horáků",
+  "family": "Horák",
+  "sizeBytes": 2033,
+  "tree": {
+    "format": "ged",
+    "text": "0 HEAD\n1 SOUR STROM_RESEARCH\n2 VERS 1.38.0\n2 NAME Strom Research\n1 DATE 1 NOV 2026\n1 _STROM_TREE 943fce29-c1c6-5433-8031-96ce4bbbcd8d\n1 _STROM_ASOF 2026-11-01\n1 SUBM @U1@\n1 GEDC\n2 VERS 5.5.1\n2 FORM LINEAGE-LINKED\n1 CHAR UTF-8\n1 NOTE Horákovi\n2 CONT Vygenerováno programem Strom Research z evidence výzkumu. Údaje bez citace pramene nejsou doloženy záznamem.\n0 @P0001@ INDI\n1 NAME Anna /Horáková/\n2 _STROM_PRIMARY Y\n1 SEX F\n1 BIRT\n2 DATE 14 JAN 1931\n2 PLAC Dolní Lhota\n1 OBJE\n2 FORM png\n2 _STROM_KIND photo\n2 FILE data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\n1 REFN P0001\n2 TYPE strom-research\n1 FAMC @F0001@\n0 @P0002@ INDI\n1 NAME Josef /Horák/\n1 SEX M\n1 BIRT\n2 DATE 3 MAR 1898\n2 PLAC Dolní Lhota\n1 OCCU rolník\n1 REFN P0002\n2 TYPE strom-research\n1 FAMS @F0001@\n1 FAMC @F0002@\n0 @P0003@ INDI\n1 NAME Marie /Krejčí/\n1 SEX F\n1 BIRT\n2 DATE 20 AUG 1902\n2 PLAC Dolní Lhota\n1 REFN P0003\n2 TYPE strom-research\n1 FAMS @F0001@\n0 @P0004@ INDI\n1 NAME Václav /Horák/\n1 SEX M\n1 BIRT\n2 DATE 1 OCT 1865\n1 REFN P0004\n2 TYPE strom-research\n1 FAMS @F0002@\n0 @P0005@ INDI\n1 NAME Kateřina /Vlková/\n1 SEX F\n1 BIRT\n2 PLAC Horní Lhota\n1 REFN P0005\n2 TYPE strom-research\n1 FAMS @F0002@\n0 @F0001@ FAM\n1 HUSB @P0002@\n1 WIFE @P0003@\n1 CHIL @P0001@\n1 MARR\n2 DATE 12 MAY 1924\n2 PLAC Dolní Lhota\n0 @F0002@ FAM\n1 HUSB @P0004@\n1 WIFE @P0005@\n1 CHIL @P0002@\n0 @U1@ SUBM\n1 NAME Strom Research\n0 TRLR\n"
+  },
+  "research": {
+    "id": "943fce29-c1c6-5433-8031-96ce4bbbcd8d",
+    "status": null,
+    "log": null,
+    "material": null,
+    "queue": null
+  }
+}

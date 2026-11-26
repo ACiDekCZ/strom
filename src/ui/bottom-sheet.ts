@@ -61,6 +61,8 @@ interface MenuRow {
     icon?: string;
     /** A drawn sign (an SVG, trusted markup) in place of `icon`'s text (the Table's pin). */
     iconHtml?: string;
+    /** A tag right after the label's words (a sample tree's "Sample"). */
+    tag?: HTMLElement;
     /** A second line of the row's own (the tree's research marks). */
     extra?: HTMLElement;
     /** Offered but not working now (`aria-disabled`, never `disabled`: it can be focused and read); a click does nothing. */
@@ -615,6 +617,7 @@ export const bottomSheetMethods = uiModule({
             const label = document.createElement('span');
             label.className = 'bottom-sheet-label';
             label.textContent = row.label;
+            if (row.tag) label.appendChild(row.tag);
             if (row.sub) {
                 const sub = document.createElement('span');
                 sub.className = 'bottom-sheet-sub';

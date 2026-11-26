@@ -954,6 +954,38 @@
             flex: none; font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 7px; border-radius: var(--r-tag);
             background: var(--surface-2); color: var(--text-light); border: 1px solid var(--border); white-space: nowrap;
         }
+        /* A sample tree's tag (spec 143 §1): the kind label's look under its own name, after the tree's name in the
+           toolbar, the switcher's list and the phone's Trees sheet; it never shortens (the name does, "…"). */
+        .tree-sample-tag {
+            flex: none; font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 7px; border-radius: var(--r-tag);
+            background: var(--surface-2); color: var(--text-light); border: 1px solid var(--border); white-space: nowrap;
+            font-family: var(--font-sans); letter-spacing: 0; text-transform: none;
+        }
+        #current-tree-tag:not([hidden]) { display: contents; }
+        #current-tree-tag[hidden] { display: none; }
+        /* With the tag the pill is wider and the name keeps more of itself (desktop 210 px, tablet 140 px). */
+        @media (min-width: 1025px) {
+            .toolbar .tree-switcher-btn:has(.tree-sample-tag) { max-width: min(300px, 100%); }
+            .toolbar .tree-switcher-btn:has(.tree-sample-tag) .tree-name { max-width: 210px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) and (min-height: 501px) {
+            .toolbar .tree-switcher-btn:has(.tree-sample-tag) { max-width: min(300px, 100%); }
+            .toolbar .tree-switcher-btn:has(.tree-sample-tag) .tree-name { max-width: 140px; }
+        }
+        .bottom-sheet-label > .tree-sample-tag { display: inline-block; margin-left: 8px; vertical-align: 1px; }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bottom-sheet-item[data-tree-id] .bottom-sheet-label > .tree-sample-tag { margin-left: 0; }
+        }
+        /* The tag's bubble on touch (and a sample's other reasons): the look of .bulk-bubble, under its anchor. */
+        .sample-why {
+            position: fixed; z-index: 2600; width: 288px; max-width: calc(100vw - 32px); box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 6px; padding: 12px 14px;
+            background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-lg);
+            box-shadow: var(--shadow-lg); font-size: 13px; line-height: 1.5; text-wrap: pretty; animation: fadeIn 0.15s ease;
+        }
+        .sample-why b { font-weight: 600; }
+        .sample-why .what { color: var(--text-light); font-size: 12.5px; }
+        @media (max-width: 640px) { .sample-why { width: calc(100vw - 32px); } }
         /* A merge not sent to the research yet (spec 134 11b): quiet, beside the switcher on a desktop,
            its row's second line in the list (phone and tablet: the row wraps). */
         .tree-switcher-hold {
@@ -37265,7 +37297,7 @@
             <button class="tree-switcher-btn" onclick="window.Strom.UI.toggleTreeSwitcher()">
                 <!-- Phone: one dot for "only in the browser" / offline (the pills have no room) -->
                 <span class="toolbar-state-dot" aria-hidden="true"></span>
-                <span class="tree-switcher-lines"><span id="current-tree-name" class="tree-name">…</span><span id="current-tree-conn" class="tree-switcher-conn" hidden></span></span>
+                <span class="tree-switcher-lines"><span id="current-tree-name" class="tree-name">…</span><span id="current-tree-tag" hidden></span><span id="current-tree-conn" class="tree-switcher-conn" hidden></span></span>
                 <svg class="tree-dropdown-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
             </button>
             <div id="tree-switcher-dropdown" class="tree-switcher-dropdown" role="menu">

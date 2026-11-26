@@ -400,7 +400,7 @@ export const researchOthersMethods = uiModule({
         // The open list: each row's marks and hover sentence, the blocked sentence.
         const dropdown = document.getElementById('tree-switcher-dropdown');
         if (dropdown && !DataManager.isViewMode()) {
-            dropdown.classList.toggle('with-research', this.treeSwitcherMarksShown());
+            dropdown.classList.toggle('with-research', this.treeSwitcherWide());
             dropdown.querySelectorAll<HTMLElement>('.tree-switcher-item[data-tree-id]').forEach(row => {
                 const tree = byId.get(row.dataset.treeId ?? '');
                 if (!tree) return;
