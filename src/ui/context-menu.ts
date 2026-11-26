@@ -27,6 +27,7 @@ import { getWindowRole } from '../windows/window-role.js';
 import { satelliteResearchMenu, WIN_RESEARCH_PREFIX } from '../windows/window-research-menu.js';
 import { isBulkBubbleOpen, runBulkFamily } from './bulk-family-ui.js';
 import { personListMenuRows } from './person-list-add.js';
+import { canGiftTree, giftMenuMeta } from './gift-tree-ui.js';
 
 /** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
 const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
@@ -323,6 +324,10 @@ export const contextMenuMethods = uiModule({
         // "Select ›" (spec 098 §2): a view, so in every variant, after the person's own rows.
         const { index, labels } = rodIndex();
         const rodRows = selectionMenuRows(index, labels, personId, getSelection().ref);
+        // Give a family tree… (spec 093): a person with family; the quiet date of the last package made.
+        const giftRows: PersonMenuAction[] = !isViewMode && canGiftTree(personId)
+            ? [{ action: 'gift-tree', label: strings.giftTree.menu, ...(giftMenuMeta(personId) ? { meta: giftMenuMeta(personId) } : {}) }]
+            : [];
         if (isViewMode) {
             return forWindow(withViewLinkRows([
                 { action: 'focus', label: c.focus, kind: 'focus' },
@@ -349,7 +354,7 @@ export const contextMenuMethods = uiModule({
                 ] : []),
                 ...readItems(false),
                 ...rodRows,
-                ...group(personListMenuRows(personId)),
+                ...group([...giftRows, ...personListMenuRows(personId)]),
                 ...group([
                     ...researchInGroup,
                     ...(isTreeLocked ? [] : [{ action: 'toggle-lock', label: strings.lock.unlockPerson }]),
@@ -377,6 +382,7 @@ export const contextMenuMethods = uiModule({
             ...group([
                 { action: 'relationship', label: c.relationship },
                 { action: 'archives', label: c.archives },
+                ...giftRows,
                 ...personListMenuRows(personId),
             ]),
             ...group([
@@ -660,6 +666,9 @@ export const contextMenuMethods = uiModule({
                 break;
             case 'archives':
                 this.showArchiveSearch(personId);
+                break;
+            case 'gift-tree':
+                this.showGiftTree({ personId });
                 break;
             case 'parent':
             case 'partner':

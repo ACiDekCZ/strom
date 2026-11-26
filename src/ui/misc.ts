@@ -929,6 +929,11 @@ export const miscMethods = uiModule({
                     this.structureEscape();
                     return;
                 }
+                // Give a family tree: its person choice first, then the guide (nothing made, the settings remembered).
+                if (this.topActiveOverlay()?.id === 'gift-modal' && this.isGiftTreeOpen() && !this.bottomSheet) {
+                    this.giftEscape();
+                    return;
+                }
                 // New list / Save as list: its person choice, then the dialog (over Lists of people).
                 if (this.isNewPersonListOpen() && ['person-list-new', 'person-list-save'].includes(this.topActiveOverlay()?.id ?? '')) {
                     this.newPersonListEscape();
