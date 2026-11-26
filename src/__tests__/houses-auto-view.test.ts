@@ -23,18 +23,28 @@ afterEach(() => setLanguage('en'));
 describe('House history setting texts', () => {
     it('says the estimate with the price once measured (cs)', () => {
         setLanguage('cs');
-        expect(housesAutoEstimate(measured)).toBe('Úkol dostane 7 domů ve 3 obcích · asi 5 h práce agenta (≈ 11 USD) · čerpá předplatné AI');
+        expect(housesAutoEstimate(measured)).toBe('Úkol dostane 7 domů ve 3 obcích · asi 5\u00a0h práce agenta (≈\u00a011\u00a0USD) · čerpá předplatné AI');
         expect(housesAutoConfirmOn(measured)).toBe(
-            'Úkol dostane 7 domů ve 3 obcích, asi 5 h práce agenta (≈ 11 USD). Čerpá předplatné AI. Další domy přibudou samy, až splní práh.');
+            'Úkol dostane 7 domů ve 3 obcích, asi 5\u00a0h práce agenta (≈\u00a011\u00a0USD). Čerpá předplatné AI. Další domy přibudou samy, až splní práh.');
     });
 
     it('says the time alone before the price is measured', () => {
         setLanguage('cs');
-        expect(housesAutoEstimate(unmeasured)).toBe('Úkol dostane 1 dům v 1 obci · asi 50 min práce agenta · čerpá předplatné AI');
+        expect(housesAutoEstimate(unmeasured)).toBe('Úkol dostane 1 dům v 1 obci · asi 50\u00a0min práce agenta · čerpá předplatné AI');
         setLanguage('en');
-        expect(housesAutoEstimate(unmeasured)).toBe('The task covers 1 house in 1 town · about 50 min of agent work · uses the AI subscription');
+        expect(housesAutoEstimate(unmeasured)).toBe('The task covers 1 house in 1 town · about 50\u00a0min of agent work · uses the AI subscription');
         setLanguage('de');
-        expect(housesAutoEstimate(measured)).toBe('Der Auftrag umfasst 7 Häuser in 3 Orten · etwa 5 Std. Arbeit des Agenten (≈ 11 USD) · verbraucht das KI-Abo');
+        expect(housesAutoEstimate(measured)).toBe('Der Auftrag umfasst 7 Häuser in 3 Orten · etwa 5\u00a0Std. Arbeit des Agenten (≈\u00a011\u00a0USD) · verbraucht das KI-Abo');
+    });
+
+    it('keeps the price and the time whole on a line break (no space to break inside them)', () => {
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            setLanguage(lang);
+            const text = housesAutoEstimate(measured)!;
+            expect(text).toMatch(/\(≈\u00a011\u00a0USD\)/);
+            expect(text).toMatch(/5\u00a0(h|Std\.)/);
+            expect(housesAutoConfirmOn(measured)).toMatch(/\(≈\u00a011\u00a0USD\)/);
+        }
     });
 
     it('says nothing when the tree gives no house (no auto, or zero)', () => {
@@ -54,9 +64,9 @@ describe('House history setting texts', () => {
 
     it('rounds the work and the price', () => {
         setLanguage('en');
-        expect(houseWorkDuration(3)).toBe('5 min');
-        expect(houseWorkDuration(87)).toBe('90 min');
-        expect(houseWorkDuration(90)).toBe('2 h');
+        expect(houseWorkDuration(3)).toBe('5\u00a0min');
+        expect(houseWorkDuration(87)).toBe('90\u00a0min');
+        expect(houseWorkDuration(90)).toBe('2\u00a0h');
         expect(houseUsd(0.94)).toBe('0.9');
         expect(houseUsd(11.2)).toBe('11');
         expect(houseUsd(undefined)).toBeNull();

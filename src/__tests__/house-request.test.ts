@@ -103,9 +103,9 @@ describe('The request\'s estimate', () => {
 
     it('the sentence in cs and en', () => {
         setLanguage('cs');
-        expect(houseRequestCostText({ minutes: 50, usd: null })).toBe('Jedno sezení výzkumu, zhruba 50 min. Čerpá předplatné AI agenta výzkumu.');
+        expect(houseRequestCostText({ minutes: 50, usd: null })).toBe('Jedno sezení výzkumu, zhruba 50\u00a0min. Čerpá předplatné AI agenta výzkumu.');
         setLanguage('en');
-        expect(houseRequestCostText({ minutes: 110, usd: 4.5 })).toBe('One research session, about 2 h (≈ 4.5 USD). Uses the research agent’s AI subscription.');
+        expect(houseRequestCostText({ minutes: 110, usd: 4.5 })).toBe('One research session, about 2\u00a0h (≈\u00a04.5\u00a0USD). Uses the research agent’s AI subscription.');
     });
 
     it('a refusal says the bridge\'s words, else the usual sentence', () => {

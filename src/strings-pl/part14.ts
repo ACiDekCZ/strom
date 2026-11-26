@@ -88,7 +88,7 @@ export const plPart14: Pick<StringsType, 'houses'> = {
             title: (house: string, town: string) => `Historia domu ${house}, ${town}`,
             what: 'Przeszukiwane są księgi metrykalne, kroniki, mapy i inne dozwolone źródła.',
             againWhat: 'Przeszukane źródła nie są przeszukiwane ponownie; tylko nowe i jeszcze nieprzeszukane.',
-            cost: (dur: string, usd: string | null) => `Jedna sesja badań, około ${dur}${usd ? ` (≈ ${usd} USD)` : ''}. Korzysta z subskrypcji AI agenta badań.`,
+            cost: (dur: string, usd: string | null) => `Jedna sesja badań, około ${dur}${usd ? ` (≈\u00a0${usd}\u00a0USD)` : ''}. Korzysta z subskrypcji AI agenta badań.`,
             neighbours: 'Sąsiednie domy rodziny w miejscowości zostaną opracowane razem',
             max: 'najwyżej 3',
             attach: 'Dołącz materiał… (opcjonalnie)',
@@ -108,13 +108,13 @@ export const plPart14: Pick<StringsType, 'houses'> = {
         auto: {
             title: 'Historia domów',
             desc: 'Badania same opracują domy bezpośrednich przodków, w których rodzina mieszkała co najmniej dwa pokolenia lub 30 lat, a najstarszy zapis ma ponad 100 lat. Pozostałe domy tylko na żądanie.',
-            durMinutes: (m: number) => `${m} min`,
-            durHours: (h: number) => `${h} h`,
+            durMinutes: (m: number) => `${m}\u00a0min`,
+            durHours: (h: number) => `${h}\u00a0h`,
             estimate: (n: number, t: number, dur: string, usd: string | null) =>
-                `Zadanie obejmie ${nPl(n, 'dom', 'domy', 'domów')} w ${t} ${t === 1 ? 'miejscowości' : 'miejscowościach'} · około ${dur} pracy agenta${usd ? ` (≈ ${usd} USD)` : ''} · korzysta z subskrypcji AI`,
+                `Zadanie obejmie ${nPl(n, 'dom', 'domy', 'domów')} w ${t} ${t === 1 ? 'miejscowości' : 'miejscowościach'} · około ${dur} pracy agenta${usd ? ` (≈\u00a0${usd}\u00a0USD)` : ''} · korzysta z subskrypcji AI`,
             confirmOnTitle: 'Włączyć historię domów?',
             confirmOn: (n: number, t: number, dur: string, usd: string | null) =>
-                `Zadanie obejmie ${nPl(n, 'dom', 'domy', 'domów')} w ${t} ${t === 1 ? 'miejscowości' : 'miejscowościach'}, około ${dur} pracy agenta${usd ? ` (≈ ${usd} USD)` : ''}. Korzysta z subskrypcji AI. Kolejne domy dojdą same, gdy spełnią próg.`,
+                `Zadanie obejmie ${nPl(n, 'dom', 'domy', 'domów')} w ${t} ${t === 1 ? 'miejscowości' : 'miejscowościach'}, około ${dur} pracy agenta${usd ? ` (≈\u00a0${usd}\u00a0USD)` : ''}. Korzysta z subskrypcji AI. Kolejne domy dojdą same, gdy spełnią próg.`,
             confirmOnNone: 'Korzysta z subskrypcji AI. Domy dojdą same, gdy spełnią próg.',
             on: 'Włącz',
             off: 'Wyłącz',
