@@ -15,6 +15,10 @@
  * steps (spec 073 §1.2), each taken only when the
  * ones before it are not enough:
  *
+ *   0. `.toolbar-tag-name`: a tree name beside the "Sample" tag (spec 143 §1)
+ *      gives up its wider cap (210 px) for the plain one (130 px) first, so a
+ *      tight row does not take the tag's extra room for a squeezed name and
+ *      cap it at 56 px (no effect on a tree without the tag);
  *   1. `.toolbar-add-compact`: "＋ Add person" → ＋ alone (its tooltip and
  *      accessible name stay);
  *   2. `.toolbar-squeeze`: narrower view tabs, no "/" hint;
@@ -65,7 +69,7 @@ import { isDesktop, isPhoneBar, isTablet } from '../breakpoints.js';
 import { strings } from '../strings.js';
 
 /** The steps in their order (see above). */
-export const TOOLBAR_FIT_STEPS = ['toolbar-add-compact', 'toolbar-squeeze', 'toolbar-squeeze-2', 'toolbar-squeeze-name', 'toolbar-squeeze-3'] as const;
+export const TOOLBAR_FIT_STEPS = ['toolbar-tag-name', 'toolbar-add-compact', 'toolbar-squeeze', 'toolbar-squeeze-2', 'toolbar-squeeze-name', 'toolbar-squeeze-3'] as const;
 /** The tablet steps in their order (see above). */
 export const TOOLBAR_TABLET_FIT_STEPS = ['toolbar-focus-short', 'toolbar-focus-nocount', 'toolbar-focus-nobulk', 'toolbar-squeeze-3', 'toolbar-focus-nohome'] as const;
 const HYSTERESIS_PX = 16;

@@ -110,9 +110,12 @@ test.describe('the "Sample" tag of a sample tree (spec 143 §1)', () => {
         await page.evaluate(() => window.Strom.TreeManager.renameTree(window.Strom.TreeManager.getActiveTreeId()!, 'Sample – the Berg family of Voss, Norway'));
         await page.evaluate(() => window.Strom.UI.updateTreeSwitcher());
         await expect(page.locator('#current-tree-name')).toHaveText('Sample – the Berg family of Voss, Norway');
-        // The pill holds the name at its 210 px cap, the tag, the gaps and the caret (a 300 px pill cut the
-        // name under its cap, which the fit read as a squeeze and capped the name at 56 px at any width).
+        // A tight row takes the tag's extra room back first (210 → 130 px, fit step 0); a 300 px pill used to
+        // cut the name under its cap, which the fit read as a squeeze and capped the name at 56 px at any width.
         await expect(page.locator('.toolbar')).not.toHaveClass(/toolbar-squeeze-name/);
+        await expect.poll(() => page.evaluate(() => Math.round(document.getElementById('current-tree-name')!.getBoundingClientRect().width))).toBeGreaterThanOrEqual(125);
+        // Where the row has room (1920 px) the name keeps the whole wider cap.
+        await page.setViewportSize({ width: 1920, height: 900 });
         await expect.poll(() => page.evaluate(() => Math.round(document.getElementById('current-tree-name')!.getBoundingClientRect().width))).toBeGreaterThanOrEqual(205);
     });
 

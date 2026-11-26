@@ -157,3 +157,20 @@ test('a newer showcase on the web is offered once and replaces the tree\'s data,
     expect(after).toEqual({ id, anna: true });
     expect((await activeSample(page)).version).toBe('3.34.0');
 });
+
+test('a computer in de: the showcase\'s long name beside the tag is not cut to the squeezed 56 px (the research row is tight)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await serveFile(page, FIXTURE);
+    await openDemo(page);
+    await expect(page.locator('#current-tree-tag .tree-sample-tag')).toBeVisible();
+    await page.evaluate(() => {
+        const S = window.Strom;
+        S.UI.setLanguage('de' as never);
+        S.TreeManager.renameTree(S.DataManager.getCurrentTreeId()!, 'Beispiel – Familie Horák-Krejčíová');
+        S.UI.updateTreeSwitcher();
+    });
+    await expect(page.locator('#current-tree-tag .tree-sample-tag')).toHaveText('Beispiel');
+    // The name may give up the tag's extra room (210 → 130 px), never fall to the squeezed cap.
+    await expect(page.locator('.toolbar')).not.toHaveClass(/toolbar-squeeze-name/);
+    await expect.poll(() => page.evaluate(() => Math.round(document.getElementById('current-tree-name')!.getBoundingClientRect().width))).toBeGreaterThanOrEqual(125);
+});

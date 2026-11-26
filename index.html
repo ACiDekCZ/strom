@@ -969,6 +969,8 @@
         @media (min-width: 1025px) {
             .toolbar .tree-switcher-btn:has(.tree-sample-tag) { max-width: 100%; }
             .toolbar .tree-switcher-btn:has(.tree-sample-tag) .tree-name { max-width: 210px; }
+            /* Fit step 0 (src/ui/toolbar-fit.ts): a tight row takes the tag's extra room back first. */
+            .toolbar.toolbar-tag-name:not(.toolbar-squeeze-name) .tree-switcher-btn:has(.tree-sample-tag) .tree-name { max-width: 130px; }
         }
         @media (min-width: 641px) and (max-width: 1024px) and (min-height: 501px) {
             .toolbar .tree-switcher-btn:has(.tree-sample-tag) { max-width: 100%; }
