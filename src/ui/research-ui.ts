@@ -66,6 +66,7 @@ import { uiModule } from './module.js';
 import { fileLooksLikeShowcase, showcaseLangParam } from '../showcase-download.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink, researchLinkActionOf, type ResearchLinkMarkParams } from '../research-link.js';
+import { showcaseQueueActions } from './sample-why.js';
 import { inShowcase, researchShowcaseShown, showcaseActionOfLink, showcaseActionOfUrl, showcaseWhy, parseShowcaseBridge } from '../research-link.js';
 import { showcaseEventSource } from '../showcase-bridge.js';
 import { deviceEventSource, isDeviceTunnelled } from '../device/device-bridge.js';
@@ -712,6 +713,8 @@ export function queueHoldNote(q: LiveQueueItem, s: LiveSession, cls = 'live-queu
 
 /** A queued task has its ⋯: the research's actions, a place by hand, or "Do next" for it. */
 function queueRowMenu(s: LiveSession, q: LiveQueueItem, canTask: boolean, canOrder: boolean): boolean {
+    // The showcase (spec 143 K4.1): no task's ⋯ (its order and its writes), the Queue's greyed actions say why.
+    if (inShowcase()) return false;
     return canTask || canOrder || (queueNextOffered(s) && queueNextFor(s, q));
 }
 
@@ -6054,6 +6057,8 @@ export const researchUiMethods = uiModule({
         }
         const ul = el('ul', 'live-panel-list live-queue');
         host.appendChild(ul);
+        // The showcase's overview: the queue's order and "Process now" under the tasks, greyed (spec 143 K4.1).
+        if (directions && inShowcase()) host.appendChild(showcaseQueueActions());
         if (loadingFirst) {
             ul.setAttribute('aria-busy', 'true');
             if (loadShown) ul.classList.add('busy-list-dim');

@@ -440,6 +440,8 @@ const stringsEN = {
         /** The showcase's greyed "Work on the queue" in Now (the design's name of the action). */
         continueResearch: 'Continue the research',
         queueOrder: 'Change the queue\'s order',
+        /** The queue's "Process now" (the agent starts on the tasks up next in the research's terminal). */
+        processNow: 'Process now',
         /** The mark's group said in words in the bubble ("In full research: … · terminal"). */
         markTerminal: 'terminal',
         markAgent: 'AI + terminal',
@@ -13696,6 +13698,7 @@ const stringsCZ: StringsType = {
         /** The showcase's greyed "Work on the queue" in Now (the design's name of the action). */
         continueResearch: 'Pokračovat ve výzkumu',
         queueOrder: 'Změnit pořadí fronty',
+        processNow: 'Zpracovat teď',
         /** The mark's group said in words in the bubble ("In full research: … · terminal"). */
         markTerminal: 'terminál',
         markAgent: 'AI + terminál',
@@ -26604,6 +26607,7 @@ const stringsDE: StringsType = {
         /** The showcase's greyed "Work on the queue" in Now (the design's name of the action). */
         continueResearch: 'Forschung fortsetzen',
         queueOrder: 'Reihenfolge der Warteschlange ändern',
+        processNow: 'Jetzt bearbeiten',
         /** The mark's group said in words in the bubble ("In full research: … · terminal"). */
         markTerminal: 'Terminal',
         markAgent: 'KI + Terminal',

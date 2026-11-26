@@ -14,6 +14,7 @@
 import { strings, getCurrentLanguage } from '../strings.js';
 import { hideSampleWhy, installSampleTagBubble, showSampleWhy } from './sample-tag.js';
 import { copyPlainText } from './table-view/table-cell.js';
+import { setResearchActionLabel } from './research-open-mark.js';
 import { setShowcaseWhy, showcaseAsOf, type ResearchActionMark, type ResearchShowcaseAction } from '../research-link.js';
 
 /** The command that sets up the full research with the same made-up family. */
@@ -235,7 +236,7 @@ function actionLabel(action: ResearchShowcaseAction | null): { label: string; ma
         case 'chat': return { label: s.research.askAgent, mark: 'agent' };
         case 'waiting-answer': return { label: s.research.answer, mark: 'none' };
         case 'queue-order': return { label: s.sample.queueOrder, mark: 'none' };
-        case 'work-now': return { label: s.verify.processNow, mark: 'agent' };
+        case 'work-now': return { label: s.sample.processNow, mark: 'agent' };
         case 'direction-new': return { label: s.live.dirFormNew, mark: 'terminal' };
         default: return { label: '', mark: 'none' };
     }
@@ -356,4 +357,19 @@ export function researchLastWork(
         if (Number.isFinite(at) && (!best || at > best.at)) best = { at, research: d.id };
     }
     return best;
+}
+
+/**
+ * The showcase's Queue (spec 143 K4.1): under its tasks "Change the queue's order" (through the bridge, no
+ * mark) and "Process now" (the agent in the research's terminal), both greyed; a click says why.
+ */
+export function showcaseQueueActions(): HTMLElement {
+    const s = strings.sample;
+    const row = make('div', 'research-overview__queue-acts');
+    const order = setResearchActionLabel(make('button', 'link-button research-overview__queue-order'), s.queueOrder, 'none');
+    order.type = 'button';
+    const now = setResearchActionLabel(make('button', 'link-button research-overview__queue-now'), s.processNow, 'agent');
+    now.type = 'button';
+    row.append(markShowcaseOff(order, 'none', s.queueOrder), markShowcaseOff(now, 'agent', s.processNow));
+    return row;
 }

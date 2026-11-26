@@ -174,6 +174,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         /** The showcase's greyed "Work on the queue" in Now (the design's name of the action). */
         continueResearch: 'Kontynuuj badania',
         queueOrder: 'Zmień kolejność kolejki',
+        processNow: 'Przetwórz teraz',
         /** The mark's group said in words in the bubble ("In full research: … · terminal"). */
         markTerminal: 'terminal',
         markAgent: 'AI + terminal',

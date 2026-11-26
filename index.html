@@ -1011,6 +1011,14 @@
         .sample-note__asof { flex-basis: 100%; color: var(--text-faint); }
         .research-overview .sample-note { padding: 6px 16px 8px; }
         [data-showcase-off], [data-showcase-off][aria-disabled="true"] { opacity: .55; cursor: default; }
+        /* The showcase's Queue: its order and "Process now" under the tasks, greyed (spec 143 K4.1). */
+        .research-overview__queue-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0 16px; margin-top: 6px; }
+        .research-overview__queue-acts > .link-button {
+            display: inline-flex; align-items: center; gap: 5px; min-height: 24px; margin: 0; padding: 0;
+            font-size: 13px; color: var(--primary); text-decoration: underline; text-underline-offset: 2px; text-align: left;
+        }
+        .research-overview__queue-acts > .link-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--r-sm); }
+        @media (max-width: 640px) { .research-overview__queue-acts { gap: 0 12px; } }
         @media (pointer: coarse) {
             .sample-why .sample-copy, .sample-why .sample-howto, .sample-note .sample-copy, .sample-note .sample-howto {
                 display: inline-flex; align-items: center; min-height: 44px;

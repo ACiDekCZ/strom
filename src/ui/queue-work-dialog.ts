@@ -20,7 +20,7 @@
 import { strings } from '../strings.js';
 import {
     QUEUE_PAGE_FEATURE, RUN_TASKS_FEATURE, WORK_LINK_FEATURE, WORK_TASKS_MAX, WORK_TASKS_MIN, researchDeviceAgentLink, researchLinkMark,
-    researchSchemeUrl, workTasksCount,
+    researchSchemeUrl, workTasksCount, inShowcase,
     type LiveAgent, type LiveBusy, type LiveDirection, type LiveQueueCounts, type LiveQueueItem, type LiveRunEnded, type LiveRunLimits,
     type LiveRunWire, type LiveWork, type LiveWorker, type ResearchLinkParams,
 } from '../research-link.js';
@@ -294,6 +294,8 @@ let opener: HTMLElement | null = null;
 export const queueWorkMethods = uiModule({
     /** The `work` link opens here: on a computer, announced; on a device, started through the gateway (`agent.start`). */
     queueWorkLinkAvailable(): boolean {
+        // The showcase (spec 143 K4.1): its work is "Continue the research" in Now, greyed.
+        if (inShowcase()) return false;
         return this.researchLinkAvailable('work') || (inDeviceMode() && !!this.activeResearchLink('work', { workDo: 'loop' }));
     },
 

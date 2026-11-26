@@ -16,7 +16,7 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatLiveClock } from '../live-time.js';
 import { Person, PersonId } from '../types.js';
-import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, researchDeviceAllows, researchLinkMark } from '../research-link.js';
+import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, inShowcase, researchDeviceAllows, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, workingHoldEl, workingSavingEl, timeEl, workingNumberBadge, lightsGroup } from './research-ui.js';
@@ -32,6 +32,7 @@ import { announceBusy, busyStatusEl, prepareBusy } from './busy.js';
 import { RowBusy, drawRowLinkBusy, drawRowMoreBusy, rowBusyStatusEl } from './row-busy.js';
 import { type LiveRun, type LineRunBlock, lineRunBlock, lineRunOf, liveRuns, runCount, runLimit, runLinesOn } from '../research-runs.js';
 import { lineRunWaitLine } from '../research-runs-text.js';
+import { markShowcaseOff } from './sample-why.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -776,7 +777,8 @@ export const researchDirectionsMethods = uiModule({
     /** What the Directions section may do with the followed research now. */
     directionsView(s: LiveSession): DirectionsView {
         const managed = !!s.caps?.directionsWrite;
-        const readOnly = managed && (this.activeResearchNoAgent() || archiveSaid === s.bridge.base);
+        // The showcase (spec 143 K4.1): its lines only shown, "+ New line" greyed.
+        const readOnly = managed && (this.activeResearchNoAgent() || archiveSaid === s.bridge.base || inShowcase());
         const down = s.lostSince !== null;
         const ordered = managed && !!s.caps?.directionsOrder && !readOnly;
         const phoneOnly = managed && !readOnly && down && onPhone();
@@ -800,13 +802,16 @@ export const researchDirectionsMethods = uiModule({
         const { active: listed, inactive: ended } = orderDirections(s.researches, true);
         const rows = pendingOrder ? withPendingOrder(listed, pendingOrder.order) : listed;
         let aside: HTMLElement | undefined;
-        // A new line is the computer's (spec 094 §6): not offered on a device.
-        const canNew = !viewOnly && researchDeviceAllows('direction-new');
+        // A new line is the computer's (spec 094 §6): not offered on a device. The showcase: greyed, it says why.
+        const showcase = inShowcase();
+        const canNew = (!viewOnly || showcase) && researchDeviceAllows('direction-new');
+        const newOff = (add: HTMLElement): HTMLElement => markShowcaseOff(add, researchLinkMark('direction'), L.dirFormNew);
         if (canNew) {
             const add = el('button', 'link-button research-directions__new', L.dirNew);
             add.type = 'button';
             add.dataset.do = 'new';
-            if (view.down) holdForBridge(add);
+            if (showcase) newOff(add);
+            else if (view.down) holdForBridge(add);
             else add.onclick = () => this.openDirectionForm({ mode: 'new', returnFocus: add });
             aside = add;
         }
@@ -814,7 +819,7 @@ export const researchDirectionsMethods = uiModule({
         const title = rows.length === 0 ? L.dirTitleEmpty : L.dirTitle(rows.filter(d => d.state === 'active').length);
         const host = liveSection(body, { ...fold, title, aside });
         host.classList.add('research-directions', 'research-directions--managed');
-        if (view.readOnly) host.appendChild(el('p', 'research-directions__note', L.dirArchive));
+        if (view.readOnly && !showcase) host.appendChild(el('p', 'research-directions__note', L.dirArchive));
         else if (view.phoneOnly) host.appendChild(el('p', 'research-directions__note', L.dirPhoneOnly));
         else if (view.down) host.appendChild(el('p', 'research-directions__note is-warn', L.dirBridgeDown));
         const orderMode = s.caps?.orderMode;
@@ -827,7 +832,8 @@ export const researchDirectionsMethods = uiModule({
             const add = el('button', 'secondary research-directions__empty-new', L.dirNew);
             add.type = 'button';
             add.dataset.do = 'new';
-            if (view.down) holdForBridge(add);
+            if (showcase) newOff(add);
+            else if (view.down) holdForBridge(add);
             else add.onclick = () => this.openDirectionForm({ mode: 'new', returnFocus: add });
             empty.appendChild(add);
             host.appendChild(empty);
@@ -1152,7 +1158,8 @@ export const researchDirectionsMethods = uiModule({
         const mine = lineRunOf(runs, d.id);
         if (mine || d.run) return { kind: 'running', run: mine, id: mine?.id ?? d.run! };
         // Nothing to start with: the research does not take the work link here.
-        if (!this.researchLinkAvailable('work')) return null;
+        // The showcase (spec 143 K4.1): no run of a line starts there.
+        if (!this.researchLinkAvailable('work') || inShowcase()) return null;
         const starts = this.runStartsNow();
         if (starts.some(x => x.scope === d.id && x.view.phase === 'starting')) return { kind: 'starting' };
         // Starts of other runs on their way count against the most runs at once.

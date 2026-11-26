@@ -13,8 +13,9 @@ import { setLanguage } from '../strings.js';
 import { setInShowcaseLookup, setShowcaseAsOfLookup, researchNow, showcaseWhy, showcaseOff } from '../research-link.js';
 import {
     markShowcaseOff, showcaseOffEvent, sampleNoteEl, showcaseItemActions, showcaseWhatText, researchLastWork,
-    hideShowcaseWhy, SAMPLE_WHY_ID, SHOWCASE_DEMO_COMMAND, SHOWCASE_HOW_TO_URL,
+    hideShowcaseWhy, showcaseQueueActions, SAMPLE_WHY_ID, SHOWCASE_DEMO_COMMAND, SHOWCASE_HOW_TO_URL,
 } from '../ui/sample-why.js';
+import { queueWorkMethods } from '../ui/queue-work-dialog.js';
 
 const AS_OF = Date.parse('2026-11-01T09:30:00Z');
 
@@ -182,6 +183,73 @@ describe("an item's actions in the showcase", () => {
         expect(list.map(a => a.key)).toEqual(['all-images', 'answer', 'web']);
         expect(list.filter(a => a.off).map(a => a.key)).toEqual(['all-images', 'answer']);
         expect(list.find(a => a.key === 'answer')!.write).toBe(false);
+    });
+});
+
+describe("the showcase's Queue", () => {
+    it("says its order and Process now greyed, each with its mark, and why on a click", () => {
+        const row = showcaseQueueActions();
+        document.body.appendChild(row);
+        const [order, now] = Array.from(row.querySelectorAll('button')) as HTMLElement[];
+        expect(order.dataset.showcaseOff).toBe('none');
+        expect(order.dataset.showcaseLabel).toBe("Change the queue's order");
+        // The label drawn with its group's mark (setResearchActionLabel): none through the bridge, AI + terminal for the agent.
+        expect(order.innerHTML).not.toContain('research-open-mark');
+        expect(now.dataset.showcaseOff).toBe('agent');
+        expect(now.dataset.showcaseLabel).toBe('Process now');
+        expect(now.innerHTML).toContain('research-ai-badge');
+        expect(now.innerHTML).toContain('research-open-mark');
+        expect(now.getAttribute('aria-disabled')).toBe('true');
+        expect(showcaseOffEvent(fakeEvent('click', now))).toBe(true);
+        expect(bubble()!.querySelector('.what')!.textContent).toBe('In full research: Process now · AI + terminal');
+    });
+
+    it('"Work on the queue…" is never offered there (Now has Continue the research greyed)', () => {
+        const ui = { researchLinkAvailable: () => true, activeResearchLink: () => 'strom-research://work' };
+        expect(queueWorkMethods.queueWorkLinkAvailable.call(ui as never)).toBe(false);
+        setInShowcaseLookup(() => false);
+        expect(queueWorkMethods.queueWorkLinkAvailable.call(ui as never)).toBe(true);
+    });
+});
+
+describe("the showcase's lines", () => {
+    const s = {
+        caps: { directionsWrite: true, directionsOrder: true }, lostSince: null, bridge: { base: 'https://showcase.invalid/__showcase/r1' },
+        researches: [
+            { id: 'G0001', name: 'Předci Anny Horákové', state: 'active', last: { at: '2026-10-31T16:00:00Z' } },
+            { id: 'G0002', name: 'Rod Novák z Hrabětic', state: 'active' },
+        ],
+        working: [], queue: [], features: [],
+    };
+
+    it('are shown only: no write, no order, and no note of an archive', async () => {
+        const { researchDirectionsMethods: m } = await import('../ui/research-directions-ui.js');
+        const ui = { activeResearchNoAgent: () => false };
+        const view = m.directionsView.call(ui as never, s as never);
+        expect(view).toMatchObject({ readOnly: true, canWrite: false, ordered: false, canOrder: false });
+        setInShowcaseLookup(() => false);
+        expect(m.directionsView.call(ui as never, s as never)).toMatchObject({ readOnly: false, canWrite: true, canOrder: true });
+    });
+
+    it('"+ New line" stays in sight greyed and says why, with the terminal mark in words', async () => {
+        const { researchDirectionsMethods: m } = await import('../ui/research-directions-ui.js');
+        const body = document.createElement('div');
+        document.body.appendChild(body);
+        const ui = {
+            ...m, activeResearchNoAgent: () => false, renderResearchOverview: () => {},
+            openDirectionForm: () => { throw new Error('the form opened'); },
+            managedDirectionRow: () => document.createElement('div'),
+            appendOffLineSection: () => false, outsideDirectionRow: () => document.createElement('div'),
+            wireDirectionDrop: () => {},
+        };
+        const view = m.directionsView.call(ui as never, s as never);
+        m.appendManagedDirections.call(ui as never, body, s as never, { collapsed: false } as never, 'panel' as never, view);
+        const add = body.querySelector('.research-directions__new') as HTMLElement;
+        expect(add).not.toBeNull();
+        expect(add.getAttribute('aria-disabled')).toBe('true');
+        expect(body.querySelector('.research-directions__note')).toBeNull();
+        expect(showcaseOffEvent(fakeEvent('click', add))).toBe(true);
+        expect(bubble()!.querySelector('.what')!.textContent).toBe('In full research: New direction · terminal');
     });
 });
 
