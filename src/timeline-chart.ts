@@ -425,7 +425,9 @@ function rowSvg(
     const cy = (barY + 7).toFixed(1);
     const dots = r.events.filter(ev => !ev.shareId || !marked.has(ev.shareId)).map(ev => {
         const ex = xOf(ev.year).toFixed(1);
-        const label = esc(`${eventLabelFor(ev)} (${ev.year})`);
+        // The event's house (spec 030 §12), on screen only.
+        const house = ev.house && mode === 'screen' ? ` · ${strings.houses.integration.houseTip(ev.house)}` : '';
+        const label = esc(`${eventLabelFor(ev)} (${ev.year})${house}`);
         const cls = ev.type === 'wedding' ? 'tl-dot tl-dot-wedding' : 'tl-dot';
         const rad = ev.type === 'wedding' ? 4.5 : 3;
         return `<circle cx="${ex}" cy="${cy}" r="${rad}" class="${cls}"><title>${label}</title></circle>`;

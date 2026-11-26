@@ -11,6 +11,7 @@ import { StromData, Gender, LifeEventType, CoupleEventType, PartnershipId, Partn
 import { yearOf, parseFlexDate, yearFraction } from './dates.js';
 import { eventValueIsOnTag, isPosthumousEvent } from './events.js';
 import { isLivingPerson } from './privacy.js';
+import { houseContext, houseOfFact, type HouseContext } from './houses.js';
 import { shownNameOrEmpty, shownNameFull } from './person-name.js';
 import { HISTORY_KINDS, type HistoryKind, type HistoryScope } from './history.js';
 import type { DerivedParticipation } from './derived-participations.js';
@@ -22,6 +23,8 @@ export interface TimelineEvent {
     customLabel?: string;
     /** The share of an event of several persons (spec 085): drawn as one mark when two or more rows have it. */
     shareId?: string;
+    /** The house of its address as the tree writes it ("čp. 16", spec 030 §12); only with `houses` asked for. */
+    house?: string;
 }
 
 /**
@@ -158,6 +161,8 @@ export interface TimelineHistoryInput {
 
 export interface TimelineModelOptions {
     history?: TimelineHistoryInput;
+    /** The events' houses (spec 030 §12: the app's Timeline names an event's house; the poster does not). */
+    houses?: boolean;
 }
 
 /** Round down / up to the enclosing decade so the axis has tidy gridlines. */
@@ -174,14 +179,24 @@ export function computeTimelineModel(
     const rows: TimelineRow[] = [];
     let omittedCount = 0;
 
+    // The house of an event's place and address (spec 030 §12), the tree's streets read at the first address.
+    let hctx: HouseContext | null = null;
+    const houseOf = (place: string | undefined, address: string | undefined): { house?: string } => {
+        if (!opts.houses || !place?.trim() || !address?.trim()) return {};
+        hctx ??= houseContext(data);
+        const ref = houseOfFact({ place, house: address }, hctx);
+        return ref ? { house: ref.house } : {};
+    };
+
     // Wedding years per person (from partnerships with a dated start).
-    const weddingsByPerson = new Map<string, number[]>();
+    const weddingsByPerson = new Map<string, { year: number; house?: string }[]>();
     for (const u of Object.values(data.partnerships)) {
         const wy = yearOf(u.startDate);
         if (wy === null) continue;
+        const house = houseOf(u.startPlace, u.address);
         for (const pid of [u.person1Id, u.person2Id]) {
             const arr = weddingsByPerson.get(pid) ?? [];
-            arr.push(wy);
+            arr.push({ year: wy, ...house });
             weddingsByPerson.set(pid, arr);
         }
     }
@@ -203,10 +218,11 @@ export function computeTimelineModel(
                 year: y, type: ev.type,
                 ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
                 ...(ev.shareId ? { shareId: ev.shareId } : {}),
+                ...houseOf(ev.place, ev.address),
             });
         }
-        for (const wy of weddingsByPerson.get(id) ?? []) {
-            events.push({ year: wy, type: 'wedding' });
+        for (const w of weddingsByPerson.get(id) ?? []) {
+            events.push({ year: w.year, type: 'wedding', ...(w.house ? { house: w.house } : {}) });
         }
         events.sort((a, b) => a.year - b.year);
 

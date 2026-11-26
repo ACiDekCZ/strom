@@ -58,6 +58,8 @@ import { sourcePlaceLine } from './source-location.js';
 import { SharedWithLine, sharedIndexOf, sharedWithLine, sharedWithLineHtml } from './shared-with-line.js';
 import { type DerivedParticipation, derivedParticipations, derivedRoleLabel, derivedRoleWord, derivedEventWord } from './derived-participations.js';
 import { cleanEmails } from './person-contact.js';
+import { houseOfAddress, personHouses, treeHouseIndex, type PersonHouse, type TreeHouseIndex } from './person-houses.js';
+import type { HouseId } from './types.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -84,6 +86,8 @@ export interface PersonPageSetLinks {
     /** The whole tree's small lines: their block on "Other families" (`{slug}--{name}`), with the row's label. */
     rodAnchor?: ReadonlyMap<RodId, string>;
     rodAnchorLabel?: (label: string) => string;
+    /** The houses with a page in the set (spec 030 §13): their addresses and the Houses row lead there. */
+    houseSlug?: ReadonlyMap<HouseId, string>;
 }
 
 export interface PersonPageGroups {
@@ -227,6 +231,8 @@ export interface ProtectedPersonPageTree {
     /** The lineages, computed on the data before protection (names stay whole; §3.4 decides per row). */
     lineages: LineageIndex;
     rodLabels: ReadonlyMap<RodId, string>;
+    /** The protected tree's houses (spec 030 §12), worked out at the first page that asks (treeHouseIndex). */
+    houseIndex?: TreeHouseIndex;
 }
 
 /** One person's page, ready to render. */
@@ -279,6 +285,12 @@ export interface PersonPageData {
      * privacy is left out), whole names in print. None: no shared event.
      */
     shared?: ReadonlyMap<string, SharedWithLine>;
+    /**
+     * The person's houses (spec 030 §12) with the person's years there, and
+     * the house of each address of the tree (place + address → house), read on
+     * the protected tree. None: no house of the tree.
+     */
+    houses?: { list: readonly PersonHouse[]; index: TreeHouseIndex };
 }
 
 /** The people of the Ancestors fan and how many of them the rings show. */
@@ -667,6 +679,9 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         const g = full.places?.[pt.placeKey];
         if (g) geo[pt.placeKey] = { lat: g.lat, lon: g.lon };
     }
+    // The person's houses (spec 030 §12): from the whole protected tree, once per protected tree.
+    const houseIndex = prot.houseIndex ?? (prot.houseIndex = treeHouseIndex(full));
+    const houseList = houseIndex.houses.length ? personHouses(houseIndex, id) : [];
     const page: PersonPageData = {
         personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree, living,
         history, historyPending: groups.research && historyPending,
@@ -680,6 +695,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         rod: rodRowShown(opts.privacy, prot.living.has(id)) ? personRodRowValue(prot.lineages, prot.rodLabels, id, opts.lang) : null,
         ancestors,
         ...(shared.size ? { shared } : {}),
+        ...(houseIndex.byAddress.size ? { houses: { list: houseList, index: houseIndex } } : {}),
     };
     page.counts = countGroups(page);
     return page;
@@ -968,6 +984,43 @@ function placeLink(c: Ctx, place: string | undefined): string {
         return `<a class="pp-link pp-place-link" href="#pp-sec-places" data-pp-to-place="${esc(key)}">${esc(p)}</a>`;
     }
     return esc(p);
+}
+
+/**
+ * A link to a house of the tree (spec 030 §12): a button the window opens the
+ * house page by (`data-pp-house`), an anchor to the house's page in a set
+ * that has it (a button `data-sp-open` in the set's window), else null.
+ */
+function houseLinkHtml(c: Ctx, id: HouseId, inner: string, title: string): string | null {
+    const attrs = ` title="${esc(title)}"`;
+    if (c.app && c.opts.links === 'app') return `<button type="button" class="pp-link pp-house-link" data-pp-house="${esc(id)}"${attrs}>${inner}</button>`;
+    const slug = setLinksOf(c.opts)?.houseSlug?.get(id);
+    if (!slug) return null;
+    if (c.app) return `<button type="button" class="pp-link pp-house-link" data-sp-open="page:${esc(slug)}"${attrs}>${inner}</button>`;
+    return `<a class="pp-link pp-house-link" href="#${esc(slug)}"${attrs}>${inner}</a>`;
+}
+
+/** An event's address: the link to its house when it is a house of the tree (spec 030 §12), else text. */
+function houseAddressHtml(c: Ctx, place: string | undefined, address: string): string {
+    const index = c.page.houses?.index;
+    const id = index ? houseOfAddress(index, place, address) : null;
+    const house = id ? index!.houses.find(h => h.id === id) : undefined;
+    if (!house) return esc(address);
+    return houseLinkHtml(c, house.id, esc(address), c.S.houses.integration.houseTip(house.text)) ?? esc(address);
+}
+
+/** The Places section's row "Houses" (spec 030 §12): the person's houses with the years there; '' without one. */
+function housesRowHtml(c: Ctx): string {
+    const list = c.page.houses?.list ?? [];
+    if (!list.length) return '';
+    const I = c.S.houses.integration;
+    const items = list.map(h => {
+        const years = h.from === undefined ? '' : h.from === h.to ? String(h.from) : `${h.from}–${h.to}`;
+        const link = houseLinkHtml(c, h.id, esc(I.houseLink(h.text)), `${h.town} ${h.text}`);
+        const what = link ? `${esc(h.town)} ${link}` : esc(`${h.town} ${h.text}`);
+        return `<li class="pp-house">${what}${years ? ` <span class="pp-house-y">${esc(years)}</span>` : ''}</li>`;
+    }).join('');
+    return `<div class="pp-houses"><span class="pp-houses-k">${esc(I.ppHouses)}</span><ul class="pp-houses-list">${items}</ul></div>`;
 }
 
 /** ` id="…"` for the first timeline row of a chart anchor ('' when given out already). */
@@ -2206,7 +2259,7 @@ function detailsLine(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): string 
     const note = pt.kind === 'event' && ev?.note?.trim() && !pt.detail ? ev.note.trim()
         : pt.kind === 'marriage' ? u?.note?.trim() : '';
     if (note) parts.push(esc(stripResearchIds(note).text));
-    if (pt.details?.address) parts.push(esc(pt.details.address));
+    if (pt.details?.address) parts.push(houseAddressHtml(c, pt.place, pt.details.address));
     if (!parts.length) return '';
     const line = parts.join(' · ');
     const plainLen = line.replace(/<[^>]*>/g, '').length;
@@ -3412,7 +3465,10 @@ function personPageBodyHtml(page: PersonPageData, opts: PersonPageOptions): stri
     const boxes = portraitLightbox(c, safeImage(c.person.photo)) + lightboxHtml(c);
     // Last: every image of the page is registered by now.
     const styles = imgStyles(c);
-    const content = `${summary}${family}${ancestors}${story}${question}${places}${mapPathRow}${timeline}${gallery}${people}${notes}${sources}${research}`;
+    // The person's houses (spec 030 §12): a row of the Places section, a row of its own without the section.
+    const houses = housesRowHtml(c);
+    const placesWithHouses = houses && places ? places.replace(/<\/section>$/, `${houses}</section>`) : places || houses;
+    const content = `${summary}${family}${ancestors}${story}${question}${placesWithHouses}${mapPathRow}${timeline}${gallery}${people}${notes}${sources}${research}`;
     // The file's contents on a phone and in a narrow window (§0.7): a fold under the header.
     const tocM = opts.toc && !c.app ? tocFoldHtml(personPageTocItems(content, page.lang), page.lang) : '';
     return `${open}${styles}${header}${tocM}${content}${footer}${boxes}</article>`;

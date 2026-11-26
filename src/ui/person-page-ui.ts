@@ -809,6 +809,9 @@ export const personPageMethods = uiModule({
         if (storyJump) { e.preventDefault(); this.openPersonPageStory(storyJump.dataset.ppStory ?? ''); return; }
         const personBtn = target.closest<HTMLElement>('[data-pp-person]');
         if (personBtn) { this.navigatePersonPage(personBtn.dataset.ppPerson as PersonId); return; }
+        // A house of the tree (spec 030 §12): its page, over this window.
+        const houseBtn = target.closest<HTMLElement>('[data-pp-house]');
+        if (houseBtn) { this.openHouse(houseBtn.dataset.ppHouse ?? '', PERSON_PAGE_ID); return; }
         const placeBtn = target.closest<HTMLElement>('[data-pp-place]');
         if (placeBtn) { this.showPersonPagePlace(placeBtn.dataset.ppPlace ?? ''); return; }
         // A family line (spec 026 §3.3): the lineage's page in this window (Back returns to the person).

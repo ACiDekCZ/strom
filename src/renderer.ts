@@ -7919,7 +7919,8 @@ class TreeRendererClass {
         const todayYear = new Date().getFullYear();
         // The history row of the whole timeline (spec 121 §1): kept while the rows and the data stay, the focus only its line.
         const history = getUI().timelineHistoryAll(ids, this.focusPersonId);
-        const model = computeTimelineModel(DataManager.getData(), ids, todayYear, history ? { history } : {});
+        // The events' houses in their tooltips (spec 030 §12).
+        const model = computeTimelineModel(DataManager.getData(), ids, todayYear, { houses: true, ...(history ? { history } : {}) });
         getUI().setTimelineHistoryDrawn(model.history?.events ?? [], model.rows.map(r => r.personId), model.history);
         // The window's selection highlighted with This view or the Whole tree (11a·2).
         const selection = getUI().timelineHighlightIds();

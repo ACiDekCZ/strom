@@ -85,6 +85,11 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-path[aria-disabled="true"] { color: var(--text-faint); cursor: not-allowed; text-decoration: none; }
 .pp-map-path-note { margin: -8px 0 12px; font-size: 12.5px; color: var(--text-light); text-align: right; }
 .pp-places { scroll-margin-top: 12px; }
+/* The person's houses (spec 030 §12): a quiet row under the places, each house with the years there. */
+.pp-houses { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 12px 0 0; font-size: 14px; color: var(--text); }
+.pp-houses-k { font-size: 12.5px; font-weight: 600; color: var(--text-light); }
+.pp-houses-list { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; }
+.pp-house-y { font-size: 12.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
 /* The kinds of places (spec 031 P2): the main map's chips, in the page's flow above the map. */
 .pp-map-kinds { display: flex; flex-wrap: wrap; gap: 2px; width: fit-content; max-width: 100%; margin: 0 0 10px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .pp-map-kind { display: flex; align-items: center; gap: 7px; padding: 5px 10px 5px 8px; border: none; border-radius: 6px; background: none; color: var(--text-faint); font: 400 13px/1.3 var(--font-sans); white-space: nowrap; cursor: pointer; }
@@ -199,6 +204,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-kind[aria-pressed="false"]:hover { background: var(--surface-2); }
 }
 @media (pointer: coarse) {
+  .pp-houses .pp-house-link { display: inline-block; padding: 12px 0; margin: -12px 0; }
   .pp-map-tools .pp-act { min-height: 44px; }
   .pp-map-pt::before { content: ''; position: absolute; inset: -11px; border-radius: 50%; }
   .pp-map-pt--rel::before { inset: -15px; }
