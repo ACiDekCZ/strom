@@ -11,7 +11,7 @@
  */
 
 import { HouseId, Partnership, Person, PersonId, PartnershipId, StromData, Story, StoryDraft } from './types.js';
-import { applyLivingPrivacy, inferBirthUpperBounds, isLivingPerson, stripResearchWork } from './privacy.js';
+import { applyLivingPrivacy, inferBirthUpperBounds, isLivingPerson, isRecentPerson, stripResearchWork } from './privacy.js';
 import { stripMedia } from './attachments.js';
 import { formatFlexDate, yearOf } from './dates.js';
 import { getStringsForLang } from './strings.js';
@@ -24,7 +24,7 @@ import { shownName } from './person-name.js';
 import { buildLineages } from './lineage.js';
 import { PersonPageContext } from './person-page.js';
 import { BookChapter, buildBookModel } from './book-model.js';
-import { BookLang, BookOptions, BookParts, autoBookTitle, bookChapterHouses, bookHouses, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
+import { BookLang, BookOptions, BookParts, autoBookTitle, bookChapterHouses, bookHouseRecent, bookHouses, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
 import { collectHouses, withResearchNumbers, type TreeHouse } from './houses.js';
 import type { HouseResearch } from './house-bridge.js';
 import { houseOutputFilter, housePrivacyContext } from './house-privacy.js';
@@ -250,8 +250,13 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     const living = new Set<PersonId>();
     for (const p of Object.values(data.persons)) if (!p.isPlaceholder && isLivingPerson(p, year, bounds)) living.add(p.id);
 
+    // A book of a house: people of the last ~100 years by name and role only, in the whole book (spec 030 K1.4a).
+    const byName = bookHouseRecent(opts);
+    const recent = new Set<PersonId>();
+    if (byName) for (const p of Object.values(data.persons)) if (isRecentPerson(data, p, year, bounds)) recent.add(p.id);
+
     // Privacy before anything is rendered; only the living lose their sources (as on the person page).
-    let tree = applyLivingPrivacy(data, opts.privacy, year, { keepDeceasedSources: true });
+    let tree = applyLivingPrivacy(data, opts.privacy, year, { keepDeceasedSources: true, ...(byName ? { recentByName: true } : {}) });
     if (opts.privacy === 'anonymous' || opts.privacy === 'minimal') {
         // "Living person" in the book's language, not the app's.
         for (const id of living) { const p = tree.persons[id]; if (p) p.firstName = S.privacy.livingPerson; }
@@ -308,8 +313,9 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     const ctx: BookCtx = {
         mode: 'book', lang, privacy: opts.privacy, detail: opts.detail, parts, notes: opts.notes, research: opts.research,
         linkTo, tree, living, model, now,
+        ...(byName ? { recent } : {}),
         sources: new BookSourceNumbers(tree.sources ?? {}, parts.sources),
-        ...(env.personHistory ? { personHistory: env.personHistory } : {}),
+        ...(env.personHistory ? { personHistory: byName ? (id: PersonId) => (recent.has(id) ? undefined : env.personHistory!(id)) : env.personHistory } : {}),
         ...(extras ? { extras } : {}),
         described: new Map(),
         protectedTree: { tree, privacy: opts.privacy, living, drafts: new Set(personDrafts.keys()), lineages: model.index, rodLabels: model.labels },

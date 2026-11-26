@@ -67,6 +67,16 @@ export interface BookOptions {
     lang: BookLang;
     /** A title typed by hand; empty = automatic (autoBookTitle). */
     title?: string;
+    /**
+     * A book of a house: people of the last ~100 years by name and role only in the whole book (spec 030
+     * K1.4a); on unless false. Off: their data as in any book, the living still by the privacy.
+     */
+    houseRecent?: boolean;
+}
+
+/** Does the book keep people of the last ~100 years to their name and role (a book of a house, K1.4a)? */
+export function bookHouseRecent(options: Pick<BookOptions, 'selection' | 'houseRecent'>): boolean {
+    return options.selection.kind === 'house' && options.houseRecent !== false;
 }
 
 export interface BookPartState {

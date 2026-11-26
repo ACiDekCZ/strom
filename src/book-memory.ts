@@ -41,6 +41,8 @@ export interface BookMemory {
     research: boolean;
     privacy: PrivacyMode;
     lang: BookLang;
+    /** A book of a house: people of the last ~100 years by name only (spec 030 K1.4a); absent = on. */
+    houseRecent?: boolean;
     /** The Custom preset's own values (§4.9), null before Custom is first chosen. */
     custom?: BookPresetValues | null;
     /** The last lineages chosen (kind 'rods'), offered again from the menu. */
@@ -126,6 +128,7 @@ export function parseBookMemory(raw: string | null | undefined): Partial<BookMem
     if (lang) out.lang = lang;
     if (typeof o.notes === 'boolean') out.notes = o.notes;
     if (typeof o.research === 'boolean') out.research = o.research;
+    if (typeof o.houseRecent === 'boolean') out.houseRecent = o.houseRecent;
     const parts = parseParts(o.parts);
     if (parts) out.parts = parts as BookParts;
     if (o.custom === null) out.custom = null;
@@ -232,6 +235,7 @@ export function saveBookMemory(
             research: options.research,
             privacy: options.privacy,
             lang: options.lang,
+            ...(options.houseRecent !== undefined ? { houseRecent: options.houseRecent } : {}),
             ...(custom !== undefined ? { custom: custom ? { ...custom, parts: { ...custom.parts } } : null } : {}),
             ...(lastRods?.length ? { lastRods } : {}),
             ...((extra.output ?? prev?.output) ? { output: extra.output ?? prev?.output } : {}),
@@ -278,6 +282,7 @@ export function bookOptionsFromMemory(
         ...(memory?.notes !== undefined ? { notes: memory.notes } : {}),
         ...(memory?.research !== undefined ? { research: memory.research } : {}),
         ...(memory?.privacy ? { privacy: memory.privacy } : {}),
+        ...(memory?.houseRecent !== undefined ? { houseRecent: memory.houseRecent } : {}),
         selection,
     };
 }

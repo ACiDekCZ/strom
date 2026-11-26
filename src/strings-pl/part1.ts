@@ -337,6 +337,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             notesHint: 'Notatki robocze. Drukowane osobno pod nagłówkiem Notatki, bez znaczników wewnętrznych.',
             research: 'Dane dla badaczy',
             researchHint: 'Stan udokumentowania danych, sprzeczności, sekcja „Dla badaczy” ze strony osoby.',
+            houseRecent: 'Ostatnie ~100 lat: tylko imię i nazwisko',
+            houseRecentHint: 'Osoby z ostatnich około 100 lat są w całej książce tylko z imieniem i nazwiskiem oraz rolą, bez lat i wydarzeń.',
             privacy: 'Ochrona osób żyjących',
             privacyHint: 'Dotyczy tekstu, drzewa rodu, spisu treści i indeksu.',
             lang: 'Język księgi',

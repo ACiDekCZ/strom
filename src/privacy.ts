@@ -488,6 +488,17 @@ function stripDetails(person: Person): void {
     delete person.changedAt;
 }
 
+/** Drop every detail field but the names the person goes by (a person kept to their name, K1.4a). */
+function stripKeepingNames(person: Person): void {
+    const { firstName, lastName, marriedSurname, marriedFirstName, primaryName } = person;
+    stripDetails(person);
+    if (marriedSurname !== undefined) person.marriedSurname = marriedSurname;
+    if (marriedFirstName !== undefined) person.marriedFirstName = marriedFirstName;
+    if (primaryName !== undefined) person.primaryName = primaryName;
+    person.firstName = firstName;
+    person.lastName = lastName;
+}
+
 /**
  * Drop a couple's details when either partner is living: when and where they
  * married (or split), the note and the witnesses. The union itself (partners,
@@ -528,6 +539,12 @@ export interface LivingPrivacyOptions {
      * attachment goes (book, tree export).
      */
     keepDeceasedSources?: boolean;
+    /**
+     * People of the last ~100 years (isRecentPerson, the living among them) by name only, whatever the mode:
+     * their details, their couples' and their attachments go, their names stay as the mode leaves them, no
+     * year (a book of a house, spec 030 K1.4a).
+     */
+    recentByName?: boolean;
     /**
      * Living people shown in full whatever the mode (a gift's household and
      * its exceptions, spec 093 §4); `sensitive` masks their details by kind.
@@ -752,11 +769,11 @@ export function applyLivingPrivacy(
     const copy = structuredClone(data);
     // A gift's choices (spec 093 §4): people in full, masks by kind, the deceased's details.
     const gift = !!(options.fullIds || options.sensitive || options.othersSensitive || options.dead);
-    if (mode === 'full' && !gift) return copy;
+    if (mode === 'full' && !gift && !options.recentByName) return copy;
     // The merge history keeps the details a merge changed, of the living too: never under a privacy mode.
     delete copy.merges;
     // A house of people of the last ~100 years keeps its location and name to itself (spec 030 §10).
-    protectHouses(copy, data, currentYear, inferBirthUpperBounds(data));
+    if (mode !== 'full' || gift) protectHouses(copy, data, currentYear, inferBirthUpperBounds(data));
 
     // The source catalog may hold sensitive references (e.g. registers of the
     // living), so it is never exported under a privacy mode. Drop every citation
@@ -795,8 +812,13 @@ export function applyLivingPrivacy(
     );
     // The living shown in full (all of them under 'full'); the rest are obscured by the mode.
     const fullIds = new Set<string>(options.fullIds ?? []);
-    const shown = new Set([...living].filter(id => mode === 'full' || fullIds.has(id)));
-    const obscured = shown.size ? new Set([...living].filter(id => !shown.has(id))) : living;
+    // People of the last ~100 years by name only (K1.4a), judged before anything is stripped.
+    const recent = options.recentByName
+        ? new Set(Object.values(copy.persons).filter(p => isRecentPerson(copy, p, currentYear, bounds)).map(p => p.id))
+        : null;
+    const shown = new Set([...living].filter(id => (mode === 'full' || fullIds.has(id)) && !recent?.has(id)));
+    const obscured = new Set([...living].filter(id => !shown.has(id)));
+    for (const id of recent ?? []) obscured.add(id);
     const sensitive = options.sensitive;
     const othersSensitive = mode === 'full' ? options.othersSensitive : undefined;
     const dead = options.dead;
@@ -822,7 +844,8 @@ export function applyLivingPrivacy(
     // masked like the people.
     for (const partnership of Object.values(copy.partnerships)) {
         if (obscured.has(partnership.person1Id) || obscured.has(partnership.person2Id)) {
-            stripPartnershipDetails(partnership, mode);
+            const byName = recent && (recent.has(partnership.person1Id) || recent.has(partnership.person2Id));
+            stripPartnershipDetails(partnership, byName ? 'anonymous' : mode);
             forgetHiddenImports(partnership, true);
         } else if (shown.has(partnership.person1Id) || shown.has(partnership.person2Id)) {
             const mask = coupleMask(partnership);
@@ -839,6 +862,11 @@ export function applyLivingPrivacy(
         if (shown.has(person.id)) {
             const mask = maskOf(person.id);
             if (mask) maskSensitive(person, mask);
+            continue;
+        }
+        if (recent?.has(person.id) && (mode === 'full' || !living.has(person.id))) {
+            stripKeepingNames(person);
+            forgetHiddenImports(person, true);
             continue;
         }
         if (!living.has(person.id)) {
@@ -872,6 +900,8 @@ export function applyLivingPrivacy(
                 break;
             }
         }
+        // Initials keep the birth year: not of a person kept to their name (K1.4a).
+        if (recent?.has(person.id)) delete person.birthDate;
         // The file's values of what was just hidden must not stay behind.
         forgetHiddenImports(person, true);
     }

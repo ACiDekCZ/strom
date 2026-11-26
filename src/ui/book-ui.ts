@@ -387,7 +387,7 @@ function optionsHtml(s: DialogState): string {
     const seg = (name: string, items: ReadonlyArray<[string, string]>, label: string): string =>
         `<div class="book-seg sel-seg" role="radiogroup" aria-label="${esc(label)}">`
         + items.map(([v, l]) => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-${name}="${v}">${esc(l)}</button>`).join('') + `</div>`;
-    const sw = (key: 'notes' | 'research', title: string, hintText: string): string =>
+    const sw = (key: 'notes' | 'research' | 'houseRecent', title: string, hintText: string): string =>
         `<div class="book-switch-row"><button type="button" class="book-switch" role="switch" data-switch="${key}" aria-labelledby="book-sw-${key}">`
         + `<span class="book-switch-track" aria-hidden="true"></span></button>`
         + `<div class="book-switch-text"><span class="book-switch-t" id="book-sw-${key}">${esc(title)}</span><span class="book-hint">${esc(hintText)}</span></div></div>`;
@@ -448,7 +448,9 @@ function optionsHtml(s: DialogState): string {
         + sw('notes', D.notes, D.notesHint) + sw('research', D.research, D.researchHint) + `</section>`
         + `<div class="book-pair">`
         + `<section class="book-sec" data-sec="privacy"><h3 class="book-sec-h" id="book-privacy-h">${esc(D.privacy)}</h3>`
-        + privacyRadios + `<p class="book-hint">${esc(D.privacyHint)}</p></section>`
+        + privacyRadios + `<p class="book-hint">${esc(D.privacyHint)}</p>`
+        // A book of a house: people of the last ~100 years by name only (K1.4a), under the protection of the living.
+        + `<div class="book-house-recent" hidden>${sw('houseRecent', D.houseRecent, D.houseRecentHint)}</div></section>`
         + `<section class="book-sec" data-sec="lang"><h3 class="book-sec-h">${esc(D.lang)}</h3>`
         + seg('lang', LANGS.map(l => [l, D.langName[l]] as [string, string]), D.lang)
         + `<p class="book-hint">${esc(D.langHint)}</p></section></div>`
@@ -650,8 +652,10 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
     modal.querySelectorAll<HTMLElement>('[data-detail]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.detail === s.opts.detail)));
     setText(modal, '.book-detail-hint', T.detailHint[s.opts.detail]);
     modal.querySelectorAll<HTMLElement>('[data-switch]').forEach(b => {
-        b.setAttribute('aria-checked', String(b.dataset.switch === 'notes' ? s.opts.notes : s.opts.research));
+        const k = b.dataset.switch;
+        b.setAttribute('aria-checked', String(k === 'notes' ? s.opts.notes : k === 'research' ? s.opts.research : s.opts.houseRecent !== false));
     });
+    modal.querySelectorAll<HTMLElement>('.book-house-recent').forEach(el => { el.hidden = s.kind !== 'house'; });
     modal.querySelectorAll<HTMLElement>('[data-lang]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.lang === s.opts.lang)));
 
     // Title: automatic by the selection and the book's language, until edited
@@ -1374,6 +1378,11 @@ export const bookUiMethods = uiModule({
             if (detail) { updateValues(s => { s.opts = { ...s.opts, detail: detail.dataset.detail as BookDetail }; }); return; }
             const sw = t.closest<HTMLElement>('[data-switch]');
             if (sw) {
+                // Not a preset's value: a book of a house's protection (K1.4a).
+                if (sw.dataset.switch === 'houseRecent') {
+                    update(s => { s.opts = { ...s.opts, houseRecent: s.opts.houseRecent === false }; });
+                    return;
+                }
                 updateValues(s => {
                     s.opts = sw.dataset.switch === 'notes' ? { ...s.opts, notes: !s.opts.notes } : { ...s.opts, research: !s.opts.research };
                 });

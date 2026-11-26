@@ -122,6 +122,8 @@ export interface BookCtx {
     tree: StromData;
     /** Living people, judged before protection. */
     living: ReadonlySet<PersonId>;
+    /** People of the last ~100 years kept to their name and role (a book of a house, spec 030 K1.4a). */
+    recent?: ReadonlySet<PersonId>;
     model: BookModel;
     sources: BookSourceNumbers;
     now: Date;
@@ -202,7 +204,7 @@ export function founderNote(ctx: BookCtx, id: PersonId): string {
 
 /** A living person under a privacy other than full: no details. */
 function shielded(ctx: BookCtx, id: PersonId): boolean {
-    return ctx.living.has(id) && ctx.privacy !== 'full';
+    return (ctx.living.has(id) && ctx.privacy !== 'full') || !!ctx.recent?.has(id);
 }
 
 /** May the person's lineage be named (§3.4: not for the living under initials or hidden names)? */
