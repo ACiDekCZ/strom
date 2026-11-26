@@ -151,7 +151,8 @@ test.describe('family book: the options dialog', () => {
         await dialog.locator('[data-gen="1"]').click();
         await expect(dialog.locator('.book-gens-n')).toHaveText('5');
         await expect(dialog.locator('.book-estimate')).not.toHaveText(before!);
-        await expect(dialog.locator('#book-title-input')).toHaveValue('Ancestors of Mikael Brandvold');
+        // The title as the book's title page has it: the living Mikael by the default privacy (initials).
+        await expect(dialog.locator('#book-title-input')).toHaveValue('Ancestors of M. B.');
         // Back to lineages: the choice made before is kept.
         await kind(dialog, 'rods').check();
         await expect(dialog.locator('.book-rod-row input:checked')).toHaveCount(2);

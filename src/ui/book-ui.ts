@@ -23,11 +23,11 @@ import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage, getStringsForLang } from '../strings.js';
 import { PrivacyMode } from '../privacy.js';
 import { HouseId, PersonId, StromData, TreeId } from '../types.js';
-import { buildFamilyBook, buildFamilyBookAsync, type BookBuildEnv } from '../book.js';
+import { bookTitlePage, buildFamilyBook, buildFamilyBookAsync, type BookBuildEnv } from '../book.js';
 import { bookFileName, bookPreparingHtml } from '../book-window.js';
 import {
     BOOK_HOUSE_PARTS, BOOK_PART_KEYS, BookDetail, BookEnv, BookEstimate, BookLang, BookOptions, BookPartKey, BookSelectionSpec,
-    autoBookTitle, bookHouseDefaults, bookPartAvailability, bookSelectionHouses, bookPeriod, bookRodCounts, estimateBook,
+    autoBookTitle, bookHouseDefaults, bookHouseRecent, bookPartAvailability, bookSelectionHouses, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
     BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PAGES_GROUP_KEYS, PagesChoices, PagesGroups,
@@ -185,6 +185,8 @@ interface DialogState {
      */
     bookEsts?: Map<string, BookEstimate | null>;
     bookEstPending?: string | null;
+    /** The title page's automatic title and period by the options that change them (bookTitlePage), the last few. */
+    titlePages?: Map<string, { title: string; period: string }>;
     job: PagesJob | null;
     prog: { done: number; total: number; text: string };
     file: PagesFile | null;
@@ -324,9 +326,27 @@ function currentOptions(s: DialogState): BookOptions {
     return { ...rest, selection: sel, ...(s.titleEdited && s.opts.title?.trim() ? { title: s.opts.title.trim() } : {}) };
 }
 
+/**
+ * The automatic title and the period as the book's title page shows them: from the same protected tree as the
+ * book (privacy, a house book's people of the last ~100 years by name only), never a name or year it leaves out.
+ */
+function titlePage(s: DialogState): { title: string; period: string } {
+    const sel = selectionOf(s);
+    if (!selectionReady(sel)) return { title: autoBookTitle(s.data, sel ?? { kind: 'tree' }, s.opts.lang, { index: s.index, treeName: s.treeName }), period: '' };
+    const opts: BookOptions = { ...currentOptions(s), selection: sel };
+    const key = JSON.stringify([sel, opts.privacy, bookHouseRecent(opts), opts.lang]);
+    const kept = s.titlePages ??= new Map();
+    let tp = kept.get(key);
+    if (!tp) {
+        tp = bookTitlePage(s.data, opts, { index: s.index, treeName: s.treeName });
+        kept.set(key, tp);
+        while (kept.size > BOOK_ESTIMATES_KEPT) kept.delete(kept.keys().next().value!);
+    }
+    return tp;
+}
+
 function autoTitle(s: DialogState): string {
-    const sel = selectionOf(s) ?? { kind: 'tree' as const };
-    return autoBookTitle(s.data, sel, s.opts.lang, { index: s.index, treeName: s.treeName });
+    return titlePage(s).title;
 }
 
 function personLabel(data: StromData, id: PersonId | null): string {
@@ -665,7 +685,7 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
     if (!s.titleEdited && input.value !== auto) input.value = auto;
     // The rows written again (back from the pages): the edited title into its field.
     if (s.titleEdited && !input.value && s.opts.title) input.value = s.opts.title;
-    const period = ready ? bookPeriod(s.data, sel, env) : '';
+    const period = titlePage(s).period;
     const note = modal.querySelector<HTMLElement>('.book-title-note')!;
     note.innerHTML = s.titleEdited
         ? `${esc(D.titleEdited)} · <button type="button" class="book-title-revert">${esc(D.titleRevert)}</button>`

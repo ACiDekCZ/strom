@@ -21,9 +21,9 @@ import { proseHtml } from './story-text.js';
 import { sourceCodeNamer, storyBasisShown, storyBasisWords, storyFactText } from './story-sources.js';
 import { storyCompareHtml } from './story-compare.js';
 import { shownName } from './person-name.js';
-import { buildLineages } from './lineage.js';
+import { buildLineages, type LineageIndex } from './lineage.js';
 import { PersonPageContext } from './person-page.js';
-import { BookChapter, buildBookModel } from './book-model.js';
+import { BookChapter, BookModel, buildBookModel } from './book-model.js';
 import { BookLang, BookOptions, BookParts, autoBookTitle, bookChapterHouses, bookHouseRecent, bookHouses, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
 import { collectHouses, withResearchNumbers, type TreeHouse } from './houses.js';
 import type { HouseResearch } from './house-bridge.js';
@@ -144,7 +144,7 @@ export function tocHtml(ctx: BookCtx, parts: BookParts): string {
 }
 
 /** The span of the book's dated records over the protected tree ('' without dates). */
-function protectedPeriod(ctx: BookCtx): string {
+function protectedPeriod(tree: StromData, model: BookModel): string {
     let from = Infinity, to = -Infinity;
     const see = (date: string | undefined): void => {
         const y = yearOf(date);
@@ -152,15 +152,58 @@ function protectedPeriod(ctx: BookCtx): string {
         if (y < from) from = y;
         if (y > to) to = y;
     };
-    for (const id of ctx.model.personIds) {
-        const p = ctx.tree.persons[id];
+    for (const id of model.personIds) {
+        const p = tree.persons[id];
         if (!p || p.isPlaceholder) continue;
         see(p.birthDate);
         see(p.deathDate);
     }
-    for (const ch of ctx.model.chapters) see(ctx.tree.partnerships[ch.unionId]?.startDate);
+    for (const ch of model.chapters) see(tree.partnerships[ch.unionId]?.startDate);
     if (from === Infinity) return '';
     return from === to ? String(from) : `${from}–${to}`;
+}
+
+/** Who is living, judged on the data before protection (the protection strips the very dates it reads). */
+function bookLiving(data: StromData, year: number): Set<PersonId> {
+    const bounds = inferBirthUpperBounds(data);
+    const living = new Set<PersonId>();
+    for (const p of Object.values(data.persons)) if (!p.isPlaceholder && isLivingPerson(p, year, bounds)) living.add(p.id);
+    return living;
+}
+
+/**
+ * The tree a book is drawn from: the privacy mode, people of the last ~100 years by name only in a book of a
+ * house (spec 030 K1.4a), "Living person" in the book's language, not the app's.
+ */
+function protectedBookTree(data: StromData, opts: BookOptions, year: number, living: ReadonlySet<PersonId>): StromData {
+    const tree = applyLivingPrivacy(data, opts.privacy, year, { keepDeceasedSources: true, ...(bookHouseRecent(opts) ? { recentByName: true } : {}) });
+    if (opts.privacy === 'anonymous' || opts.privacy === 'minimal') {
+        const S = getStringsForLang(opts.lang);
+        for (const id of living) { const p = tree.persons[id]; if (p) p.firstName = S.privacy.livingPerson; }
+    }
+    return tree;
+}
+
+/** The title page's automatic title and period, from the protected tree (one rule for the book and its dialog). */
+function titlePageOf(data: StromData, tree: StromData, opts: BookOptions, model: BookModel, living: ReadonlySet<PersonId>,
+    index: LineageIndex, treeName: string | undefined): { title: string; period: string } {
+    // A house's name after the farm stays out under privacy where people of the last ~100 years lived (spec 030 §10).
+    const titleData = ((opts.selection.kind === 'ancestors' || opts.selection.kind === 'descendants')
+        && living.has(opts.selection.person) || opts.selection.kind === 'house') && opts.privacy !== 'full' ? tree : data;
+    const title = autoBookTitle(titleData, opts.selection, opts.lang, { ...(titleData === data ? { index } : {}), ...(treeName ? { treeName } : {}) });
+    return { title, period: protectedPeriod(tree, model) };
+}
+
+/**
+ * The automatic title and the period the book's title page will show (the book dialog's title field and
+ * cover): the same protected tree as the book, so the dialog never shows a name or a year the book leaves out.
+ */
+export function bookTitlePage(data: StromData, options: BookOptions, env: Pick<BookBuildEnv, 'index' | 'treeName' | 'now'> = {}): { title: string; period: string } {
+    const year = (env.now ?? new Date()).getFullYear();
+    const index = env.index && env.index.data === data ? env.index : buildLineages(data);
+    const model = buildBookModel(data, options.selection, index);
+    const living = bookLiving(data, year);
+    return titlePageOf(data, protectedBookTree(data, options, year, living), options, model, living, index, env.treeName);
 }
 
 /**
@@ -247,8 +290,7 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
 
     // Who is living is judged on the data before protection (the protection strips the very dates it reads).
     const bounds = inferBirthUpperBounds(data);
-    const living = new Set<PersonId>();
-    for (const p of Object.values(data.persons)) if (!p.isPlaceholder && isLivingPerson(p, year, bounds)) living.add(p.id);
+    const living = bookLiving(data, year);
 
     // A book of a house: people of the last ~100 years by name and role only, in the whole book (spec 030 K1.4a).
     const byName = bookHouseRecent(opts);
@@ -256,11 +298,7 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     if (byName) for (const p of Object.values(data.persons)) if (isRecentPerson(data, p, year, bounds)) recent.add(p.id);
 
     // Privacy before anything is rendered; only the living lose their sources (as on the person page).
-    let tree = applyLivingPrivacy(data, opts.privacy, year, { keepDeceasedSources: true, ...(byName ? { recentByName: true } : {}) });
-    if (opts.privacy === 'anonymous' || opts.privacy === 'minimal') {
-        // "Living person" in the book's language, not the app's.
-        for (const id of living) { const p = tree.persons[id]; if (p) p.firstName = S.privacy.livingPerson; }
-    }
+    let tree = protectedBookTree(data, opts, year, living);
     // New versions of stories wait in the research's workshop: kept aside for the screen, gone from the tree.
     const personDrafts = new Map<PersonId, StoryDraft>();
     const coupleDrafts = new Map<PartnershipId, StoryDraft>();
@@ -384,12 +422,10 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     }
 
     // ── The front: the title page and the contents ──
-    // A house's name after the farm stays out under privacy where people of the last ~100 years lived (spec 030 §10).
-    const titleData = ((opts.selection.kind === 'ancestors' || opts.selection.kind === 'descendants')
-        && living.has(opts.selection.person) || opts.selection.kind === 'house') && opts.privacy !== 'full' ? tree : data;
-    const title = opts.title?.trim()
-        || autoBookTitle(titleData, opts.selection, lang, { ...(titleData === data ? { index } : {}), ...(env.treeName ? { treeName: env.treeName } : {}) });
-    const period = protectedPeriod(ctx);
+    // The title page's title and period from the protected tree, as the dialog shows them (bookTitlePage).
+    const titlePage = titlePageOf(data, tree, opts, model, living, index, env.treeName);
+    const title = opts.title?.trim() || titlePage.title;
+    const period = titlePage.period;
     const persons = [...model.personIds].filter(id => tree.persons[id] && !tree.persons[id].isPlaceholder).length;
     const meta = [B.persons(persons)];
     const front = `<section class="book-sheet book-front book-title-page" id="book-title-page"><div class="book-kicker">${esc(B.subtitle)}</div>`

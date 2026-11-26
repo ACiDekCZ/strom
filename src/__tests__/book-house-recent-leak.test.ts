@@ -11,7 +11,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PrivacyMode } from '../privacy.js';
-import { buildFamilyBook } from '../book.js';
+import { bookTitlePage, buildFamilyBook } from '../book.js';
 import { bookHouseRecent, defaultBookOptions, type BookOptions, type BookSelectionSpec } from '../book-options.js';
 import { bookOptionsFromMemory, loadBookMemory, saveBookMemory } from '../book-memory.js';
 import { HOUSE_ID, HOUSE_NOW, LIVING_NAME, houseResearch, houseTree } from './helpers/house-book-fixture.js';
@@ -92,6 +92,29 @@ describe('a book of a house: people of the last ~100 years by name and role only
         }
         // The option belongs to a book of a house only.
         expect(text(book({ kind: 'tree' }, 'full', true))).toContain('1970');
+    });
+
+    it('the dialog\'s title and period are the book\'s title page: from the protected tree, not the data', () => {
+        const base = defaultBookOptions('cs');
+        for (const privacy of PRIVACY) {
+            for (const houseRecent of [undefined, false]) {
+                const opts: BookOptions = { ...base, selection: HOUSE, privacy, ...(houseRecent !== undefined ? { houseRecent } : {}) };
+                const front = bookTitlePage(houseTree(), opts, { now: HOUSE_NOW });
+                const html = book(HOUSE, privacy, houseRecent);
+                const page = part(html, 'book-title-page');
+                const tag = `${privacy} ${houseRecent ?? 'on'}`;
+                expect(page, tag).toContain(`<h1>${front.title}</h1>`);
+                expect(page, tag).toContain(front.period ? `<div class="book-title-sub">${front.period}</div>` : '<hr');
+            }
+        }
+        // The option on: no year of the last ~100 years, and no name after the farm where they lived.
+        const on = bookTitlePage(houseTree(), { ...base, selection: HOUSE, privacy: 'initials' }, { now: HOUSE_NOW });
+        expect(on.period).toBe('1820–1920');
+        expect(on.title).toBe('Bělokamen čp. 16');
+        // Without any protection the data as it is.
+        const open = bookTitlePage(houseTree(), { ...base, selection: HOUSE, privacy: 'full', houseRecent: false }, { now: HOUSE_NOW });
+        expect(open.period).toBe('1820–2001');
+        expect(open.title).toBe('Bělokamen čp. 16 · U Prouzalů');
     });
 
     it('the option: on unless switched off, for a book of a house only; remembered like the other options', () => {

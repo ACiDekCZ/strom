@@ -207,16 +207,21 @@ test.describe('family book: a house', () => {
         await expect(sw).toBeVisible();
         await expect(sw).toHaveAttribute('aria-checked', 'true');
         await expect(dialog.locator('.book-house-recent')).toContainText('Last ~100 years by name only');
+        // The cover's period as the book's title page has it: without Dobromil's 1975.
+        await expect(dialog.locator('.book-cover-sub')).toHaveText('1820–1915');
 
         const book = await openBook(page, context);
         await expect(book.locator('body')).toContainText('Dobromil');
         expect(await book.locator('body').innerText()).not.toContain('1975');
+        await expect(book.locator('.book-title-sub')).toHaveText('1820–1915');
+        await expect(book.locator('.book-title-page h1')).toHaveText(await dialog.locator('.book-cover-title').innerText());
 
         // Off: Change options, the switch, the same window again.
         await book.locator('.book-toolbar').getByRole('button', { name: 'Change options' }).click();
         await expect(dialog).toHaveClass(/active/);
         await sw.click();
         await expect(sw).toHaveAttribute('aria-checked', 'false');
+        await expect(dialog.locator('.book-cover-sub')).toHaveText('1820–1975');
         await dialog.locator('#book-open').click();
         await expect(book.locator('body')).toContainText('1975');
     });

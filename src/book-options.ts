@@ -245,28 +245,6 @@ export function autoBookTitle(data: StromData, spec: BookSelectionSpec, lang: Bo
     }
 }
 
-/** The subtitle's span "{from}–{to}" over the chosen people's dated records ('' without dates). */
-export function bookPeriod(data: StromData, spec: BookSelectionSpec, env: BookEnv = {}): string {
-    const selIndex = indexOf(data, env);
-    const sel = selection(selIndex, lineageSpec(spec, selIndex));
-    let from = Infinity, to = -Infinity;
-    const see = (date: string | undefined): void => {
-        const y = yearOf(date);
-        if (y === null) return;
-        if (y < from) from = y;
-        if (y > to) to = y;
-    };
-    for (const id of sel.personIds) {
-        const p = data.persons[id];
-        if (!p || p.isPlaceholder) continue;
-        see(p.birthDate);
-        see(p.deathDate);
-    }
-    for (const id of sel.familyIds) see(data.partnerships[id]?.startDate);
-    if (from === Infinity) return '';
-    return from === to ? String(from) : `${from}–${to}`;
-}
-
 export interface BookEstimate {
     pages: number;
     persons: number;

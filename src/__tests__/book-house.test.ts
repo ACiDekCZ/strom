@@ -9,8 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PartnershipId, PersonId, StromData } from '../types.js';
 import { buildLineages, selection } from '../lineage.js';
 import { buildBookModel, lineageSpec, type BookSelectionSpec } from '../book-model.js';
-import { autoBookTitle, bookPeriod, defaultBookOptions } from '../book-options.js';
-import { buildFamilyBook } from '../book.js';
+import { autoBookTitle, defaultBookOptions } from '../book-options.js';
+import { bookTitlePage, buildFamilyBook } from '../book.js';
 import { findHouse } from '../houses.js';
 import { HOUSE_NOW, houseTree } from './helpers/house-book-fixture.js';
 
@@ -79,7 +79,7 @@ describe('a book of a house: the selection', () => {
         expect(model.personIds.has('vlastimila' as PersonId)).toBe(true);
         expect(model.personIds.has('radovan' as PersonId)).toBe(true);
         expect(model.smallRods).toEqual([]);
-        expect(bookPeriod(data, HOUSE)).toBe('1820–2001');
+        expect(bookTitlePage(data, { ...defaultBookOptions('cs'), selection: HOUSE, privacy: 'full', houseRecent: false }, { now: HOUSE_NOW }).period).toBe('1820–2001');
     });
 });
 
