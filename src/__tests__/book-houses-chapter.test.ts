@@ -120,8 +120,8 @@ describe('the Houses chapter in the book: as outputs show a house', () => {
         const html = book(withSources(houseTree()), 'full');
         const ch = chapter(html);
         expect(ch).toContain('Domy, ve kterých rod žil aspoň dvě generace nebo třicet let.');
-        expect(ch).toContain('<h3>Bělokamen čp. 16</h3>');
-        expect(ch).toContain('<h3>Mlýnkovice čp. 3</h3>');
+        expect(ch).toContain('<h3>Bělokamen čp.\u00a016</h3>');
+        expect(ch).toContain('<h3>Mlýnkovice čp.\u00a03</h3>');
         expect(ch).toContain('<em>U Prouzalů</em>');
         expect(ch).toContain('Časová osa');
         expect(ch).toContain('Stavení postaveno po rozdělení gruntu<sup class="book-house-fn-mark">1</sup>');

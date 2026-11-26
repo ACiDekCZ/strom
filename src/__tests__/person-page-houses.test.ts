@@ -35,10 +35,10 @@ describe('the person page — houses', () => {
     it('window: the address is a button to the house, the Places row lists the houses with the years', () => {
         const html = body(houseTree(), { personId: pid('radegunda') });
         expect(html).toContain(`data-pp-house="${HOUSE_ID}"`);
-        expect(html).toMatch(/<button type="button" class="pp-link pp-house-link" data-pp-house="belokamen\|16" title="House čp. 16">čp. 16<\/button>/);
+        expect(html).toMatch(/<button type="button" class="pp-link pp-house-link" data-pp-house="belokamen\|16" title="House čp. 16">čp.\u00a016<\/button>/);
         expect(html).toContain('<span class="pp-houses-k">Houses</span>');
-        expect(html).toMatch(/Mlýnkovice <button[^>]*data-pp-house="mlynkovice\|3"[^>]*>House čp. 3 ›<\/button> <span class="pp-house-y">1824<\/span>/);
-        expect(html).toMatch(/data-pp-house="belokamen\|16"[^>]*>House čp. 16 ›<\/button> <span class="pp-house-y">1891<\/span>/);
+        expect(html).toMatch(/Mlýnkovice <button[^>]*data-pp-house="mlynkovice\|3"[^>]*>House čp.\u00a03 ›<\/button> <span class="pp-house-y">1824<\/span>/);
+        expect(html).toMatch(/data-pp-house="belokamen\|16"[^>]*>House čp.\u00a016 ›<\/button> <span class="pp-house-y">1891<\/span>/);
     });
 
     it('a person without a house has no row', () => {
@@ -54,9 +54,9 @@ describe('the person page — houses', () => {
         const html = body(houseTree(), { mode: 'file', links: 'plain' });
         expect(html).not.toContain('data-pp-house');
         expect(html).not.toContain('pp-house-link');
-        expect(html).toContain('Bělokamen čp. 16');
+        expect(html).toContain('Bělokamen čp.\u00a016');
         // Without a link no "›".
-        expect(html).not.toContain('House čp. 16 ›');
+        expect(html).not.toContain('House čp.\u00a016 ›');
     });
 
     it('a set: an anchor only to a house with a page in the set', () => {
@@ -65,7 +65,7 @@ describe('the person page — houses', () => {
         });
         const withPage = body(houseTree(), set(new Map([[HOUSE_ID, 'dum-belokamen-cp-16']])));
         expect(withPage).toContain('href="#dum-belokamen-cp-16"');
-        expect(withPage).toContain('House čp. 16 ›');
+        expect(withPage).toContain('House čp.\u00a016 ›');
         const without = body(houseTree(), set(new Map()));
         expect(without).not.toContain('pp-house-link');
     });

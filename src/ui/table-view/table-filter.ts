@@ -541,9 +541,12 @@ export function generationSpan(model: TableModel): { min: number; max: number } 
 // ---------------------------------------------------------------------------
 // Column filters (§8.2)
 
-/** Lowercase without diacritics (§8.3: "Klikv" finds "Klikvová"). */
+/**
+ * Lowercase without diacritics (§8.3: "Klikv" finds "Klikvová"); a non-breaking space as a space
+ * ("čp. 16" finds a house shown "čp.\u00a016", houseLabel).
+ */
 export function foldText(text: string): string {
-    return text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase();
+    return text.normalize('NFD').replace(/\p{M}/gu, '').replace(/[\u00a0\u202f]/g, ' ').toLocaleLowerCase();
 }
 
 const folded = new WeakMap<CellValue, string>();

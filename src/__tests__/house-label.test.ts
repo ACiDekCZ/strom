@@ -125,3 +125,10 @@ describe('the round\'s texts (questions 2, 10, 12, 28, 30, 44)', () => {
             'Osoby z mniej więcej ostatnich 100 lat tylko z imienia, nazwiska i roli, bez dat; ich wydarzenia, wydarzenia wrażliwe i położenie domu są pomijane.']);
     });
 });
+
+describe('the Table\'s text filter finds a house typed with a plain space', () => {
+    it('foldText reads a non-breaking space as a space', async () => {
+        const { foldText } = await import('../ui/table-view/table-filter.js');
+        expect(foldText(houseTitle({ ref: { town: 'Bělokamen', house: '16' }, text: 'čp. 16' }))).toContain(foldText('čp. 16'));
+    });
+});

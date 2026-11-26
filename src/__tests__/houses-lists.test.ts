@@ -78,9 +78,9 @@ describe('the Table\'s House column (§15)', () => {
 
     it('a person\'s birth house: the tree\'s house, the older number faint in brackets, none without a house', () => {
         expect(col).toBeTruthy();
-        expect(cell('hostivit')).toMatchObject({ text: 'Bělokamen čp. 16', house: { id: 'belokamen|16', title: 'Bělokamen čp. 16' }, empty: false });
+        expect(cell('hostivit')).toMatchObject({ text: 'Bělokamen čp.\u00a016', house: { id: 'belokamen|16', title: 'Bělokamen čp.\u00a016' }, empty: false });
         expect(cell('hostivit').house!.old).toBeUndefined();
-        expect(cell('svatobor')).toMatchObject({ text: 'Bělokamen čp. 16 (9)', house: { id: 'belokamen|16', old: '9' } });
+        expect(cell('svatobor')).toMatchObject({ text: 'Bělokamen čp.\u00a016 (9)', house: { id: 'belokamen|16', old: '9' } });
         expect(cell('kunhuta').house?.id).toBe('mlynkovice|8');
         expect(cell('vratislav')).toMatchObject({ empty: true, text: '' });
         expect(cell('vratislav').house).toBeUndefined();
@@ -97,7 +97,7 @@ describe('the Table\'s House column (§15)', () => {
         expect(ev).toBeTruthy();
         const of = (pred: (r: typeof model.events[number]) => boolean) => cellOf(model, model.events.find(pred)!, ev);
         expect(of(r => r.event?.id === 'e-host-census').house?.id).toBe('belokamen|16');
-        expect(of(r => r.source === 'marriage' && r.union?.id === 'u1')).toMatchObject({ text: 'Bělokamen čp. 16 (9)' });
+        expect(of(r => r.source === 'marriage' && r.union?.id === 'u1')).toMatchObject({ text: 'Bělokamen čp.\u00a016 (9)' });
         expect(of(r => r.source === 'death' && r.persons[0]?.id === 'dobromil').house?.id).toBe('mlynkovice|8');
     });
 
@@ -140,10 +140,10 @@ describe('the lists\' rule Lived in the house (§15)', () => {
 
     it('in words, in every language', () => {
         setLanguage('cs');
-        expect(condLabel(cond({ house: 'belokamen|16', houseName: '' }), index)).toBe('žil(a) v domě Bělokamen čp. 16');
-        expect(condLabel(cond({ house: 'belokamen|16', houseName: '', years: { from: 1850, to: 1900 } }), index)).toBe('žil(a) v domě Bělokamen čp. 16 v letech 1850–1900');
+        expect(condLabel(cond({ house: 'belokamen|16', houseName: '' }), index)).toBe('žil(a) v domě Bělokamen čp.\u00a016');
+        expect(condLabel(cond({ house: 'belokamen|16', houseName: '', years: { from: 1850, to: 1900 } }), index)).toBe('žil(a) v domě Bělokamen čp.\u00a016 v letech 1850–1900');
         setLanguage('en');
-        expect(condLabel(cond({ house: 'belokamen|16', houseName: '' }), index)).toBe('lived in the house Bělokamen čp. 16');
+        expect(condLabel(cond({ house: 'belokamen|16', houseName: '' }), index)).toBe('lived in the house Bělokamen čp.\u00a016');
         for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
             const t = getStringsForLang(lang);
             expect(t.lists.rules.cond.livedInHouse, lang).toBeTruthy();
@@ -163,7 +163,7 @@ describe('the lists\' rule Lived in the house (§15)', () => {
     it('is offered next to Place and surroundings, only in a tree with houses', () => {
         const cat = ruleCatalog(index).map(e => e.c);
         expect(cat.indexOf('livedInHouse')).toBe(cat.indexOf('near') + 1);
-        expect(ruleHouseChoices(index).map(h => h.name)).toEqual(['Bělokamen čp. 16', 'Mlýnkovice čp. 8']);
+        expect(ruleHouseChoices(index).map(h => h.name)).toEqual(['Bělokamen čp.\u00a016', 'Mlýnkovice čp.\u00a08']);
         const none = village();
         for (const p of Object.values(none.persons)) { delete p!.birthAddress; delete p!.deathAddress; delete p!.events; }
         for (const u of Object.values(none.partnerships)) delete u!.address;
@@ -186,23 +186,23 @@ describe('the statistics of houses (§15)', () => {
 
     it('ranks the houses by their people (a person under each house), those at none Not given', () => {
         const t = table(all);
-        expect(t.rows.map(r => [r.label, r.count])).toEqual([['Bělokamen čp. 16', 5], ['Mlýnkovice čp. 8', 3]]);
+        expect(t.rows.map(r => [r.label, r.count])).toEqual([['Bělokamen čp.\u00a016', 5], ['Mlýnkovice čp.\u00a08', 3]]);
         expect(t.none).toEqual(['vratislav']);
         expect(t.units).toBe(7);
         expect(t.known).toBe(6);
         // A scope counts only its people.
-        expect(table(['dobromil', 'vratislav'] as PersonId[]).rows.map(r => [r.label, r.count])).toEqual([['Mlýnkovice čp. 8', 1]]);
+        expect(table(['dobromil', 'vratislav'] as PersonId[]).rows.map(r => [r.label, r.count])).toEqual([['Mlýnkovice čp.\u00a08', 1]]);
     });
 
     it('the house one family held longest and the houses with history somebody married into', () => {
         const t = table(all);
-        expect(t.houses?.longest).toMatchObject({ id: 'belokamen|16', title: 'Bělokamen čp. 16' });
+        expect(t.houses?.longest).toMatchObject({ id: 'belokamen|16', title: 'Bělokamen čp.\u00a016' });
         expect(t.houses!.longest!.years).toBeGreaterThanOrEqual(100);
         expect(t.houses!.marriedIn.of).toBeGreaterThanOrEqual(1);
         expect(t.houses!.marriedIn.houses).toBeGreaterThanOrEqual(1);
         setLanguage('cs');
         const parts = houseStatsParts(t);
-        expect(parts[0]).toBe(`Nejdéle jedna rodina: Bělokamen čp. 16, ${t.houses!.longest!.years} let`);
+        expect(parts[0]).toBe(`Nejdéle jedna rodina: Bělokamen čp.\u00a016, ${t.houses!.longest!.years} let`);
         expect(parts[1]).toMatch(/^Přiženění nebo přivdání: \d+ z \d+ dom/);
         for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
             const S = getStringsForLang(lang);

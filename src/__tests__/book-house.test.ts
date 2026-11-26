@@ -89,8 +89,8 @@ describe('a book of a house: the title and the options', () => {
 
     it('the title is the town, the house and its name after the farm', () => {
         const data = tree();
-        expect(autoBookTitle(data, HOUSE, 'cs')).toBe('Bělokamen čp. 16 · U Prouzalů');
-        expect(autoBookTitle(data, { kind: 'house', place: 'Mlýnkovice', house: 'čp. 3' }, 'en')).toBe('Mlýnkovice čp. 3 · Na Mlýnku');
+        expect(autoBookTitle(data, HOUSE, 'cs')).toBe('Bělokamen čp.\u00a016 · U Prouzalů');
+        expect(autoBookTitle(data, { kind: 'house', place: 'Mlýnkovice', house: 'čp.\u00a03' }, 'en')).toBe('Mlýnkovice čp.\u00a03 · Na Mlýnku');
     });
 
     it('the selection goes through the options as data (the book window gives it back to the dialog)', () => {
@@ -104,12 +104,12 @@ describe('a book of a house: the title and the options', () => {
     it('the book: the people of the house; under privacy the house of the last ~100 years without its name after the farm', () => {
         const data = tree();
         const full = buildFamilyBook(data, { ...defaultBookOptions('cs'), selection: HOUSE, privacy: 'full' }, { dateLabel: 'x' });
-        expect(full).toContain('Bělokamen čp. 16 · U Prouzalů');
+        expect(full).toContain('Bělokamen čp.\u00a016 · U Prouzalů');
         expect(full).toContain('Svatobor');
         expect(full).toContain('Vlastimila');
         expect(full).not.toContain('Drahobud');
         const kept = buildFamilyBook(data, { ...defaultBookOptions('cs'), selection: HOUSE, privacy: 'initials' }, { dateLabel: 'x' });
-        expect(kept).toContain('Bělokamen čp. 16');
+        expect(kept).toContain('Bělokamen čp.\u00a016');
         expect(kept).not.toContain('U Prouzalů');
     });
 });

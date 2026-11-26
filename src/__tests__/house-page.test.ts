@@ -113,7 +113,7 @@ describe('house page — app', () => {
         const on = buildHousePage(data, house, fullResearch(), 'app', { ...opts, app: { canConfirm: true } });
         expect(on).toContain('data-hp-act="renumber" data-number="n2"');
         expect(on).toContain('data-hp-act="not-same" data-number="n2"');
-        expect(on).toContain('čp. 9');
+        expect(on).toContain('čp.\u00a09');
     });
 
     it('in brief: one family N years, the numbers, the generations, the oldest record (K3.2)', () => {
