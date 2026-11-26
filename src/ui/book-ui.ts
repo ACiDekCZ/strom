@@ -27,7 +27,7 @@ import { buildFamilyBook, buildFamilyBookAsync, type BookBuildEnv } from '../boo
 import { bookFileName, bookPreparingHtml } from '../book-window.js';
 import {
     BOOK_HOUSE_PARTS, BOOK_PART_KEYS, BookDetail, BookEnv, BookEstimate, BookLang, BookOptions, BookPartKey, BookSelectionSpec,
-    autoBookTitle, bookHouseDefaults, bookPartAvailability, bookPeriod, bookRodCounts, estimateBook,
+    autoBookTitle, bookHouseDefaults, bookPartAvailability, bookSelectionHouses, bookPeriod, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
     BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PAGES_GROUP_KEYS, PagesChoices, PagesGroups,
@@ -53,6 +53,7 @@ import { shownName } from '../person-name.js';
 import { displayYear } from '../dates.js';
 import { openPersonPopover, openSearchPopover, type SearchPopoverRow } from './person-popover.js';
 import { collectHouses, findHouse, hasNumberedHouse, houseTitle, type TreeHouse } from '../houses.js';
+import { loadBookHouseResearch, type BookHouseResearch } from '../book-house-research.js';
 import { houseMatches, houseSearchText } from '../houses-view.js';
 import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
@@ -244,6 +245,9 @@ function selectionOf(s: DialogState): BookSelectionSpec | null {
 }
 
 /** The tree's houses (once per opening). */
+/** The research's results of the last book's houses, read before it was built (K7.3): its save uses them too. */
+let bookHouseRead: (BookHouseResearch & { base: string }) | null = null;
+
 function housesOf(s: DialogState): TreeHouse[] {
     if (!s.houses) s.houses = collectHouses(s.data);
     return s.houses;
@@ -1737,21 +1741,40 @@ export const bookUiMethods = uiModule({
         return out;
     },
 
+    /**
+     * Before a book with the Houses chapter, the index of houses or a house as its selection: the research's
+     * results of its houses, read over the bridge (`house`). A failure leaves the book to the tree, no error shown.
+     */
+    async loadBookHouses(options: BookOptions, data: StromData): Promise<void> {
+        bookHouseRead = null;
+        const b = this.houseResearchBridge();
+        if (!b || !(options.parts.houses || options.parts.houseIndex || options.selection.kind === 'house')) return;
+        try {
+            if (!hasNumberedHouse(data)) return;
+            const got = await loadBookHouseResearch(b.base, bookSelectionHouses(data, options));
+            bookHouseRead = { base: b.base, ...got };
+        } catch { /* built from the tree */ }
+    },
+
     /** What the book is built with besides the data and the options (window or saved file). */
     familyBookEnv(options: BookOptions, forSave: boolean): BookBuildEnv {
         const data = DataManager.getData();
         const firstId = Object.keys(data.persons)[0];
         const lang = options.lang;
         const locale = lang === 'cs' ? 'cs-CZ' : lang === 'de' ? 'de-DE' : lang === 'pl' ? 'pl-PL' : 'en-GB';
+        const read = bookHouseRead && bookHouseRead.base === this.houseResearchBridge()?.base ? bookHouseRead : null;
         return {
             treeName: TreeManager.getActiveTreeMetadata()?.name,
             dateLabel: getStringsForLang(lang).book.compiled(new Date().toLocaleDateString(locale)),
             fontCss: appFontFaceCss(POSTER_SERIF_FACES) + bookItalicFontCss(),
             hasHistory: !!(firstId && this.personPageHistory(firstId as PersonId)),
             personHistory: (id) => this.personPageHistory(id),
-            // The research's results of houses read so far (the Houses window reads them): the index of houses.
-            houseResearch: (house) => this.houseResearchRead(house),
-            finishedHouses: this.bookFinishedHouses(options.parts.houses && hasNumberedHouse(data) ? collectHouses(data) : []),
+            // The research's results of the book's houses (read before it), else those read so far (the Houses window).
+            houseResearch: (house) => read?.research.get(house.id) ?? this.houseResearchRead(house),
+            finishedHouses: new Set([
+                ...this.bookFinishedHouses(options.parts.houses && hasNumberedHouse(data) ? collectHouses(data) : []),
+                ...(read?.finished ?? []),
+            ]),
             ...(forSave ? { forSave: true } : {
                 approveStoryUrl: (p) => this.storyApproveUrl(p.id),
                 storyDraftUrls: (owner) => this.storyCompareUrls('person' in owner
@@ -1795,6 +1818,8 @@ export const bookUiMethods = uiModule({
             if (k0) k0.textContent = '';
             // Its pooled images whole (image-expand.ts): the book's window and its print are a document of their own.
             const bookData = await expandedData(DataManager.getData());
+            if (cancelled || win.closed) throw new BookBuildStopped();
+            await this.loadBookHouses(options, bookData);
             if (cancelled || win.closed) throw new BookBuildStopped();
             const html = await buildFamilyBookAsync(bookData, options, this.familyBookEnv(options, false), async ({ k, n }) => {
                 if (cancelled || win.closed) throw new BookBuildStopped();
@@ -1940,7 +1965,13 @@ export const bookUiMethods = uiModule({
                 // The tree's photos still on their way: the file waits for them (spec 116 §8), the button stays "Saving…".
                 // The file carries the pooled images whole (image-expand.ts).
                 void imagesBeforeOutput(strings.photos.out.book, { el: null })
-                    .then(async (go) => go === 'cancelled' || win.closed ? null : expandedData(DataManager.getData()))
+                    .then(async (go) => {
+                        if (go === 'cancelled' || win.closed) return null;
+                        const data = await expandedData(DataManager.getData());
+                        // The research's results of its houses, read again for the file (K7.3).
+                        await this.loadBookHouses(options, data);
+                        return data;
+                    })
                     .then((data) => {
                         try { if (data && !win.closed) this.saveOrShareBook(win, options, act, title(), data); } finally { rest(); }
                     }, rest);

@@ -143,6 +143,13 @@ export function housesChapterPages(houses: readonly TreeHouse[]): number {
     return 0.5 + houses.reduce((n, h) => n + 0.4 + (h.numbers.length + new Set(h.facts.map(f => f.factRef)).size) / 35, 0);
 }
 
+/** The houses of the people the book's selection takes (its houses before any part is chosen). */
+export function bookSelectionHouses(data: StromData, options: BookOptions, env: BookEnv = {}): TreeHouse[] {
+    const selIndex = indexOf(data, env);
+    const sel = selection(selIndex, lineageSpec(options.selection, selIndex));
+    return bookHouses(data, sel.personIds, env.houses ?? collectHouses(data));
+}
+
 /** Every part's availability and the reason when it is not (§4.3). */
 export function bookPartAvailability(data: StromData, options: BookOptions, env: BookEnv = {}): Record<BookPartKey, BookPartState> {
     const B = getStringsForLang(options.lang).book;
