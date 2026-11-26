@@ -98,9 +98,11 @@ export function isHeadMenuOpen(): boolean {
 
 /**
  * Show the menu under a head cell. Keys: ↑ ↓ Home End move, Enter / Space
- * choose, Escape or Tab close; the focus goes back to the head cell.
+ * choose, Escape or Tab close; the focus goes back to the head cell (or to
+ * `opts.focusBack()`, the anchor as drawn now when a redraw replaced it).
  */
-export function openHeadMenu(anchor: HTMLElement, title: string, note: string, entries: MenuEntry[]): HTMLElement {
+export function openHeadMenu(anchor: HTMLElement, title: string, note: string, entries: MenuEntry[],
+    opts: { focusBack?: () => HTMLElement | null } = {}): HTMLElement {
     closeHeadMenu();
     const el = document.createElement('div');
     el.className = 'tv-menu';
@@ -144,7 +146,8 @@ export function openHeadMenu(anchor: HTMLElement, title: string, note: string, e
         el.remove();
         document.removeEventListener('pointerdown', onOutside, true);
         window.removeEventListener('resize', onResize);
-        if (focusBack && anchor.isConnected) anchor.focus({ preventScroll: true });
+        const back = opts.focusBack?.() ?? anchor;
+        if (focusBack && back.isConnected) back.focus({ preventScroll: true });
     };
     const onOutside = (e: PointerEvent): void => { if (!el.contains(e.target as Node)) close(false); };
     const onResize = (): void => close(false);

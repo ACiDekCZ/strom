@@ -223,6 +223,29 @@ test.describe('What the research knows grouped (spec 140)', () => {
         await expect(rows(page)).toHaveCount(7);
     });
 
+    test('a redraw while the Group menu is open (a status of the research followed live): the button still says it is open, the choice made returns the focus to it', async ({ page }) => {
+        await setup(page);
+        await groupBtn(page).click();
+        await expect(groupBtn(page)).toHaveAttribute('aria-expanded', 'true');
+        const menu = page.locator('.research-overview__knows-group-menu');
+        await expect(menu).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.renderResearchOverview());
+        await expect(menu).toBeVisible();
+        await expect(groupBtn(page)).toHaveAttribute('aria-expanded', 'true');
+        await menu.locator('[role="menuitemradio"]').filter({ hasText: 'By research line' }).click();
+        await expect(menu).toHaveCount(0);
+        await expect(groupBtn(page)).toHaveAttribute('aria-label', 'Group, By research line');
+        await expect(groupBtn(page)).toHaveAttribute('aria-expanded', 'false');
+        await expect(groupBtn(page)).toBeFocused();
+        // Closed by Escape after a redraw: the focus back on the button drawn anew.
+        await groupBtn(page).click();
+        await page.evaluate(() => window.Strom.UI.renderResearchOverview());
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        await expect(groupBtn(page)).toHaveAttribute('aria-expanded', 'false');
+        await expect(groupBtn(page)).toBeFocused();
+    });
+
     test('the kind chips and the search before the groups: a group of conflicts alone goes under Hypotheses, a search unfolds a folded group and folds it again when cleared, ↓ reaches a row', async ({ page }) => {
         await setup(page, { more: true });
         await expect(field(page)).toBeVisible();

@@ -316,6 +316,18 @@ const answerChanged = new Set<string>();
 /** The "More actions" menu open (the item's id) and how it is let go. */
 let moreMenuFor: string | null = null;
 let moreMenuCleanup: (() => void) | null = null;
+/**
+ * The focus key of the button whose choice menu (openWaitingChoice: the
+ * order, the groups, Group of What the research knows) is open: a redraw
+ * meanwhile draws that button anew still saying the menu is open.
+ */
+let choiceOpenFor: string | null = null;
+/** After a redraw of the overview: the button of the open choice menu, drawn anew, says it is open. */
+function keepChoiceOpen(): void {
+    if (!choiceOpenFor) return;
+    document.querySelector(`#research-overview [data-focus-key="${CSS.escape(choiceOpenFor)}"][aria-haspopup="menu"]`)
+        ?.setAttribute('aria-expanded', 'true');
+}
 
 /** The answer form drawn last loses no focus to a redraw: the same field, the caret where it was. */
 function keepAnswerFocus(): () => void {
@@ -764,6 +776,7 @@ export const researchOverviewMethods = uiModule({
         queueMicrotask(keepLineFocus());
         queueMicrotask(keepAnswerFocus());
         queueMicrotask(keepKeyFocus());
+        queueMicrotask(keepChoiceOpen);
         queueMicrotask(keepSectionControlFocus());
         queueMicrotask(keepQueueLoadFocus());
         // A task just moved by "Do next": focused once drawn first.
@@ -1725,18 +1738,27 @@ export const researchOverviewMethods = uiModule({
             });
             return;
         }
+        // A redraw meanwhile (a status of the research followed live) draws the button anew:
+        // it is found again by its focus key, says the menu is open and takes the focus back.
+        const key = btn.closest('#research-overview') ? btn.dataset.focusKey ?? null : null;
+        const current = (): HTMLElement => {
+            if (btn.isConnected || !key) return btn;
+            return document.querySelector<HTMLElement>(`#research-overview [data-focus-key="${CSS.escape(key)}"][aria-haspopup="menu"]`) ?? btn;
+        };
+        choiceOpenFor = key;
         btn.setAttribute('aria-expanded', 'true');
         const menu = openHeadMenu(btn, '', '', [
             { heading: c.title },
             ...c.options.map(o => ({ id: o.id, label: o.label, desc: o.sub, icon: '', checked: o.on, run: o.run })),
-        ]);
+        ], { focusBack: current });
         menu.classList.add(c.menuClass);
         menu.setAttribute('aria-label', c.title);
         // Closed any way: the button says so again.
         const watch = new MutationObserver(() => {
             if (menu.isConnected) return;
             watch.disconnect();
-            btn.setAttribute('aria-expanded', 'false');
+            if (key && choiceOpenFor === key) choiceOpenFor = null;
+            current().setAttribute('aria-expanded', 'false');
         });
         watch.observe(document.body, { childList: true });
     },
