@@ -32183,6 +32183,37 @@
         .gift-last { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         .gift-last b { font-weight: 600; color: var(--text); }
         .gift-modal :is(.gift-last, .gift-phone-fast) .link-button { padding: 0; margin: 0; font-size: inherit; }
+        /* A batch (§7 [53, 54]): the list's field, the recipients' table, the edit's sentence, step 5's ‹ name ›. */
+        .gift-cols.is-list { grid-template-columns: minmax(0, 1fr); }
+        .gift-cols.is-list > .gift-col { max-width: 880px; }
+        .gift-batch-source .export-list-field { max-width: 340px; }
+        .gift-cols.is-list .gift-signature { max-width: 260px; }
+        .gift-rcp-head { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+        .gift-rcp { display: flex; flex-direction: column; min-width: 0; }
+        .gift-rcp-h, .gift-rcp-r { display: grid; grid-template-columns: minmax(0, 1.3fr) 150px 74px 64px 120px 28px; gap: 12px; align-items: center; }
+        .gift-rcp-h { min-height: 32px; font-size: 12px; font-weight: 600; color: var(--text-light); border-bottom: 1px solid var(--border); }
+        .gift-rcp-r { min-height: 48px; padding: 4px 0; font-size: 13.5px; color: var(--text); border-bottom: 1px solid var(--divider); }
+        .gift-rcp-c { min-width: 0; }
+        .gift-rcp-c.is-num { text-align: right; font-variant-numeric: tabular-nums; }
+        .gift-rcp-c.is-who { display: flex; flex-direction: column; gap: 1px; }
+        .gift-rcp-name { font: 600 14.5px/1.3 var(--font-serif); overflow-wrap: anywhere; }
+        .gift-rcp-s { font-size: 12px; color: var(--text-faint); }
+        .gift-modal .gift-rcp-sal { min-height: 32px; padding: 4px 8px; font-size: 13.5px; }
+        .gift-rcp-tag { font-size: 12px; color: var(--text-light); }
+        .gift-rcp-r.is-own .gift-rcp-tag { font-weight: 500; color: var(--text); }
+        .gift-modal .gift-rcp-edit { padding: 0; margin: 0; font-size: 12.5px; }
+        .gift-modal button.gift-rcp-x, .gift-modal button.gift-switch-b {
+            display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
+            border: 0; border-radius: var(--r-md); background: none; color: var(--text-faint); font-size: 18px; line-height: 1; cursor: pointer;
+        }
+        .gift-rcp-r.is-lone { color: var(--text-faint); }
+        .gift-rcp-r.is-lone .gift-rcp-name { color: var(--text-light); }
+        .gift-modal :is(.gift-rcp-removed, .gift-own-line) .link-button { padding: 0; margin: 0; font-size: inherit; }
+        .gift-own-line { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .gift-own-line b { font-weight: 600; color: var(--text); }
+        .gift-sum-own { font-weight: 500; color: var(--text); }
+        .gift-switch { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; font-size: 13px; color: var(--text); }
+        .gift-switch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .gift-field { display: flex; flex-direction: column; gap: 4px; }
         .gift-modal :is(.gift-input, .gift-select) {
             min-height: 36px; padding: 6px 10px; box-sizing: border-box; width: 100%;
@@ -32298,6 +32329,7 @@
             .gift-prev:not(.is-still) .gift-mc:hover { border-color: var(--text-faint); }
             .gift-prev:not(.is-still) .gift-mc.is-me:hover { border-color: var(--sel-border); }
             .gift-modal button:is(.gift-stub, .gift-prev-zb):hover { background: var(--hover-bg); color: var(--text); }
+            .gift-modal button:is(.gift-rcp-x, .gift-switch-b):hover { background: var(--hover-bg); color: var(--text); }
             .gift-modal button.gift-seg-o:not([aria-disabled="true"]):not([aria-checked="true"]):hover { color: var(--text); }
         }
         /* A tablet: the window inside the screen's margins, a narrower side and right column. */
@@ -32311,6 +32343,7 @@
             .gift-cols.is-s2 { grid-template-columns: minmax(0, 1fr) 300px; }
             .gift-prev-host { height: 440px; }
             .gift-protect .content-checks { grid-template-columns: 1fr; }
+            .gift-rcp-h, .gift-rcp-r { grid-template-columns: minmax(0, 1.2fr) 130px 52px 56px 104px 28px; gap: 8px; }
         }
         @media (pointer: coarse) {
             .gift-modal .link-button { min-height: 44px; }
@@ -32319,6 +32352,9 @@
             .gift-modal button.gift-prev-zb { width: 44px; height: 44px; }
             .gift-modal button.gift-stub { height: 32px; }
             .gift-br-r { min-height: 52px; }
+            .gift-modal button.gift-rcp-x, .gift-modal button.gift-switch-b { width: 44px; height: 44px; }
+            .gift-rcp-h, .gift-rcp-r { grid-template-columns: minmax(0, 1.2fr) 130px 52px 56px 104px 44px; }
+            .gift-modal .gift-rcp-sal { min-height: 44px; }
         }
         /* A phone, and a phone held sideways: the whole screen; ‹ always (from step 1 it closes), the subtitle a
            button with the list of steps; one column, the footer's buttons full width with the summary under them. */
@@ -32341,6 +32377,12 @@
             .gift-nav { display: none; }
             .gift-pane { padding: 14px 16px; gap: 12px; }
             .gift-cols.is-s1, .gift-cols.is-s3 { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
+            /* A batch is made on a computer; turned to a phone meanwhile, the table's rows stack. */
+            .gift-rcp-h { display: none; }
+            .gift-rcp-r { grid-template-columns: minmax(0, 1fr) 44px; gap: 6px 8px; padding: 8px 0; }
+            .gift-rcp-c:is(.is-sal, .is-set) { grid-column: 1; }
+            .gift-rcp-c.is-num { display: none; }
+            .gift-rcp-c.is-x { grid-column: 2; grid-row: 1; }
             .gift-defaults :is(.gift-h3, .gift-dl, .gift-defaults-note, .gift-fast) { display: none; }
             .gift-modal .gift-phone-fast { display: block; font-size: 12.5px; color: var(--text-light); }
             /* Step 3 in the design's order: numbers, the other living, the list, the checks. */

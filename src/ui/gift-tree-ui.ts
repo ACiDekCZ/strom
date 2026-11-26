@@ -24,7 +24,7 @@ import { iconSvg } from '../icons.js';
 import { inferBirthUpperBounds, isLivingPerson, type PrivacyMode } from '../privacy.js';
 import { giftPersonKey, loadGiftMemory } from '../gift-memory.js';
 import {
-    buildGiftPackage, estimateGiftSize, GiftOutOfMemory, giftFileNames, giftNamesLabel, giftStepsFor, isAbortError,
+    buildGiftBatch, buildGiftPackage, estimateGiftSize, GiftOutOfMemory, giftBatchFileName, giftFileNames, giftNamesLabel, giftStepsFor, isAbortError,
     type GiftPackageEnv, type GiftPackageResult, type GiftPartKey, type GiftProgress, type GiftSizeEstimate, type GiftStep,
 } from '../gift-package.js';
 import { buildGiftCover, giftDefaultSalutation, giftFacts } from '../gift-cover.js';
@@ -54,7 +54,14 @@ import { barEl } from './prog-bar.js';
 import { spinEl } from './busy.js';
 import { svgToPngBlob } from './svg-png.js';
 import { fanPhotoPortrait } from './fan-view.js';
-import type { SelectionRef } from '../view-selection.js';
+import { selectionPersonIds, type SelectionRef } from '../view-selection.js';
+import { selectionIndex, selectionText } from './view-selection-ui.js';
+import { listDisplayName, listKind } from '../person-lists.js';
+import { listKindIcon } from './list-kind-icon.js';
+import {
+    giftBatchActive, giftBatchDefaultSalutation, giftBatchRows, giftBatchRowSettings, giftBatchSalutation, giftOwnDiff, giftOwnParts,
+    type GiftOwnSettings, type GiftRecipientRow,
+} from '../gift-batch.js';
 
 export const GIFT_MODAL_ID = 'gift-modal';
 
@@ -118,6 +125,33 @@ interface GiftUi {
     est: { now: GiftSizeEstimate; all: GiftSizeEstimate } | null;
     /** Step 5's typing: the cover page's preview drawn again a moment later. */
     letterTimer: number;
+    /** A list or the selection (§7 [53]): its recipients' rows; null for a person or a couple. */
+    batch: GiftBatchUi | null;
+}
+
+/** Where a batch's recipients come from: a list of people or the window's selection (098). */
+type GiftBatchSource = { kind: 'list'; listId: string } | { kind: 'selection'; ref: SelectionRef };
+
+interface GiftBatchUi {
+    source: GiftBatchSource | null;
+    /** The selection the guide was opened with (offered beside the lists). */
+    selection: SelectionRef | null;
+    /** "Spouses and partners as one package". */
+    pairs: boolean;
+    rows: GiftRecipientRow[];
+    removed: Set<string>;
+    own: Map<string, GiftOwnSettings>;
+    salutations: Map<string, string>;
+    /** The row steps 2–5 show (step 5's ‹ name ›). */
+    preview: string | null;
+    /** The row edited on its own (§7 [54]) and the common settings meanwhile. */
+    edit: string | null;
+    common: GiftSettings | null;
+    /** Each row's numbers for the settings now (computed again only when they change). */
+    statsKey: string;
+    stats: Map<string, GiftSummary>;
+    /** The outer archive's name typed in step 6. */
+    fileName?: string;
 }
 
 interface GiftCutInfo {
@@ -368,6 +402,100 @@ function livingOf(u: GiftUi): GiftLivingModel {
     return u.living;
 }
 
+/** The active tree's lists with people, by name (the batch's source field). */
+function batchLists(): Array<{ id: string; name: string; count: number; icon: string }> {
+    return DataManager.getPersonLists()
+        .map(list => ({ id: list.id, name: listDisplayName(list), count: DataManager.getPersonListIds(list.id).length, icon: listKindIcon(listKind(list), 16) }))
+        .filter(l => l.count > 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function batchSourceIds(src: GiftBatchSource | null): PersonId[] {
+    if (!src) return [];
+    if (src.kind === 'list') return DataManager.getPersonListIds(src.listId);
+    return [...(selectionPersonIds(DataManager.getData(), selectionIndex().index, src.ref) ?? [])];
+}
+
+function batchSourceLabel(src: GiftBatchSource | null): string {
+    if (!src) return '';
+    if (src.kind === 'selection') return selectionText(src.ref);
+    const list = DataManager.getPersonList(src.listId);
+    return list ? listDisplayName(list) : '';
+}
+
+function batchNew(data: StromData, source: GiftBatchSource | null, selection: SelectionRef | null): GiftBatchUi {
+    const b: GiftBatchUi = {
+        source, selection, pairs: true, rows: giftBatchRows(data, batchSourceIds(source), true),
+        removed: new Set(), own: new Map(), salutations: new Map(), preview: null, edit: null, common: null, statsKey: '', stats: new Map(),
+    };
+    b.preview = giftBatchActive(b)[0]?.key ?? null;
+    return b;
+}
+
+function batchRow(b: GiftBatchUi, key: string | null): GiftRecipientRow | null {
+    return key ? b.rows.find(r => r.key === key) ?? null : null;
+}
+
+/** The common settings: the guide's own, or the ones put aside while a row is edited. */
+function batchCommon(u: GiftUi): GiftSettings {
+    return u.batch?.common ?? u.g.settings;
+}
+
+/** A row's names: "Daniel Berg", "Eva Berg and Jonas Holm". */
+function batchRowName(u: GiftUi, row: GiftRecipientRow): string {
+    return giftNamesLabel(lang(), row.recipients.map(id => realPerson(u.data, id)).filter((p): p is Person => !!p).map(p => shownName(p) || '?'));
+}
+
+/** Steps 2–5 show the preview row: its recipients and its salutation over the common settings. */
+function batchShow(u: GiftUi): void {
+    const b = u.batch;
+    if (!b || b.edit) return;
+    const active = giftBatchActive(b);
+    if (!active.some(r => r.key === b.preview)) b.preview = active[0]?.key ?? null;
+    const row = batchRow(b, b.preview);
+    const s = u.g.settings;
+    const recipients = row ? [...row.recipients] : [];
+    u.g.recipients = recipients.length ? recipients : [null];
+    s.cut = { ...s.cut, recipients };
+    if (row) s.letter = { ...s.letter, salutation: giftBatchSalutation(u.data, b, s, row) };
+}
+
+/** Each row's people, generations, living and size for its own settings over the common ones. */
+function batchStats(u: GiftUi): Map<string, GiftSummary> {
+    const b = u.batch!;
+    const common = batchCommon(u);
+    const key = JSON.stringify([common.cut.depth, common.cut.branches, common.privacy, common.parts, common.photos, [...b.own], b.rows.map(r => r.key)]);
+    if (b.statsKey !== key) {
+        const now = new Date();
+        b.stats = new Map(b.rows.filter(r => !r.lone).map(r => [r.key, giftSummary(u.data, giftBatchRowSettings(u.data, b, common, r), now)]));
+        b.statsKey = key;
+    }
+    return b.stats;
+}
+
+/** The batch's totals: packages, recipients, couples, the living and the outer ZIP's size. */
+function batchTotals(u: GiftUi): { packages: number; recipients: number; couples: number; living: number; bytes: number } {
+    const b = u.batch!;
+    const stats = batchStats(u);
+    const active = giftBatchActive(b);
+    let living = 0;
+    let bytes = 0;
+    for (const r of active) {
+        const st = stats.get(r.key);
+        if (st) { living += st.living; bytes += st.bytes; }
+    }
+    return {
+        packages: active.length, recipients: active.reduce((n, r) => n + r.recipients.length, 0),
+        couples: active.filter(r => r.recipients.length === 2).length, living, bytes,
+    };
+}
+
+/** The guide can go on: the recipients chosen with a family; a batch has at least one package. */
+function canGo(u: GiftUi): boolean {
+    if (u.batch && !u.batch.edit && !giftBatchActive(u.batch).length) return false;
+    return canGo(u);
+}
+
 /** A small round portrait place with the initials (the design's avatar), framed by gender. */
 function avatar(p: Person): HTMLElement {
     const av = el('span', p.gender === 'female' ? 'gift-av is-f' : 'gift-av', personInitials(p.firstName, p.lastName));
@@ -481,7 +609,15 @@ export const giftTreeMethods = uiModule({
         const first = opts.recipients?.[0] ?? opts.personId ?? focusId ?? null;
         let mode: GiftMode = opts.mode ?? (opts.recipients && opts.recipients.length === 2 ? 'pair' : 'single');
         if (mode === 'list' && isPhone()) mode = 'single';
-        const recipients: Array<PersonId | null> = [realPerson(data, first)?.id ?? null];
+        let batch: GiftBatchUi | null = null;
+        if (mode === 'list') {
+            const lists = batchLists();
+            const listId = opts.listId && lists.some(l => l.id === opts.listId) ? opts.listId : lists[0]?.id;
+            const source: GiftBatchSource | null = opts.selection ? { kind: 'selection', ref: opts.selection } : listId ? { kind: 'list', listId } : null;
+            batch = batchNew(data, source, opts.selection ?? null);
+        }
+        const previewRow = batch ? batchRow(batch, batch.preview) : null;
+        const recipients: Array<PersonId | null> = previewRow ? [...previewRow.recipients] : [realPerson(data, first)?.id ?? null];
         if (mode === 'pair') {
             const second = opts.recipients?.[1] ?? (recipients[0] ? giftSuggestedPartner(data, recipients[0]) : null);
             recipients.push(realPerson(data, second)?.id ?? null);
@@ -495,8 +631,9 @@ export const giftTreeMethods = uiModule({
             summaryKey: '', summary: null, livingKey: '', living: null, mq: null, onMq: null,
             branchesScreen: false, view: null, viewKey: '', expanded: new Set(), cutInfo: null,
             relKey: '', rel: new Map(), dropPreview: null, run: null, carry: null, coverKey: '', coverHtml: '', estKey: '', est: null, letterTimer: 0,
+            batch,
         };
-        if (opts.step && giftCanProceed(g, data)) giftGoTo(g, opts.step);
+        if (opts.step && canGo(ui)) giftGoTo(g, opts.step);
         // A window turned between phone and wider: the steps drawn again (the greyed list choice, the footer).
         if (typeof matchMedia === 'function') {
             const mq = matchMedia(MQ_PHONE_BAR);
@@ -534,6 +671,7 @@ export const giftTreeMethods = uiModule({
                 return;
             }
             if (ui.branchesScreen) { this.giftBranchesScreen(false); return; }
+            if (ui.batch?.edit) { this.giftBatchEditEnd(true); return; }
             if (ui.g.step <= 1) this.closeGiftTree();
             else this.giftStep(-1);
         });
@@ -571,7 +709,7 @@ export const giftTreeMethods = uiModule({
             u.run = null;
             if (u.letterTimer) clearTimeout(u.letterTimer);
             if (u.mq && u.onMq) u.mq.removeEventListener('change', u.onMq);
-            if (giftCanProceed(u.g, u.data)) giftRemember(u.g, summaryOf(u).persons, new Date());
+            if (canGo(u)) giftRemember(u.g, summaryOf(u).persons, new Date());
         }
         document.getElementById(GIFT_COVER_ID)?.remove();
         document.getElementById(GIFT_MODAL_ID)?.querySelector('.gift-run-foot')?.remove();
@@ -586,7 +724,7 @@ export const giftTreeMethods = uiModule({
 
     async giftCreateAsync(): Promise<void> {
         const u = ui;
-        if (!u || u.run?.phase === 'making' || !giftCanProceed(u.g, u.data)) return;
+        if (!u || u.run?.phase === 'making' || !canGo(u)) return;
         const s = u.g.settings;
         // Near the browser's limit: the question first; "Leave the photos out" makes it without them.
         const answer = await confirmMemoryForOutput({
@@ -789,7 +927,8 @@ export const giftTreeMethods = uiModule({
     giftGo(step: number): void {
         if (!ui) return;
         if (ui.run?.phase === 'making') return;
-        if (step > 1 && !giftCanProceed(ui.g, ui.data)) return;
+        if (step > 1 && !canGo(ui)) return;
+        if (ui.batch?.edit && (step < 2 || step > 5)) { this.giftBatchEditEnd(true); return; }
         ui.run = null;
         ui.closePicker?.();
         giftGoTo(ui.g, step);
@@ -810,22 +949,26 @@ export const giftTreeMethods = uiModule({
         const t = strings.giftTree;
         const g = u.g;
         const names = t.stepNames;
-        const can = giftCanProceed(g, u.data);
+        const can = canGo(u);
         const sum = summaryOf(u);
         overlay.dataset.step = String(g.step);
 
         // Header: ‹ the step before (a phone: ‹ always, from step 1 it closes), the title, "step N of 6: …".
         const back = overlay.querySelector<HTMLButtonElement>('#gift-back');
         const sub2 = g.step === 2 && u.branchesScreen && isPhone();
+        const editing = u.batch?.edit ? batchRow(u.batch, u.batch.edit) : null;
         if (back) {
-            back.classList.toggle('is-first', g.step <= 1 && !sub2);
+            back.classList.toggle('is-first', g.step <= 1 && !sub2 && !editing);
             back.innerHTML = MODAL_BACK_CHEVRON;
-            const label = sub2 ? names[g.step - 1] : g.step > 1 ? names[g.step - 2] : strings.buttons.close;
+            const label = editing ? t.batch.allRecipients : sub2 ? names[g.step - 1] : g.step > 1 ? names[g.step - 2] : strings.buttons.close;
             back.appendChild(el('span', 'gift-back-name', g.step > 1 ? label : ''));
-            back.setAttribute('aria-label', g.step > 1 ? `${t.guide.back}: ${label}` : strings.buttons.close);
+            back.setAttribute('aria-label', editing ? label : g.step > 1 ? `${t.guide.back}: ${label}` : strings.buttons.close);
         }
+        const title = overlay.querySelector('#gift-title');
+        if (title) title.textContent = editing ? `${t.title} · ${batchRowName(u, editing)}` : t.title;
+        overlay.classList.toggle('is-own', !!editing);
         const sub = overlay.querySelector('#gift-sub');
-        if (sub) sub.textContent = t.step(g.step, names[g.step - 1]);
+        if (sub) sub.textContent = t.step(g.step, names[g.step - 1]) + (editing ? ` · ${t.batch.ownSub}` : '');
         const subBtn = overlay.querySelector('#gift-sub-btn');
         if (subBtn) {
             subBtn.textContent = `${t.stepPhone(g.step, names[g.step - 1])}${sub2 ? ` › ${t.cut.branchesSub}` : ''} `;
@@ -849,7 +992,7 @@ export const giftTreeMethods = uiModule({
                 tab.dataset.step = String(i);
                 tab.dataset.gk = `tab-${i}`;
                 if (i === g.step) tab.setAttribute('aria-current', 'step');
-                if ((i > 1 && !can) || u.run?.phase === 'making') tab.setAttribute('aria-disabled', 'true');
+                if ((i > 1 && !can) || u.run?.phase === 'making' || (editing && (i < 2 || i > 5))) tab.setAttribute('aria-disabled', 'true');
                 const k = el('span', 'gift-k', String(i));
                 k.setAttribute('aria-hidden', 'true');
                 tab.append(k, el('span', 'gift-tab-l', names[i - 1]));
@@ -872,6 +1015,7 @@ export const giftTreeMethods = uiModule({
             u.dropPreview?.();
             u.dropPreview = null;
             pane.replaceChildren();
+            if (editing && !u.run) pane.appendChild(this.giftBatchOwnLine(editing));
             if (u.run) this.giftRenderRun(pane);
             else if (g.step === 1) this.giftRenderForWhom(pane);
             else if (g.step === 2) this.giftRenderCut(pane);
@@ -896,7 +1040,7 @@ export const giftTreeMethods = uiModule({
         if (prev) { prev.hidden = g.step <= 1; prev.textContent = t.guide.back; }
         if (cancel) cancel.hidden = g.step > 1;
         if (next) {
-            next.textContent = g.step >= GIFT_GUIDE_STEPS ? t.create : t.guide.next;
+            next.textContent = editing && g.step >= 5 ? t.batch.allRecipients : g.step >= GIFT_GUIDE_STEPS ? t.create : t.guide.next;
             next.disabled = !can;
         }
         // While making and at its end: the run's own buttons instead of the guide's.
@@ -1099,19 +1243,25 @@ export const giftTreeMethods = uiModule({
         top.append(langField, motif);
         left.appendChild(top);
 
-        // The salutation the template puts in.
-        const salField = el('label', 'gift-field gift-letter-sal');
-        salField.appendChild(el('span', 'gift-label', L.salutationH));
-        const sal = el('input', 'gift-input');
-        sal.type = 'text';
-        sal.value = letter.salutation;
-        sal.dataset.gk = 'letter-salutation';
-        sal.addEventListener('input', () => {
-            s.letter = { ...s.letter, salutation: sal.value };
-            this.giftLetterChanged();
-        });
-        salField.appendChild(sal);
-        left.appendChild(salField);
+        // The salutation the template puts in (a batch: each recipient's own, in step 1's table).
+        if (u.batch && !u.batch.edit) {
+            const salField = el('div', 'gift-field gift-letter-sal');
+            salField.append(el('span', 'gift-label', L.salutationH), el('p', 'gift-note gift-sal-note', strings.giftTree.batch.salutationNote));
+            left.appendChild(salField);
+        } else {
+            const salField = el('label', 'gift-field gift-letter-sal');
+            salField.appendChild(el('span', 'gift-label', L.salutationH));
+            const sal = el('input', 'gift-input');
+            sal.type = 'text';
+            sal.value = letter.salutation;
+            sal.dataset.gk = 'letter-salutation';
+            sal.addEventListener('input', () => {
+                s.letter = { ...s.letter, salutation: sal.value };
+                this.giftLetterChanged();
+            });
+            salField.appendChild(sal);
+            left.appendChild(salField);
+        }
 
         // The message: the template until rewritten; "Insert the template again".
         const msgField = el('div', 'gift-field gift-letter-msg');
@@ -1177,6 +1327,8 @@ export const giftTreeMethods = uiModule({
         open.dataset.gk = 'open-cover';
         head.appendChild(open);
         right.appendChild(head);
+        const sw = this.giftBatchPreviewSwitch();
+        if (sw) right.appendChild(sw);
         right.appendChild(this.giftCoverThumb());
 
         cols.append(left, right);
@@ -1237,10 +1389,21 @@ export const giftTreeMethods = uiModule({
             box.append(el('b', undefined, value), el('span', undefined, label));
             stats.appendChild(box);
         };
-        stat(String(sum.persons), G.persons(sum.persons));
-        stat(String(sum.generations), G.generations(sum.generations));
-        stat(String(sum.living), G.living(sum.living));
-        stat(formatTreeSize(sum.bytes, language), R.zipStat);
+        const batch = u.batch && !u.batch.edit ? u.batch : null;
+        const B = t.batch;
+        if (batch) {
+            // A batch: packages, recipients, the living and the outer ZIP.
+            const tot = batchTotals(u);
+            stat(String(tot.packages), B.packages(tot.packages));
+            stat(String(tot.recipients), G.persons(tot.recipients));
+            stat(String(tot.living), G.living(tot.living));
+            stat(formatTreeSize(tot.bytes, language), R.zipStat);
+        } else {
+            stat(String(sum.persons), G.persons(sum.persons));
+            stat(String(sum.generations), G.generations(sum.generations));
+            stat(String(sum.living), G.living(sum.living));
+            stat(formatTreeSize(sum.bytes, language), R.zipStat);
+        }
         left.appendChild(stats);
 
         // What the package will be, each row with "Change" to its step.
@@ -1256,7 +1419,12 @@ export const giftTreeMethods = uiModule({
             }
             dl.append(el('dt', undefined, dt), d);
         };
-        row(R.forRow, giftNamesLabel(language, names), 1);
+        if (batch) {
+            const n = giftBatchActive(batch).length;
+            row(R.forRow, `${batchSourceLabel(batch.source) || B.tableH} · ${n} ${B.packages(n)}`, 1);
+        } else {
+            row(R.forRow, giftNamesLabel(language, names), 1);
+        }
         const rows = this.giftSettingsRows(sum);
         const L = t.letter;
         rows.forEach(([dt, dd], i) => {
@@ -1277,11 +1445,13 @@ export const giftTreeMethods = uiModule({
         input.dataset.gk = 'file-name';
         input.spellcheck = false;
         input.autocomplete = 'off';
-        const fallback = defaultZipName(u);
-        input.value = s.fileName ?? fallback;
+        const fallback = batch ? giftBatchFileName(s.letter.lang, new Date().getFullYear()) : defaultZipName(u);
+        input.value = (batch ? batch.fileName : s.fileName) ?? fallback;
         input.addEventListener('input', () => {
             const v = input.value.trim();
-            s.fileName = v && v !== fallback ? v : undefined;
+            const name = v && v !== fallback ? v : undefined;
+            if (batch) batch.fileName = name;
+            else s.fileName = name;
         });
         field.appendChild(input);
         left.appendChild(field);
@@ -1464,13 +1634,29 @@ export const giftTreeMethods = uiModule({
         const t = strings.giftTree.guide;
         const box = el('div', 'gift-sum');
         box.setAttribute('aria-live', 'polite');
+        const B = strings.giftTree.batch;
+        const line = (html: string): void => { const s = el('span'); s.innerHTML = html; box.appendChild(s); };
+        if (u.batch && !u.batch.edit) {
+            // A batch: the list's name, packages and recipients, couples, the outer ZIP's size.
+            box.appendChild(el('span', 'gift-sum-name', batchSourceLabel(u.batch.source) || B.tableH));
+            if (!canGo(u)) return box;
+            const tot = batchTotals(u);
+            line(`<b>${tot.packages}</b> ${esc(B.packages(tot.packages))} · ${tot.recipients} ${esc(t.persons(tot.recipients))}`);
+            if (tot.couples) box.appendChild(el('span', undefined, `${tot.couples} ${B.couples(tot.couples)}`));
+            box.appendChild(el('span', undefined, t.zip(formatTreeSize(tot.bytes, lang()))));
+            return box;
+        }
         const names = giftRecipients(u.g).map(id => realPerson(u.data, id)).filter((p): p is Person => !!p).map(p => shownName(p) || '?');
         box.appendChild(el('span', 'gift-sum-name', giftNamesLabel(lang(), names)));
-        if (!giftCanProceed(u.g, u.data)) return box;
-        const line = (html: string): void => { const s = el('span'); s.innerHTML = html; box.appendChild(s); };
+        if (!canGo(u)) return box;
         line(`<b>${sum.persons}</b> ${esc(t.persons(sum.persons))} · ${sum.generations} ${esc(t.generations(sum.generations))}`);
         line(`<b>${sum.living}</b> ${esc(t.living(sum.living))}`);
         box.appendChild(el('span', undefined, t.zip(formatTreeSize(sum.bytes, lang()))));
+        if (u.batch?.edit && u.batch.common) {
+            // One row edited: which steps are its own.
+            const parts = giftOwnParts(giftOwnDiff(u.batch.common, u.g.settings) ?? undefined);
+            if (parts.length) box.appendChild(el('span', 'gift-sum-own', B.ownParts(parts.map(k => B.ownPart[k]).join(', '))));
+        }
         return box;
     },
 
@@ -1479,7 +1665,7 @@ export const giftTreeMethods = uiModule({
         const u = ui;
         if (!u) return;
         const t = strings.giftTree;
-        const can = giftCanProceed(u.g, u.data);
+        const can = canGo(u);
         const sum = summaryOf(u);
         const rows = t.stepNames.map((name, i) => ({
             label: name, icon: String(i + 1), active: i + 1 === u.g.step,
@@ -1504,7 +1690,7 @@ export const giftTreeMethods = uiModule({
         const t = strings.giftTree;
         const G = t.guide;
         const phone = isPhone();
-        const can = giftCanProceed(g, u.data);
+        const can = canGo(u);
         const cols = el('div', 'gift-cols is-s1');
         const left = el('div', 'gift-col');
         const right = el('div', 'gift-col gift-defaults');
@@ -1552,6 +1738,15 @@ export const giftTreeMethods = uiModule({
         left.appendChild(group);
         if (phone && u.listWhy) left.appendChild(el('p', 'gift-note', G.listPhoneNote));
 
+        // A list or the selection: the source, the couples, the signature and the recipients' table.
+        if (g.mode === 'list' && u.batch) {
+            cols.classList.add('is-list');
+            this.giftBatchPick(left);
+            cols.appendChild(left);
+            pane.appendChild(cols);
+            return;
+        }
+
         // Who: one person, or the couple's two.
         const who = el('div', 'gift-who');
         const chosen = g.recipients;
@@ -1582,19 +1777,7 @@ export const giftTreeMethods = uiModule({
         }
         left.appendChild(who);
 
-        // The signature (shown in the letter and when the app opens).
-        const field = el('label', 'gift-field');
-        field.appendChild(el('span', 'gift-label', phone ? G.signatureShort : G.signature));
-        const input = el('input', 'gift-input');
-        input.type = 'text';
-        input.value = g.settings.letter.signature;
-        input.dataset.gk = 'signature';
-        input.autocomplete = 'off';
-        input.addEventListener('input', () => {
-            g.settings.letter = { ...g.settings.letter, signature: input.value };
-        });
-        field.appendChild(input);
-        left.appendChild(field);
+        left.appendChild(this.giftSignatureField());
 
         cols.appendChild(left);
         if (can) {
@@ -1619,6 +1802,269 @@ export const giftTreeMethods = uiModule({
             cols.appendChild(right);
         }
         pane.appendChild(cols);
+    },
+
+    /** The signature (shown in the letter and when the app opens). */
+    giftSignatureField(): HTMLElement {
+        const g = ui!.g;
+        const G = strings.giftTree.guide;
+        const field = el('label', 'gift-field gift-signature');
+        field.appendChild(el('span', 'gift-label', isPhone() ? G.signatureShort : G.signature));
+        const input = el('input', 'gift-input');
+        input.type = 'text';
+        input.value = g.settings.letter.signature;
+        input.dataset.gk = 'signature';
+        input.autocomplete = 'off';
+        input.addEventListener('input', () => {
+            g.settings.letter = { ...g.settings.letter, signature: input.value };
+        });
+        field.appendChild(input);
+        return field;
+    },
+
+    /** Step 1 of a batch (§7 [53]): the list or selection, couples as one package, the signature, the recipients. */
+    giftBatchPick(left: HTMLElement): void {
+        const u = ui!;
+        const b = u.batch!;
+        const B = strings.giftTree.batch;
+        const lists = batchLists();
+
+        // The list or the selection (as the export's list field: the kind's icon, "name · N people").
+        if (!lists.length && !b.selection) {
+            left.appendChild(el('p', 'gift-note gift-batch-none', B.noLists));
+        } else {
+            const field = el('div', 'gift-field gift-batch-source');
+            const label = el('label', 'gift-label', B.sourceH);
+            label.htmlFor = 'gift-batch-source';
+            field.appendChild(label);
+            const row = el('div', 'export-list-field');
+            const icon = el('span', 'export-list-kind');
+            icon.setAttribute('aria-hidden', 'true');
+            const src = b.source;
+            icon.innerHTML = src?.kind === 'list' ? (lists.find(l => l.id === src.listId)?.icon ?? '') : iconSvg('list', { size: 16 });
+            const select = el('select', 'gift-input gift-select');
+            select.id = 'gift-batch-source';
+            select.dataset.gk = 'batch-source';
+            if (b.selection) {
+                const o = el('option', undefined, `${selectionText(b.selection)} · ${strings.lists.persons(batchSourceIds({ kind: 'selection', ref: b.selection }).length)}`);
+                o.value = 'selection';
+                select.appendChild(o);
+            }
+            for (const l of lists) {
+                const o = el('option', undefined, `${l.name} · ${strings.lists.persons(l.count)}`);
+                o.value = `list:${l.id}`;
+                select.appendChild(o);
+            }
+            select.value = src?.kind === 'selection' ? 'selection' : src ? `list:${src.listId}` : '';
+            select.addEventListener('change', () => this.giftBatchSetSource(select.value));
+            row.append(icon, select);
+            field.appendChild(row);
+            left.appendChild(field);
+        }
+        left.appendChild(this.giftCheck('batch-pairs', B.pairs, b.pairs, (on) => this.giftBatchSetPairs(on)));
+        left.appendChild(this.giftSignatureField());
+
+        // The recipients: one row per package.
+        const active = giftBatchActive(b);
+        const recipients = active.reduce((n, r) => n + r.recipients.length, 0);
+        const couples = active.filter(r => r.recipients.length === 2).length;
+        const head = el('div', 'gift-rcp-head');
+        head.appendChild(el('h3', 'gift-h3', `${B.tableH} · ${B.tableCount(active.length, recipients, couples)}`));
+        head.appendChild(el('p', 'gift-note gift-rcp-note', B.tableNote));
+        left.appendChild(head);
+        const shown = b.rows.filter(r => !b.removed.has(r.key));
+        if (!active.length && b.source) left.appendChild(el('p', 'gift-note gift-batch-empty', B.empty));
+        if (shown.length) left.appendChild(this.giftBatchTable(shown));
+        if (b.removed.size) {
+            const note = el('p', 'gift-note gift-rcp-removed', `${B.removed(b.removed.size)} `);
+            const back = button('link-button', B.putBack, () => {
+                b.removed.clear();
+                batchShow(u);
+                this.giftRender();
+            });
+            back.dataset.gk = 'put-back';
+            note.appendChild(back);
+            left.appendChild(note);
+        }
+    },
+
+    /** The recipients' table: name (years or "couple"), salutation, people, living, common/own with Edit…, ×. */
+    giftBatchTable(rows: GiftRecipientRow[]): HTMLElement {
+        const u = ui!;
+        const b = u.batch!;
+        const B = strings.giftTree.batch;
+        const common = batchCommon(u);
+        const stats = batchStats(u);
+        const table = el('div', 'gift-rcp');
+        table.setAttribute('role', 'table');
+        table.setAttribute('aria-label', B.tableH);
+        const head = el('div', 'gift-rcp-h');
+        head.setAttribute('role', 'row');
+        for (const [cls, text] of [['who', B.col.who], ['sal', B.col.salutation], ['num', B.col.persons], ['num', B.col.living], ['set', B.col.settings], ['x', '']] as const) {
+            const c = el('span', `gift-rcp-c is-${cls}`, text);
+            c.setAttribute('role', 'columnheader');
+            head.appendChild(c);
+        }
+        table.appendChild(head);
+        for (const r of rows) {
+            const name = batchRowName(u, r);
+            const own = b.own.has(r.key);
+            const line = el('div', `gift-rcp-r${r.lone ? ' is-lone' : ''}${own ? ' is-own' : ''}`);
+            line.setAttribute('role', 'row');
+            line.dataset.key = r.key;
+            const cell = (cls: string): HTMLElement => {
+                const c = el('div', `gift-rcp-c is-${cls}`);
+                c.setAttribute('role', 'cell');
+                line.appendChild(c);
+                return c;
+            };
+            const who = cell('who');
+            const first = realPerson(u.data, r.recipients[0]);
+            who.append(el('span', 'gift-rcp-name', name),
+                el('span', 'gift-rcp-s', r.recipients.length === 2 ? B.couple : first ? yearsOf(first) : ''));
+            const sal = cell('sal');
+            if (!r.lone) {
+                const input = el('input', 'gift-input gift-rcp-sal');
+                input.type = 'text';
+                input.autocomplete = 'off';
+                input.value = giftBatchSalutation(u.data, b, common, r);
+                input.dataset.gk = `sal-${r.key}`;
+                input.setAttribute('aria-label', `${B.col.salutation}: ${name}`);
+                input.addEventListener('input', () => {
+                    b.salutations.set(r.key, input.value);
+                    if (r.key === b.preview) u.g.settings.letter = { ...u.g.settings.letter, salutation: input.value };
+                });
+                sal.appendChild(input);
+            }
+            const st = stats.get(r.key);
+            cell('num').textContent = st ? String(st.persons) : '–';
+            cell('num').textContent = st ? String(st.living) : '–';
+            const set = cell('set');
+            if (r.lone) {
+                set.appendChild(el('span', 'gift-rcp-tag', B.lone));
+            } else {
+                set.appendChild(el('span', 'gift-rcp-tag', own ? B.own : B.common));
+                const edit = button('link-button gift-rcp-edit', B.edit, () => this.giftBatchEdit(r.key));
+                edit.dataset.gk = `edit-${r.key}`;
+                edit.setAttribute('aria-label', B.editFor(name));
+                set.append(' ', edit);
+            }
+            const x = button('gift-rcp-x', '×', () => {
+                b.removed.add(r.key);
+                batchShow(u);
+                this.giftRender();
+            });
+            x.dataset.gk = `rm-${r.key}`;
+            x.title = B.remove;
+            x.setAttribute('aria-label', B.removeFor(name));
+            cell('x').appendChild(x);
+            table.appendChild(line);
+        }
+        return table;
+    },
+
+    /** Another list or the selection: its rows (own settings and salutations kept by person). */
+    giftBatchSetSource(value: string): void {
+        const u = ui;
+        const b = u?.batch;
+        if (!u || !b) return;
+        b.source = value === 'selection' && b.selection ? { kind: 'selection', ref: b.selection }
+            : value.startsWith('list:') ? { kind: 'list', listId: value.slice(5) } : null;
+        if (b.source?.kind === 'list') u.listId = b.source.listId;
+        b.rows = giftBatchRows(u.data, batchSourceIds(b.source), b.pairs);
+        b.removed.clear();
+        batchShow(u);
+        this.giftRender();
+    },
+
+    /** "Spouses and partners as one package" on or off: the rows again. */
+    giftBatchSetPairs(on: boolean): void {
+        const u = ui;
+        const b = u?.batch;
+        if (!u || !b) return;
+        b.pairs = on;
+        b.rows = giftBatchRows(u.data, batchSourceIds(b.source), on);
+        batchShow(u);
+    },
+
+    /** "Edit…" (§7 [54]): steps 2–5 for this row alone, from its settings now (common with its own over them). */
+    giftBatchEdit(key: string): void {
+        const u = ui;
+        const b = u?.batch;
+        const row = b ? batchRow(b, key) : null;
+        if (!u || !b || !row || b.edit) return;
+        b.common = u.g.settings;
+        b.edit = key;
+        u.g.settings = giftBatchRowSettings(u.data, b, b.common, row);
+        u.g.recipients = [...row.recipients];
+        this.giftGo(2);
+    },
+
+    /** Back to all recipients: what the edit changed stays the row's own; `keep` false drops it ("Back to common"). */
+    giftBatchEditEnd(keep: boolean): void {
+        const u = ui;
+        const b = u?.batch;
+        const row = b ? batchRow(b, b.edit) : null;
+        if (!u || !b || !b.common || !row) return;
+        const common = b.common;
+        if (keep) {
+            const diff = giftOwnDiff(common, u.g.settings);
+            if (diff) b.own.set(row.key, diff);
+            else b.own.delete(row.key);
+            const typed = u.g.settings.letter.salutation;
+            const fallback = giftBatchDefaultSalutation(u.data, row, b.own.get(row.key)?.letter?.lang ?? common.letter.lang);
+            if (typed === fallback) b.salutations.delete(row.key);
+            else b.salutations.set(row.key, typed);
+        } else {
+            b.own.delete(row.key);
+        }
+        u.g.settings = common;
+        b.common = null;
+        b.edit = null;
+        batchShow(u);
+        u.closePicker?.();
+        u.branchesScreen = false;
+        u.g.step = 1;
+        this.giftRender();
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(`#${GIFT_MODAL_ID} [data-gk="edit-${row.key}"]`)?.focus({ preventScroll: true }));
+    },
+
+    /** The edit's sentence on top of steps 2–5: "Changes only for … – the others have the common settings. Back to common". */
+    giftBatchOwnLine(row: GiftRecipientRow): HTMLElement {
+        const B = strings.giftTree.batch;
+        const p = el('p', 'gift-own-line');
+        p.append(el('b', undefined, B.ownH(batchRowName(ui!, row))), ` ${B.ownRest} `);
+        const back = button('link-button', B.backToCommon, () => this.giftBatchEditEnd(false));
+        back.dataset.gk = 'back-to-common';
+        p.appendChild(back);
+        return p;
+    },
+
+    /** Step 5's ‹ name ›: the letter's preview for the previous or next recipient. */
+    giftBatchPreviewSwitch(): HTMLElement | null {
+        const u = ui!;
+        const b = u.batch;
+        if (!b || b.edit) return null;
+        const active = giftBatchActive(b);
+        if (active.length < 2) return null;
+        const B = strings.giftTree.batch;
+        const at = Math.max(0, active.findIndex(r => r.key === b.preview));
+        const go = (d: number): void => {
+            b.preview = active[(at + d + active.length) % active.length].key;
+            batchShow(u);
+            this.giftRender();
+        };
+        const box = el('div', 'gift-switch');
+        const prev = button('gift-switch-b', '‹', () => go(-1));
+        prev.dataset.gk = 'preview-prev';
+        prev.setAttribute('aria-label', B.previewPrev);
+        const next = button('gift-switch-b', '›', () => go(1));
+        next.dataset.gk = 'preview-next';
+        next.setAttribute('aria-label', B.previewNext);
+        const name = el('span', 'gift-switch-name', batchRowName(u, active[at]));
+        name.setAttribute('aria-live', 'polite');
+        box.append(prev, name, next);
+        return box;
     },
 
     /** A recipient's row: portrait, name, years and what they are, "Change…" (or "Choose a person…" while missing). */
@@ -1681,7 +2127,16 @@ export const giftTreeMethods = uiModule({
     giftSetMode(mode: GiftMode): void {
         const u = ui;
         if (!u || u.g.mode === mode) return;
-        const first = u.g.recipients[0] ?? null;
+        if (mode === 'list') {
+            const lists = batchLists();
+            const listId = u.listId && lists.some(l => l.id === u.listId) ? u.listId : lists[0]?.id;
+            u.batch = batchNew(u.data, listId ? { kind: 'list', listId } : null, null);
+            const row = batchRow(u.batch, u.batch.preview);
+            this.giftRestartFor('list', row ? [...row.recipients] : [null]);
+            return;
+        }
+        const first = u.batch ? (u.focusId ?? u.g.recipients[0] ?? null) : u.g.recipients[0] ?? null;
+        u.batch = null;
         const recipients: Array<PersonId | null> = [first];
         if (mode === 'pair') recipients.push(first ? giftSuggestedPartner(u.data, first) : null);
         this.giftRestartFor(mode, recipients);

@@ -142,7 +142,8 @@ export function giftGoTo(state: GiftState, to: number): void {
 /** Whether the guide can go on from step 1: the recipients chosen (a couple both, two people) and with a family. */
 export function giftCanProceed(state: GiftState, data: StromData): boolean {
     const chosen = giftRecipients(state);
-    if (state.mode === 'pair') {
+    // A list: its rows are checked by the batch; here the row its steps show (a person or a couple of it).
+    if (state.mode === 'pair' || (state.mode === 'list' && chosen.length === 2)) {
         if (chosen.length !== 2 || chosen[0] === chosen[1]) return false;
         return chosen.some(id => giftHasFamily(data, id)) || giftHasFamilyTogether(data, chosen[0], chosen[1]);
     }
