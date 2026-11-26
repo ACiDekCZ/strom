@@ -20,7 +20,8 @@
  * keeps every old path unchanged.
  */
 
-import { inShowcase, showcaseResearchKnown, showcaseWhy } from '../research-link.js';
+import { inShowcase, researchMarkNone, showcaseResearchKnown, showcaseWhy } from '../research-link.js';
+import { showcaseOffAttrs } from './sample-why.js';
 import { canvasBusy } from './canvas-busy.js';
 import { researchActionLabel, researchMarkFlags, researchLinkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
@@ -4068,7 +4069,7 @@ export const researchSyncMethods = uiModule({
             // round: the pill named by the state, its text hidden, had the button in its middle).
             set('is-warn', `<span class="research-sync-pill-mark" title="${esc(tip)}" aria-hidden="true">!</span>`
                 + `<span class="research-sync-pill-label" title="${esc(tip)}">${esc(w.text)}</span>`
-                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${this.researchSyncActionLabel(w.action, w.button)}</button>`);
+                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}"${w.action === 'send' || w.action === 'retry' ? showcaseOffAttrs('send', w.button, '', this.researchSyncActionMark(w.action)) : ''} onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${this.researchSyncActionLabel(w.action, w.button)}</button>`);
             pill.onclick = (e) => {
                 if (!(e.target as Element | null)?.closest('button')) this.openResearchSyncMenu();
             };
@@ -4129,8 +4130,10 @@ export const researchSyncMethods = uiModule({
             const busy = sendingTree === ctx.treeId && !handSend;
             // Split: "Send to research | 3 ⌄", the second part shows who changed (A2).
             const more = this.researchSendMoreHtml(busy);
+            // The showcase (spec 143 K4.1): in sight greyed, a click says why (it goes through the bridge: no mark).
+            const showcase = showcaseOffAttrs('send', s.sendButton, '', researchMarkNone());
             set(`is-send${more.startsWith('<button') ? ' is-split' : ''}`, `<button type="button" class="research-sync-send" id="research-sync-send"${busy ? ' disabled aria-busy="true"' : ''}`
-                + ` title="${esc(s.sendButtonTitle)}" onclick="${call('researchSyncAction', "'send'")}">`
+                + ` title="${esc(s.sendButtonTitle)}"${showcase} onclick="${call('researchSyncAction', "'send'")}">`
                 + (busy
                     ? `<i class="busy-spin s12" aria-hidden="true"></i><span>${esc(s.sending)}</span>`
                     : `<span class="research-sync-send-long">${esc(s.sendButton)}</span><span class="research-sync-send-short">${esc(s.barSend)}</span>`)

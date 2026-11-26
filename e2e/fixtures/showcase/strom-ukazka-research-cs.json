@@ -1,0 +1,933 @@
+{
+ "kind": "strom-showcase",
+ "format": 1,
+ "lang": "cs",
+ "exportId": "showcase-cs",
+ "sampleVersion": "3.33.0-beta.1",
+ "appVersion": "3.33.0-beta.1",
+ "researchVersion": "1.37.0",
+ "asOf": "2026-11-01T09:00:00.000Z",
+ "name": "Ukázka – rod Horáků",
+ "family": "Horák",
+ "sizeBytes": 42234,
+ "tree": {
+  "format": "ged",
+  "text": "0 HEAD\n1 SOUR STROM_RESEARCH\n2 VERS 1.37.0\n2 NAME Strom Research\n1 DATE 1 NOV 2026\n1 _STROM_TREE 943fce29-c1c6-5433-8031-96ce4bbbcd8d\n1 _STROM_HEAD dd32fd8dc1083bc52217ca0814d2fbb96ced13f9\n1 _STROM_ASOF 2026-11-01T09:00:00Z\n1 _STROM_MARRIED_LAST Y\n1 SUBM @U1@\n1 GEDC\n2 VERS 5.5.1\n2 FORM LINEAGE-LINKED\n1 CHAR UTF-8\n1 NOTE Horákovi\n2 CONT Vygenerováno programem Strom Research z evidence výzkumu. Údaje bez citace pramene nejsou doloženy záznamem.\n2 CONT Soubor je generovaný – needitovat ručně; změny se dělají ve výzkumu.\n0 @P0001@ INDI\n1 NAME Anna /Horáková/\n1 SEX F\n1 REFN P0001\n2 TYPE strom-research\n1 BIRT\n2 DATE 14 JAN 1931\n2 PLAC Dolní Lhota\n3 MAP\n4 LATI N49.1372\n4 LONG E17.8124\n2 ADDR čp. 12\n2 SOUR @S0001@\n3 PAGE fol. 112\n3 QUAY 3\n3 DATA\n4 DATE 18 JAN 1931\n2 _STROM_STATUS proven\n1 BIRT\n2 DATE 1931\n2 PLAC Dolní Lhota\n3 MAP\n4 LATI N49.1372\n4 LONG E17.8124\n2 _STROM_STATUS lead\n1 CHR\n2 DATE 18 JAN 1931\n2 PLAC Dolní Lhota\n3 MAP\n4 LATI N49.1372\n4 LONG E17.8124\n2 SOUR @S0001@\n3 PAGE fol. 112\n3 QUAY 3\n3 DATA\n4 DATE 18 JAN 1931\n2 _WITN Růžena Horáková\n3 RELA Godparent\n2 _STROM_STATUS proven\n1 _STORY\n2 TYPE vypraveni\n2 TITL Dítě z čp. 12\n2 STAT navrh\n2 TEXT Anna Horáková se narodila **14. ledna 1931** v Dolní Lhotě, v domě čp. 12, kde její rodina hospodařila už dvě generace. Pokřtěna byla o čtyři dny později.\n3 CONT\n3 CONT ## Rodiče\n3 CONT\n3 CONT Její otec Josef, *rolník*, se o sedm let dříve oženil s Marií Krejčí z téže vesnice.\n3 CONT\n3 CONT - otec: Josef Horák, narozen 1898\n3 CONT - matka: Marie roz. Krejčí, narozena 1902\n3 CONT - kmotra: teta Růžena Horáková\n3 CONT\n3 CONT ## Sourozenci\n3 CONT\n3 CONT Anna měla staršího bratra Karla a mladší sestru Věru.\n1 FAMC @F0002@\n0 @P0006@ INDI\n1 NAME Josef /Horák/\n2 SOUR @S0001@\n3 PAGE fol. 112\n3 QUAY 3\n3 DATA\n4 DATE 18 JAN 1931\n1 SEX M\n1 REFN P0006\n2 TYPE strom-research\n1 BIRT\n2 DATE 3 MAR 1898\n2 PLAC Dolní Lhota\n3 MAP\n4 LATI N49.1372\n4 LONG E17.8124\n2 ADDR čp. 12\n2 SOUR @S0003@\n3 PAGE fol. 21\n3 QUAY 3\n3 DATA\n4 DATE 3 MAR 1898\n2 _STROM_STATUS proven\n1 OCCU rolník\n2 SOUR @S0004@\n3 QUAY 2\n2 _STROM_STATUS probable\n1 _STORY\n2 TYPE vypraveni\n2 TITL Hospodář z Dolní Lhoty\n2 STAT hotovo\n2 TEXT Josef Horák se narodil **3. března 1898** jako syn Václava a Kateřiny.\n3 CONT\n3 CONT V roce 1924 se oženil s Marií Krejčí a převzal po otci hospodářství v čp. 12.\n1 _STROM_CONFLICT X0001\n2 TYPE BIRT\n2 TITL Rok narození Josefa Horáka\n2 STAT open\n2 VAL 1898\n3 SOUR @S0003@\n2 VAL 1897\n3 SOUR @S0004@\n1 _STROM_HYPO H0001\n2 TITL Sloužil Josef za 1. světové války?\n2 STAT open\n2 NOTE A: sloužil u pěšího pluku\n3 CONT B: jako rolník byl uvolněn\n2 _VAR A\n3 TITL sloužil u pěšího pluku\n2 _VAR B\n3 TITL jako rolník byl uvolněn\n1 _STROM_SEARCHED\n2 TITL Křest Josefa Horáka kolem 1898\n2 DATE FROM 1897 TO 1899\n2 RESN found\n2 _AT 2026-10-31\n1 _STROM_SEARCHED\n2 TITL Vojenské kmenové listy, ročník 1898\n2 DATE FROM 1916 TO 1918\n2 RESN none\n2 _AT 2026-10-31\n1 FAMC @F0003@\n1 FAMS @F0002@\n0 @P0007@ INDI\n1 NAME Marie /Krejčí/\n2 SOUR @S0001@\n3 PAGE fol. 112\n3 QUAY 3\n3 DATA\n4 DATE 18 JAN 1931\n1 SEX F\n1 REFN P0007\n2 TYPE strom-research\n1 BIRT\n2 DATE 20 AUG 1902\n2 PLAC Dolní Lhota\n3 MAP\n4 LATI N49.1372\n4 LONG E17.8124\n2 SOUR @S0005@\n3 PAGE fol. 47\n3 QUAY 3\n3 DATA\n4 DATE 24 AUG 1902\n2 _STROM_STATUS proven\n1 _STROM_SEARCHED\n2 TITL Křest Marie Krejčí kolem 1902\n2 DATE FROM 1901 TO 1903\n2 RESN found\n2 _AT 2026-10-31\n1 _STROM_CONFLICT X0002\n2 TYPE BIRT\n2 TITL Datum narození Marie Krejčí\n2 STAT open\n2 _STROM_TAKE Y\n2 VAL 24 AUG 1902\n3 SOUR @S0005@\n3 _STROM_SIDE research\n2 VAL 20 AUG 1902\n3 _STROM_SIDE user\n1 FAMS @F0002@\n0 @P0009@ INDI\n1 NAME Václav /Horák/\n1 SEX M\n1 REFN P0009\n2 TYPE strom-research\n1 BIRT\n2 DATE 1 OCT 1865\n2 PLAC Dolní Lhota\n3 MAP\n4 LATI N49.1372\n4 LONG E17.8124\n2 _STROM_STATUS proven\n1 DEAT\n2 DATE 1932\n2 PLAC Lhota Dolní\n3 MAP\n4 LATI N49.1372\n4 LONG E17.8124\n2 _STROM_STATUS lead\n1 FAMS @F0003@\n0 @P0010@ INDI\n1 NAME Kateřina /Vlková/\n1 SEX F\n1 REFN P0010\n2 TYPE strom-research\n1 _STROM_HYPO H0002\n2 TITL Byla Kateřina Vlková z mlýna v Horní Lhotě?\n2 STAT open\n2 NOTE A: dcera Jana Vlka z Horní Lhoty čp. 5\n3 CONT B: dcera Josefa Vlka, mlynáře\n2 _VAR A\n3 TITL dcera Jana Vlka z Horní Lhoty čp. 5\n2 _VAR B\n3 TITL dcera Josefa Vlka, mlynáře\n3 _LINK child\n4 _PERS @P0010@\n1 _STROM_SEARCHED\n2 TITL Křty Vlků v Horní Lhotě 1866–1872\n2 DATE FROM 1866 TO 1872\n2 RESN none\n2 _AT 2026-11-01\n1 _STROM_SEARCHED\n2 TITL Křty Vlků v Horní Lhotě 1868–1872, druhé čtení\n2 DATE FROM 1868 TO 1872\n2 RESN none\n2 _AT 2026-11-01\n1 _STROM_EDGE parents\n2 _SCOPE in\n2 _RESEARCH G0001\n2 _GEN 3\n2 _END named\n2 _NEXT waiting\n2 _EST 1870\n3 PLAC Dolní Lhota\n3 _BASIS child 1898\n2 DATE FROM 1860 TO 1880\n2 _BOOK B0003\n3 TITL Dolní Lhota, N 1855–1889\n3 DATE FROM 1855 TO 1889\n3 _ACCESS online-free\n2 _TASK T0031\n3 _LEVEL link\n3 STAT open\n3 TITL Křest Kateřiny Vlkové kolem 1870\n3 _POS 12\n2 _TASK T0006\n3 _LEVEL link\n3 STAT waiting\n3 TITL Oddavky Václava Horáka a Kateřiny Vlkové\n3 NOTE Snímky 40–45 z oddací matriky Dolní Lhota 1890–1930 k uložení ručně: portál archivu nedovoluje stahování programem.\n2 _TASK T0024\n3 _LEVEL link\n3 STAT waiting\n3 TITL Farní kronika Horní Lhoty: zmínky o mlýně a rodině Vlků\n3 NOTE Odpověď Farního úřadu Horní Lhota na dotaz k farní kronice (mlýn čp. 5, rodina Vlků).\n2 _TASK T0032\n3 _LEVEL link\n3 STAT waiting\n3 TITL Oddavky Vlků v Horní Lhotě 1860–1875\n3 NOTE Rozhodnutí o stahování z archivu Digitální matriky Vzorov\n2 _TRIED T0029\n2 _HYPO H0002\n3 _JOIN P0020\n4 _VAR B\n4 _ISLAND 3\n4 _HELD 5\n3 _JOIN P0021\n4 _VAR B\n4 _ISLAND 3\n4 _HELD 5\n3 _VAR B\n3 _ISLAND 3\n3 _HELD 5\n2 _SEARCHES 2\n2 _SESSIONS 4\n3 _COST 0.00\n3 _PARTIAL Y\n2 _LAST 2026-11-01\n1 FAMS @F0003@\n0 @F0002@ FAM\n1 HUSB @P0006@\n1 WIFE @P0007@\n1 CHIL @P0001@\n1 SOUR @S0001@\n2 PAGE fol. 112\n2 QUAY 3\n2 DATA\n3 DATE 18 JAN 1931\n1 MARR\n2 DATE 12 MAY 1924\n2 PLAC Dolní Lhota\n3 MAP\n4 LATI N49.1372\n4 LONG E17.8124\n2 HUSB\n3 AGE 26y\n2 WIFE\n3 AGE 21y\n2 _STROM_STATUS proven\n0 @F0003@ FAM\n1 HUSB @P0009@\n1 WIFE @P0010@\n1 CHIL @P0006@\n0 @S0001@ SOUR\n1 TITL Křest Anny Horákové 1931\n1 REPO @R0001@\n1 PAGE fol. 112\n1 TEXT Anna, nar. 14. ledna, křtěna 18. ledna 1931, Dolní Lhota čp. 12. Otec Josef Horák, rolník, syn Václava Horáka a Kateřiny roz. Vlkové. Matka Marie roz. Krejčí, dcera Františka Krejčího a Ludmily roz. Novákové. Kmotra Růžena Horák\n2 CONC ová, svobodná.\n1 WWW https://archiv.example.org/matriky\n1 NOTE Fond / svazek: Dolní Lhota, N 1890–1935\n2 CONT Zapsáno: 18 JAN 1931\n2 CONT Doklad: původní záznam, primární informace\n1 REFN S0001\n1 _STROM_READ research\n2 _TXT 12b6e9f39f36992a\n1 _STROM_ORIG Y\n1 OBJE\n2 FORM png\n2 _STROM_KIND excerpt\n2 _STROM_CLIP cac98fa6e33\n2 _URL https://archiv.example.org/matriky\n2 _STROM_SHA 0c9df53bc2b380b92b014a92cb984791e2ad8b28f0497d2384a33829ca396d1b\n2 FILE data:image/png;base64,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\n0 @S0003@ SOUR\n1 TITL Křest Josefa Horáka 1898\n1 REPO @R0001@\n1 PAGE fol. 21\n1 TEXT Josephus, natus 3. Martii 1898, Dolní Lhota No. 12. Pater Wenceslaus Horák, agricola, filius Joannis Horák. Mater Catharina nata Vlk, filia Joannis Vlk ex Horní Lhota.\n1 WWW https://archiv.example.org/matriky\n1 NOTE Fond / svazek: Dolní Lhota, N 1890–1935\n2 CONT Zapsáno: 3 MAR 1898\n2 CONT Jazyk: la\n2 CONT Doklad: původní záznam, primární informace\n1 NOTE Překlad:\n2 CONT Josef, narozen 3. března 1898, Dolní Lhota čp. 12. Otec Václav Horák, rolník, syn Jana Horáka. Matka Kateřina roz. Vlková, dcera Jana Vlka z Horní Lhoty.\n1 REFN S0003\n1 _STROM_READ research\n2 _TXT a39aa5572e2fddfa\n1 _STROM_ORIG Y\n1 OBJE\n2 FORM png\n2 _STROM_KIND excerpt\n2 _STROM_CLIP cc6d3e6920d\n2 _URL https://archiv.example.org/matriky\n2 _STROM_SHA 5a3b4b8461c511df58caf6fbeb62d4f3f259d9b21e3751a5e1d1c13405ab4a4f\n2 FILE data:image/png;base64,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\n0 @S0004@ SOUR\n1 TITL Sčítání lidu 1921, Dolní Lhota čp. 12\n1 TEXT Josef Horák, hlava domácnosti, nar. 1897, rolník, Dolní Lhota čp. 12.\n1 NOTE Doklad: původní záznam, sekundární informace\n1 REFN S0004\n1 _STROM_READ research\n2 _TXT 64410b156aba86a3\n0 @S0005@ SOUR\n1 TITL Křest Marie Krejčí 1902\n1 REPO @R0001@\n1 PAGE fol. 47\n1 TEXT Marie, nar. 20. srpna 1902, Dolní Lhota čp. 31. Otec František Krejčí, kovář. Matka Ludmila roz. Nováková.\n1 NOTE Fond / svazek: Dolní Lhota, N 1890–1935\n2 CONT Zapsáno: 24 AUG 1902\n2 CONT Doklad: původní záznam, primární informace\n1 REFN S0005\n1 _STROM_READ research\n2 _TXT 2bcfd35c0aab081e\n0 @R0001@ REPO\n1 NAME Státní oblastní archiv\n0 @U1@ SUBM\n1 NAME Strom Research\n0 TRLR\n"
+ },
+ "research": {
+  "id": "943fce29-c1c6-5433-8031-96ce4bbbcd8d",
+  "status": {
+   "strom": "1.37.0",
+   "features": [
+    "sync.again",
+    "sync.undoneSince",
+    "sync.takenBack",
+    "sync.conflictEdit",
+    "sync.since",
+    "sync.ids",
+    "family.noCouple",
+    "family.alone",
+    "adopt.transfer",
+    "adopt.empty",
+    "material.list",
+    "person.titles",
+    "media.codes",
+    "hypothesis.links",
+    "status.recent",
+    "spend.readers",
+    "hypothesis.intree",
+    "archive.permission",
+    "task.check",
+    "waiting.groups",
+    "waiting.sent",
+    "waiting.note",
+    "batch.kept",
+    "live.end",
+    "whats.new",
+    "terminal.choice",
+    "person.marriedSurname",
+    "phone",
+    "read.now",
+    "read.sync",
+    "excerpt.get",
+    "log.sources",
+    "material.assign",
+    "material.thumb",
+    "seal.foreign",
+    "tree.state",
+    "disk.full",
+    "tree.notDownloaded",
+    "sync.removed",
+    "tree.kind",
+    "experiments",
+    "experiments.off",
+    "experiments.link",
+    "experiments.split",
+    "history.events",
+    "history.hide",
+    "experiments.pace",
+    "history.first",
+    "history.regions",
+    "history.hide.all",
+    "history.skip",
+    "history.map",
+    "history.delete",
+    "history.delete.restore",
+    "stories.history",
+    "history.place",
+    "surnames.suggest",
+    "surnames.read",
+    "lineage.read",
+    "duplicates.judge",
+    "quality.dismiss",
+    "quality.read",
+    "person.primary",
+    "fixes.list",
+    "fixes.towns",
+    "history.back",
+    "places.identify",
+    "places.answer",
+    "places.undo",
+    "tasks.offLine",
+    "status.busy",
+    "history.kinds",
+    "history.align",
+    "places.nameKinds",
+    "directions.edit",
+    "directions.order",
+    "directions.found",
+    "directions.people",
+    "directions.places",
+    "offLine.branches",
+    "queue.own",
+    "story.sources",
+    "queue.page",
+    "status.parts",
+    "waiting.answer",
+    "browser.state",
+    "working.place",
+    "working.family",
+    "working.helps",
+    "hypotheses.decide",
+    "sources.confirm",
+    "read.sourceTask",
+    "read.sourceTask.unsure",
+    "read.choose",
+    "read.choices.now",
+    "read.source",
+    "read.sourceEntry",
+    "read.blindText",
+    "read.kinds",
+    "read.variantKind",
+    "read.readerState",
+    "live.idle",
+    "live.stop",
+    "live.start",
+    "sources.proposal",
+    "sources.proposal.undo",
+    "origin",
+    "verify",
+    "verify.bulk",
+    "facts.confirm",
+    "verify.stop",
+    "ged.stale",
+    "facts.confirm.value",
+    "ged.etag",
+    "ged.imagesByHash",
+    "hypothesis.decide.link",
+    "hypotheses.accept.link",
+    "sources.fields",
+    "sources.split",
+    "queue.search",
+    "queue.next",
+    "work.link",
+    "run.tasks",
+    "queue.kind",
+    "work.tasks",
+    "verify.tryFirst",
+    "event.share",
+    "citations.order",
+    "sync.notWritten.codes",
+    "books",
+    "media.app",
+    "material.links",
+    "material.edit",
+    "material.uses",
+    "material.sort",
+    "tasks.audit",
+    "handoffs",
+    "material.sourceOf",
+    "material.left",
+    "material.sameAs",
+    "material.sortRun",
+    "material.delete",
+    "inbox.aside",
+    "source.retract",
+    "material.trees",
+    "census",
+    "house",
+    "house.material",
+    "house.confirm",
+    "house.import",
+    "house.auto",
+    "house.request",
+    "task.holds",
+    "archive.holds",
+    "media.queued",
+    "media.known",
+    "intake.auto",
+    "run.lines",
+    "run.agents",
+    "run.stop",
+    "run.limit",
+    "directions.move",
+    "sync.mediaRef",
+    "person.contact",
+    "media.list",
+    "media.list.source",
+    "waiting.gain",
+    "sort.confirm",
+    "working.saving",
+    "waiting.retry",
+    "sort.confirm.app",
+    "run.confirm",
+    "finds",
+    "finds.person",
+    "glance",
+    "people.search"
+   ],
+   "tree": {
+    "id": "943fce29-c1c6-5433-8031-96ce4bbbcd8d",
+    "name": "Horákovi",
+    "lang": "cs",
+    "state": "research",
+    "kind": "research"
+   },
+   "path": null,
+   "treesRoot": null,
+   "seal": null,
+   "notDownloaded": 0,
+   "agent": {
+    "id": "claude",
+    "name": "Claude Code"
+   },
+   "head": "dd32fd8dc1083bc52217ca0814d2fbb96ced13f9",
+   "headAt": "2026-11-01T08:58:00Z",
+   "persons": 5,
+   "families": 2,
+   "researches": [
+    {
+     "id": "G0001",
+     "name": "Předci Anny Horákové",
+     "state": "active",
+     "direction": "ancestors",
+     "focus": "P0001",
+     "tasks": 8,
+     "waiting": 3,
+     "working": false,
+     "since": "2026-10-29T07:43:00.535Z",
+     "generations": [
+      2,
+      4,
+      4,
+      1
+     ],
+     "last": {
+      "at": "2026-11-01T08:55:30.727Z",
+      "text": "Druhé čtení křtů rozpracováno (snímky 1–60 z 90), pokračuje se příště."
+     },
+     "order": 1,
+     "limits": {
+      "generations": 5
+     },
+     "created": "2026-10-29T07:43:00.535Z",
+     "found": {
+      "days": 7,
+      "sessions": 12,
+      "persons": 21,
+      "sources": 7,
+      "people": [
+       "P0006",
+       "P0007",
+       "P0009",
+       "P0010"
+      ]
+     },
+     "canStart": true
+    },
+    {
+     "id": "G0005",
+     "name": "Odkud pocházela Kateřina Vlková?",
+     "state": "active",
+     "direction": "question",
+     "focus": "P0010",
+     "tasks": 1,
+     "waiting": 6,
+     "working": false,
+     "since": "2026-11-01T05:40:00.692Z",
+     "last": {
+      "at": "2026-11-01T08:41:37.599Z",
+      "text": "Oddací matrika Horní Lhoty je na portálu Digitální matriky Vzorov. Podmínky omezují automatické stahování: snímky 12–14 čekají na rozhodnut…"
+     },
+     "order": 2,
+     "limits": {},
+     "question": "Odkud pocházela Kateřina Vlková?",
+     "created": "2026-11-01T05:40:00.692Z",
+     "found": {
+      "days": 7,
+      "sessions": 3,
+      "persons": 3,
+      "sources": 0,
+      "people": []
+     },
+     "canStart": true
+    },
+    {
+     "id": "G0003",
+     "name": "Potomci Václava Horáka",
+     "state": "paused",
+     "direction": "descendants",
+     "focus": "P0009",
+     "tasks": 0,
+     "waiting": 0,
+     "working": false,
+     "reason": "matriky Horní Lhoty po roce 1900 ještě nejsou online",
+     "since": "2026-10-31T04:40:00.787Z",
+     "order": 4,
+     "limits": {},
+     "created": "2026-10-30T17:03:00.696Z",
+     "canStart": false,
+     "why": "paused"
+    }
+   ],
+   "limits": {
+    "maxRuns": 3,
+    "running": 0,
+    "cap": 10
+   },
+   "agents": [
+    {
+     "id": "claude",
+     "name": "Claude Code",
+     "default": true
+    },
+    {
+     "id": "codex",
+     "name": "OpenAI Codex CLI"
+    },
+    {
+     "id": "antigravity",
+     "name": "Antigravity CLI"
+    },
+    {
+     "id": "opencode",
+     "name": "OpenCode"
+    },
+    {
+     "id": "grok",
+     "name": "Grok Build"
+    }
+   ],
+   "caps": {
+    "directionsWrite": true,
+    "directionsOrder": true,
+    "orderMode": "weight",
+    "directionKinds": [
+     "ancestors",
+     "descendants",
+     "question"
+    ],
+    "duplicateDirections": false,
+    "offLineBranches": true
+   },
+   "working": [],
+   "open": [],
+   "busy": {
+    "sessions": 0,
+    "runs": 0
+   },
+   "work": {
+    "gate": null,
+    "minutes": 60,
+    "confirm": "ask"
+   },
+   "waiting": [
+    {
+     "id": "T0006",
+     "what": "Oddavky Václava Horáka a Kateřiny Vlkové",
+     "on": "Snímky 40–45 z oddací matriky Dolní Lhota 1890–1930 k uložení ručně: portál archivu nedovoluje stahování programem.",
+     "at": "2026-11-01T08:06:30.673Z",
+     "kind": "images",
+     "section": "images",
+     "group": {
+      "key": "repo:R0001",
+      "name": "Státní oblastní archiv",
+      "kind": "archive"
+     },
+     "phase": "todo",
+     "priority": 3,
+     "inbox": {
+      "dir": "~/Documents/Strom/shared/inbox/B0002 Dolní Lhota, O 1890–1930",
+      "folder": "B0002 Dolní Lhota, O 1890–1930",
+      "recordset": "B0002",
+      "have": 0,
+      "lying": 0,
+      "want": 6,
+      "missing": [
+       40,
+       41,
+       42,
+       43,
+       44,
+       45
+      ],
+      "book": "Dolní Lhota, O 1890–1930",
+      "images": "40–45"
+     },
+     "actions": [
+      "answer",
+      "images",
+      "folder",
+      "chat"
+     ],
+     "research": "G0001",
+     "book": "B0002",
+     "gain": {
+      "score": 110,
+      "says": "nová generace: rodiče osoby Kateřina Vlková · přímá linie · odblokuje 3 úkoly",
+      "parts": [
+       {
+        "kind": "generation",
+        "person": "P0010",
+        "name": "Kateřina Vlková",
+        "missing": "parents"
+       },
+       {
+        "kind": "line"
+       },
+       {
+        "kind": "unblocks",
+        "n": 3
+       }
+      ]
+     },
+     "order": 3
+    },
+    {
+     "id": "T0024",
+     "what": "Farní kronika Horní Lhoty: zmínky o mlýně a rodině Vlků",
+     "on": "Odpověď Farního úřadu Horní Lhota na dotaz k farní kronice (mlýn čp. 5, rodina Vlků).",
+     "at": "2026-11-01T08:41:32.443Z",
+     "kind": "letter",
+     "section": "letter",
+     "group": {
+      "key": "to:farni urad horni lhota",
+      "name": "Farní úřad Horní Lhota",
+      "kind": "office"
+     },
+     "phase": "sent",
+     "sentAt": "2026-11-01T08:41:32.443Z",
+     "priority": 3,
+     "note": "notes/dotaz-fara-kronika.md",
+     "to": "Farní úřad Horní Lhota",
+     "actions": [
+      "answer",
+      "file",
+      "note",
+      "chat"
+     ],
+     "person": "P0010",
+     "research": "G0002",
+     "gain": {
+      "score": 90,
+      "says": "nová generace: rodiče osoby Kateřina Vlková · přímá linie",
+      "parts": [
+       {
+        "kind": "generation",
+        "person": "P0010",
+        "name": "Kateřina Vlková",
+        "missing": "parents"
+       },
+       {
+        "kind": "line"
+       }
+      ]
+     },
+     "order": 16
+    },
+    {
+     "id": "H0001",
+     "what": "Sloužil Josef za 1. světové války?",
+     "on": "user",
+     "at": "2026-11-01T07:30:00Z",
+     "kind": "hypothesis",
+     "section": "decide",
+     "group": {
+      "key": "hypotheses",
+      "name": "Hypotézy",
+      "kind": "other"
+     },
+     "person": "P0006",
+     "actions": [],
+     "pick": true,
+     "proposal": "A"
+    }
+   ],
+   "links": [],
+   "experiments": {
+    "history": false,
+    "regions": false,
+    "places": false,
+    "historyPace": "sometimes",
+    "kinds": [
+     "war",
+     "epidemic",
+     "census",
+     "state",
+     "emigration",
+     "law",
+     "economy",
+     "disaster",
+     "other"
+    ],
+    "kindsOwn": false,
+    "kindsDefault": [
+     "war",
+     "epidemic",
+     "census",
+     "state",
+     "emigration",
+     "law",
+     "economy",
+     "disaster",
+     "other"
+    ]
+   },
+   "stories": {
+    "history": false
+   },
+   "census": {
+    "on": false,
+    "held": 0
+   },
+   "houses": {
+    "on": false
+   },
+   "intake": {
+    "auto": false
+   },
+   "sort": {
+    "confirm": "ask"
+   },
+   "hypotheses": {
+    "decide": "agent"
+   },
+   "verify": {
+    "waiting": 1,
+    "asked": 0,
+    "images": 1,
+    "permission": 0,
+    "kept": 0,
+    "confirmed": 0
+   },
+   "readAgain": {},
+   "quality": {
+    "rev": "dd32fd8-e3b0"
+   },
+   "directions": {
+    "rev": "8f6de75f1158cee1"
+   },
+   "queue": [
+    {
+     "id": "T0016",
+     "text": "Sčítání lidu 1880 v Dolní Lhotě",
+     "state": "next",
+     "pos": 1,
+     "person": "P0009",
+     "research": "G0001",
+     "own": "next",
+     "why": {
+      "kind": "own",
+      "do": "next"
+     },
+     "taskKind": "records"
+    },
+    {
+     "id": "T0011",
+     "text": "Mimo matriky, pro vyprávění: Josef Horák (*1898) – noviny, adresáře, vojenské, pozemkové a soudní záznamy, hroby, dějiny místa",
+     "state": "next",
+     "pos": 5,
+     "person": "P0006",
+     "research": "G0001",
+     "why": {
+      "kind": "line",
+      "research": "G0001"
+     },
+     "kind": "story",
+     "taskKind": "story"
+    },
+    {
+     "id": "T0007",
+     "text": "Oddavky Františka Krejčího a Ludmily Novákové",
+     "state": "next",
+     "pos": 6,
+     "research": "G0001",
+     "why": {
+      "kind": "line",
+      "research": "G0001"
+     },
+     "taskKind": "records",
+     "book": "B0002"
+    },
+    {
+     "id": "T0030",
+     "text": "Znovu přečíst oddavky: odkud byla nevěsta",
+     "state": "next",
+     "pos": 7,
+     "person": "P0010",
+     "research": "G0005",
+     "why": {
+      "kind": "line",
+      "research": "G0005"
+     },
+     "taskKind": "records",
+     "book": "B0002"
+    },
+    {
+     "id": "T0031",
+     "text": "Křest Kateřiny Vlkové kolem 1870",
+     "state": "next",
+     "pos": 12,
+     "person": "P0010",
+     "research": "G0001",
+     "why": {
+      "kind": "line",
+      "research": "G0001"
+     },
+     "taskKind": "records",
+     "book": "B0004"
+    },
+    {
+     "id": "T0010",
+     "text": "Hrob rodiny Horákových",
+     "state": "parked",
+     "person": "P0006",
+     "research": "G0001",
+     "taskKind": "enrich"
+    }
+   ],
+   "queueMore": 0,
+   "queueCounts": {
+    "research": {
+     "G0001": 5,
+     "G0005": 1
+    },
+    "kind": {
+     "records": 6
+    },
+    "next": 5,
+    "parked": 1,
+    "general": 5,
+    "rev": "eaa024c95fbbf507"
+   },
+   "offLine": null,
+   "books": {
+    "settings": {
+     "minTasks": 5,
+     "minTasksOwn": false,
+     "minTasksDefault": 5,
+     "sameBook": "no",
+     "sameBookOwn": false,
+     "sameBookDefault": "no"
+    },
+    "list": []
+   },
+   "spend": null,
+   "accepts": null,
+   "reads": [],
+   "sorts": [],
+   "browser": {
+    "state": "no-extension",
+    "url": "https://chromewebstore.google.com/detail/fcoeoabgfenejglbffodgkkbkcdhcgfn",
+    "archives": []
+   },
+   "inbox": null,
+   "sends": null,
+   "batches": null,
+   "phone": null,
+   "handoffs": [],
+   "runs": [],
+   "runsEnded": []
+  },
+  "log": {
+   "entries": [
+    {
+     "head": "dd32fd8dc1083bc52217ca0814d2fbb96ced13f9",
+     "at": "2026-11-01T08:58:00Z",
+     "what": [
+      "+M0004 image 112 of B0007",
+      "+M0005 image 113 of B0007",
+      "+M0006 image 5 of B0010",
+      "+M0007 image 6 of B0010",
+      "+M0008 image 7 of B0010",
+      "+M0009 image 201 of B0009"
+     ],
+     "text": [
+      "Nové snímky: Horní Lhota, N 1830–1859 (obr. 112–113)",
+      "Nové snímky: Soupis obyvatel Horní Lhota 1869 (obr. 5–7)",
+      "Nový snímek: Horní Lhota, Z 1850–1900 (obr. 201)"
+     ],
+     "kinds": [
+      "source",
+      "source",
+      "source"
+     ]
+    },
+    {
+     "head": "ce88121c44f23be9414c6af2342ae431843c84eb",
+     "at": "2026-11-01T08:55:30Z",
+     "what": [
+      "T0031 back to the queue",
+      "N0017 closed: Druhé čtení křtů rozpracováno (snímky 1–60 z 90), pokračuje se příště."
+     ],
+     "text": [
+      "Agent skončil: Křest Kateřiny Vlkové kolem 1870"
+     ],
+     "kinds": [
+      "other"
+     ],
+     "task": "T0031 Křest Kateřiny Vlkové kolem 1870",
+     "research": "G0001"
+    },
+    {
+     "head": "5313672576ae91120226c0b6a4c0362cd40af419",
+     "at": "2026-11-01T08:54:00Z",
+     "what": [
+      "+Q0005 search [partial] \"Křty Vlků v Horní Lhotě 1868–1872, druhé čtení\""
+     ],
+     "text": [
+      "Hledáno, nalezeno zčásti: Křty Vlků v Horní Lhotě 1868–1872, druhé čtení"
+     ],
+     "kinds": [
+      "other"
+     ],
+     "task": "T0031 Křest Kateřiny Vlkové kolem 1870",
+     "research": "G0001"
+    },
+    {
+     "head": "74030ee8a2a0930f6dc054ef7f6ac0b91e73c0c5",
+     "at": "2026-11-01T08:46:33Z",
+     "what": [
+      "N0017 session started on T0031",
+      "T0031 start"
+     ],
+     "text": [
+      "Agent začal: Křest Kateřiny Vlkové kolem 1870"
+     ],
+     "kinds": [
+      "other"
+     ],
+     "task": "T0031 Křest Kateřiny Vlkové kolem 1870",
+     "research": "G0001"
+    },
+    {
+     "head": "0434237376056c099af64087cec58eea63001915",
+     "at": "2026-11-01T08:46:31Z",
+     "what": [
+      "T0016 next in the queue, the person's choice"
+     ],
+     "text": [
+      "Upravený úkol: Sčítání lidu 1880 v Dolní Lhotě"
+     ],
+     "kinds": [
+      "other"
+     ]
+    },
+    {
+     "head": "1de13e7adfba874fd266996abf71167a21fd29fc",
+     "at": "2026-11-01T08:46:29Z",
+     "what": [
+      "order of work: G0001 G0005 G0002 G0003 G0004"
+     ],
+     "text": [
+      "Upravená linie výzkumu: Odkud pocházela Kateřina Vlková?"
+     ],
+     "kinds": [
+      "other"
+     ]
+    },
+    {
+     "head": "cbc98bc615cacf815ec69beec69ac35d85525c33",
+     "at": "2026-11-01T08:46:27Z",
+     "what": [
+      "+T0045 task \"Křest: Helena Horáková, Chicago 1910\""
+     ],
+     "text": [
+      "Nový úkol: Křest: Helena Horáková, Chicago 1910"
+     ],
+     "kinds": [
+      "other"
+     ]
+    },
+    {
+     "head": "4896bad1d9adcdb20ca9963cd6fdb59400bc1c7f",
+     "at": "2026-11-01T08:46:25Z",
+     "what": [
+      "+T0044 task \"Oddavky: František Horák a Aloisie Kratochvílová, Chicago 1…\""
+     ],
+     "text": [
+      "Nový úkol: Oddavky: František Horák a Aloisie Kratochvílová, Chicago 1908"
+     ],
+     "kinds": [
+      "other"
+     ]
+    },
+    {
+     "head": "4c457e11fcf983a8fbaaf8d79702edf59a46a337",
+     "at": "2026-11-01T08:46:23Z",
+     "what": [
+      "+T0043 task \"Křest: Jaroslav Horák, Chicago 1896\""
+     ],
+     "text": [
+      "Nový úkol: Křest: Jaroslav Horák, Chicago 1896"
+     ],
+     "kinds": [
+      "other"
+     ]
+    },
+    {
+     "head": "ee0ae30968908ed1b609cb454f08d2168153d224",
+     "at": "2026-11-01T08:46:21Z",
+     "what": [
+      "+T0042 task \"Oddavky: František Horák a Marie Pospíšilová, Chicago 1894\""
+     ],
+     "text": [
+      "Nový úkol: Oddavky: František Horák a Marie Pospíšilová, Chicago 1894"
+     ],
+     "kinds": [
+      "other"
+     ]
+    },
+    {
+     "head": "d98efb10a5dd4a069ac0ec17a371e633763fd42d",
+     "at": "2026-11-01T08:46:20Z",
+     "what": [
+      "+T0041 task \"Vystěhování: František Horák, 1891\""
+     ],
+     "text": [
+      "Nový úkol: Vystěhování: František Horák, 1891"
+     ],
+     "kinds": [
+      "other"
+     ]
+    },
+    {
+     "head": "dc6b6f32174ebaca6f65960a08467514a03962c3",
+     "at": "2026-11-01T08:46:18Z",
+     "what": [
+      "T0015 back to the queue",
+      "N0016 closed: Václavův bratr František se vystěhoval: dvě manželky a dvě děti za oceánem zapsá"
+     ],
+     "text": [
+      "Agent skončil: Úmrtí Jana Horáka kolem 1901"
+     ],
+     "kinds": [
+      "other"
+     ],
+     "task": "T0015 Úmrtí Jana Horáka kolem 1901",
+     "research": "G0001"
+    }
+   ]
+  },
+  "material": {
+   "files": [],
+   "batches": [],
+   "people": {}
+  },
+  "queue": {
+   "items": [
+    {
+     "id": "T0016",
+     "text": "Sčítání lidu 1880 v Dolní Lhotě",
+     "state": "next",
+     "pos": 1,
+     "person": "P0009",
+     "research": "G0001",
+     "own": "next",
+     "why": {
+      "kind": "own",
+      "do": "next"
+     },
+     "taskKind": "records"
+    },
+    {
+     "id": "T0011",
+     "text": "Mimo matriky, pro vyprávění: Josef Horák (*1898) – noviny, adresáře, vojenské, pozemkové a soudní záznamy, hroby, dějiny místa",
+     "state": "next",
+     "pos": 5,
+     "person": "P0006",
+     "research": "G0001",
+     "why": {
+      "kind": "line",
+      "research": "G0001"
+     },
+     "kind": "story",
+     "taskKind": "story"
+    },
+    {
+     "id": "T0007",
+     "text": "Oddavky Františka Krejčího a Ludmily Novákové",
+     "state": "next",
+     "pos": 6,
+     "research": "G0001",
+     "why": {
+      "kind": "line",
+      "research": "G0001"
+     },
+     "taskKind": "records",
+     "book": "B0002"
+    },
+    {
+     "id": "T0030",
+     "text": "Znovu přečíst oddavky: odkud byla nevěsta",
+     "state": "next",
+     "pos": 7,
+     "person": "P0010",
+     "research": "G0005",
+     "why": {
+      "kind": "line",
+      "research": "G0005"
+     },
+     "taskKind": "records",
+     "book": "B0002"
+    },
+    {
+     "id": "T0031",
+     "text": "Křest Kateřiny Vlkové kolem 1870",
+     "state": "next",
+     "pos": 12,
+     "person": "P0010",
+     "research": "G0001",
+     "why": {
+      "kind": "line",
+      "research": "G0001"
+     },
+     "taskKind": "records",
+     "book": "B0004"
+    },
+    {
+     "id": "T0010",
+     "text": "Hrob rodiny Horákových",
+     "state": "parked",
+     "person": "P0006",
+     "research": "G0001",
+     "taskKind": "enrich"
+    }
+   ],
+   "total": 6,
+   "from": 0,
+   "rev": "eaa024c95fbbf507",
+   "head": "dd32fd8dc1083bc52217ca0814d2fbb96ced13f9"
+  }
+ }
+}

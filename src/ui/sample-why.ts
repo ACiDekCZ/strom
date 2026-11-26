@@ -169,12 +169,14 @@ function attr(text: string): string {
 /**
  * markShowcaseOff for a control drawn as HTML: its attributes (greyed with the action's mark, `aria-disabled`,
  * described by the bubble; never `disabled`), '' outside the showcase or for an action it does not grey.
- * `label`: the action's name in the bubble; `describedBy`: the control's own note, described after the bubble.
+ * `label`: the action's name in the bubble; `describedBy`: the control's own note, described after the bubble;
+ * `ownMark`: the mark the control itself carries, when it is not its action's group (the bar's Send: none).
  */
-export function showcaseOffAttrs(action: ResearchShowcaseAction, label: string, describedBy = ''): string {
+export function showcaseOffAttrs(action: ResearchShowcaseAction, label: string, describedBy = '', ownMark?: ResearchActionMark): string {
     if (!showcaseOff(action)) return '';
     installShowcaseWhy();
-    const mark = showcaseActionMark(action);
+    // `ownMark`: the control's own way (e.g. the bar's Send goes through the bridge, no mark), else its group's.
+    const mark = ownMark ?? showcaseActionMark(action);
     const ids = [SAMPLE_WHY_ID, describedBy].filter(Boolean).join(' ');
     return ` data-showcase-off="${mark}" data-showcase-label="${attr(label)}" aria-disabled="true" aria-describedby="${attr(ids)}"`;
 }
