@@ -213,3 +213,25 @@ describe("a hypothesis in the showcase's What waits", () => {
         }
     });
 });
+
+describe("a conflict's way into the research in the showcase", () => {
+    it('knows the person there (no bridge of its own), so Decide in the research and Leave it to the agent are drawn greyed', async () => {
+        const { DataManager } = await import('../data.js');
+        const { researchActionsMethods: m } = await import('../ui/research-actions-ui.js');
+        const person = vi.spyOn(DataManager, 'getPerson').mockReturnValue({ id: 'p1', refn: 'P0006' } as never);
+        const ui = { ...m, activeResearchId: () => 'r1' };
+        try {
+            // The showcase has no research here (researchHere): its person menu's actions are not asked by it.
+            expect(m.personResearchRef.call(ui as never, 'p1' as never)).toBeNull();
+            expect(m.personConflictRef.call(ui as never, 'p1' as never)).toBe('P0006');
+            // Outside the showcase: as personResearchRef (no research tree open: no way).
+            showcase = false;
+            expect(m.personConflictRef.call(ui as never, 'p1' as never)).toBe(m.personResearchRef.call(ui as never, 'p1' as never));
+            expect(m.personConflictRef.call({ ...ui, activeResearchId: () => null } as never, 'p1' as never)).toBeNull();
+            showcase = true;
+            expect(m.personConflictRef.call({ ...ui, activeResearchId: () => null } as never, 'p1' as never)).toBeNull();
+        } finally {
+            person.mockRestore();
+        }
+    });
+});

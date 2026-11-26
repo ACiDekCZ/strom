@@ -131,7 +131,7 @@ export const conflictDecideMethods = uiModule({
         const sendFirst = (!state || state.kind === 'error') && mode !== 'none' && this.researchConflictSendFirst(personId, c);
         return conflictCardView({
             mode, state, sendFirst,
-            links: this.researchLinkAvailable('conflict') && this.personResearchRef(personId) !== null,
+            links: this.researchLinkAvailable('conflict') && this.personConflictRef(personId) !== null,
             noAgent: this.activeResearchNoAgent(),
         });
     },

@@ -1131,6 +1131,15 @@ export const researchActionsMethods = uiModule({
     },
 
     /**
+     * The person's research id for a conflict's way into the research: as personResearchRef, and in the
+     * showcase too, where that way is drawn greyed and only says why (spec 143 K4.1).
+     */
+    personConflictRef(personId: PersonId): string | null {
+        if (inShowcase()) return this.activeResearchId() === null ? null : researchPersonRef(DataManager.getPerson(personId)?.refn);
+        return this.personResearchRef(personId);
+    },
+
+    /**
      * The research's actions for the person menu's "Research ›" (after "What
      * the research knows"): a person of a research tree, on a computer, with
      * the links announced. Nothing here changes the app, so it is offered on

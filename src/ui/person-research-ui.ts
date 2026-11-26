@@ -324,7 +324,7 @@ export const personResearchMethods = uiModule({
         const asOf = DataManager.getData().researchAsOf;
         const subtitle = [personSubtitle(personId), asOf ? r.asOf(formatFlexDate(asOf)) : ''].filter(Boolean).join(' · ');
         const sources = DataManager.getData().sources ?? {};
-        const canDecide = this.researchLinkAvailable('conflict') && this.personResearchRef(personId) !== null;
+        const canDecide = this.researchLinkAvailable('conflict') && this.personConflictRef(personId) !== null;
         // An archive has no agent to leave a conflict to: deciding stays (in the research).
         const toAgent = !this.activeResearchNoAgent();
 
@@ -1087,7 +1087,7 @@ export const personResearchMethods = uiModule({
         const busy = state === 'busy';
         // The showcase keeps nothing (spec 143 K4.1): no "Keep" there.
         const keepOn = !inShowcase() && (busy || (state !== 'readonly' && conflictKeepOffered()));
-        const canDecide = this.researchLinkAvailable('conflict') && this.personResearchRef(personId) !== null;
+        const canDecide = this.researchLinkAvailable('conflict') && this.personConflictRef(personId) !== null;
         const values = c.values.map(v => `<tr><td>${conflictValueHtml(researchValueText(c.fact, v.value))}</td><td>${this.researchConflictSourceCell(v)}</td></tr>`).join('');
         const decision = c.decision
             ? `<tr class="is-decision"><td>${esc(C.decisionRow(conflictValueSaid(researchValueText(c.fact, c.decision.value))))}</td><td>${this.researchConflictSourceCell(c.decision)}</td></tr>` : '';
