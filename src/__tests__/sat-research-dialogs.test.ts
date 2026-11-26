@@ -32,9 +32,9 @@ async function page(opts: { satellite: boolean; mainOpen?: boolean; features?: s
     vi.spyOn(DataManager, 'isReadOnly').mockReturnValue(false);
     vi.spyOn(DataManager, 'isTreeLocked').mockReturnValue(false);
     vi.spyOn(DataManager, 'getCurrentTreeId').mockReturnValue(TREE as never);
-    vi.spyOn(DataManager, 'getPerson').mockImplementation(((id: string) => id === 'p-0418' ? { id, refn: 'I418', firstName: 'Vendelín', lastName: 'Kratochvil' } : undefined) as never);
+    vi.spyOn(DataManager, 'getPerson').mockImplementation(((id: string) => id === 'p-0418' ? { id, refn: 'I418', firstName: 'Vendelín', lastName: 'Fíšek' } : undefined) as never);
     vi.spyOn(DataManager, 'getData').mockReturnValue({ persons: {}, sources: { 's-77': { id: 's-77', refn: 'S77', transcript: 'Liber natorum 1841', reading: '' } } } as never);
-    vi.spyOn(TreeManager, 'getTreeMetadata').mockReturnValue({ name: 'Kratochvil', research: { id: RID } } as never);
+    vi.spyOn(TreeManager, 'getTreeMetadata').mockReturnValue({ name: 'Fíšek', research: { id: RID } } as never);
     const sat = await import('../windows/window-sat-research.js');
     const main = await import('../ui/sat-research-main.js');
     const forward = { mainOpen: vi.fn(() => opts.mainOpen ?? true), run: vi.fn(), ask: vi.fn() };

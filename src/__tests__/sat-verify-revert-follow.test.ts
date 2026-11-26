@@ -42,7 +42,7 @@ const UNION = 'u-0090' as PartnershipId;
 
 function person(id: PersonId, extra: Partial<Person> = {}): Person {
     return {
-        id, firstName: 'Wendelin', lastName: 'Haberzettl', gender: 'male', isPlaceholder: false,
+        id, firstName: 'Wendelin', lastName: 'Fíškovi', gender: 'male', isPlaceholder: false,
         partnerships: [UNION], parentIds: [], childIds: [], ...extra,
     } as Person;
 }
@@ -52,7 +52,7 @@ function treeData(): StromData {
     data.persons[PID] = person(PID, {
         researchOrigins: { birth: { kind: 'import', parts: ['DATE'], was: { value: '3 MAR 1868', ref: 'R0042', parts: ['DATE'] } } },
     } as Partial<Person>);
-    data.persons[WIFE] = person(WIFE, { firstName: 'Kunigunde', gender: 'female', refn: 'P0017' } as Partial<Person>);
+    data.persons[WIFE] = person(WIFE, { firstName: 'Fíšková', gender: 'female', refn: 'P0017' } as Partial<Person>);
     data.partnerships[UNION] = { id: UNION, person1Id: PID, person2Id: WIFE, childIds: [] } as unknown as Partnership;
     return data;
 }
@@ -317,7 +317,7 @@ describe('verify, confirm, revert and following in a satellite window', () => {
             vi.spyOn(DataManager, 'isViewMode').mockReturnValue(false);
             const stamp = '2026-11-20T10:00:00.000Z';
             vi.spyOn(TreeManager, 'getVisibleTrees').mockReturnValue([
-                { id: 't-a' as TreeId, name: 'Haberzettl', lastModifiedAt: stamp }, { id: 't-b' as TreeId, name: 'Zahradnik', lastModifiedAt: stamp },
+                { id: 't-a' as TreeId, name: 'Fíškovi', lastModifiedAt: stamp }, { id: 't-b' as TreeId, name: 'Novákovi', lastModifiedAt: stamp },
             ] as never);
             vi.spyOn(TreeManager, 'getTreeData').mockImplementation(async () => treeData());
             const read = () => (TreeRenderer as unknown as { getAllTreesForCrossTreeMatching(): Promise<unknown> }).getAllTreesForCrossTreeMatching();
