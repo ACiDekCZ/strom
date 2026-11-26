@@ -26,7 +26,7 @@ import { updateBusyText, researchHere, researchReachable, researchDevice } from 
 import { PersonMenuAction } from './context-menu.js';
 import { personSubtitle } from './person-sources-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
-import { researchSendMode } from './research-sync-ui.js';
+import { researchSendMode, isBlockSendAction } from './research-sync-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { researchSendPreviewSkipped, exportReminderDue, lastExportAll, noteExportReminderShown } from '../research-device.js';
 import { exportDate } from './snapshots-ui.js';
@@ -152,12 +152,14 @@ export interface ResearchSheetRow {
     id?: string;
     /** Grey, not run (a device without its computer, spec 094 §7). */
     disabled?: boolean;
+    /** Greyed in the showcase with this mark: in sight, a tap says why (sample-why.ts). */
+    showcase?: ResearchActionMark;
 }
 
 /** The More sheet's research group (a narrow window with a mouse): the state in one line and the frequent actions. */
 export interface ResearchSheetGroup {
     /** The state, when its block offers something: its title and first action. */
-    state?: { tone: string; title: string; action?: { label: string; asLink: boolean; research?: boolean; ai?: boolean; run: () => void } };
+    state?: { tone: string; title: string; action?: { label: string; asLink: boolean; research?: boolean; ai?: boolean; showcase?: ResearchActionMark; run: () => void } };
     rows: ResearchSheetRow[];
 }
 
@@ -971,6 +973,8 @@ export const researchActionsMethods = uiModule({
         const rows: ResearchSheetRow[] = items.filter(i => frequent.includes(i.id) && (!i.disabled || away)).sort((a, b) => order(a) - order(b)).map(i => ({
             label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i), value: i.val, id: `sheet-${i.id}`,
             ...(away && i.id !== 'research-item-batch' ? { disabled: true } : {}),
+            ...(SHOWCASE_MENU_OFF.has(i.id) && showcaseOff(MENU_ITEM_ACTIONS[i.id] as ResearchShowcaseAction)
+                ? { showcase: showcaseActionMark(MENU_ITEM_ACTIONS[i.id] as ResearchShowcaseAction) } : {}),
             run: () => ui[i.method](...(i.args ?? [])),
         }));
         // A batch going on (its sheet closed): its row first, back to its list.
@@ -983,7 +987,9 @@ export const researchActionsMethods = uiModule({
             rows,
             state: block && first ? { tone: block.tone, title: block.title,
                 action: { label: first.label, asLink: !!first.asLink, ...researchMarkFlags(this.researchSyncActionMark(first.action)),
-                    run: () => this.researchSyncAction(first.action) } } : undefined,
+                    run: () => this.researchSyncAction(first.action),
+                    // A send in the showcase: greyed with its own mark (as in the menu's state block).
+                    ...(isBlockSendAction(first.action) && showcaseOff('send') ? { showcase: this.researchSyncActionMark(first.action) } : {}) } } : undefined,
         };
     },
 

@@ -309,6 +309,37 @@ test.describe('the showcase on a phone', () => {
         expect(writes).toEqual([]);
     });
 
+    test('the More sheet\'s research group: the agent and Send greyed, a tap says why, nothing opens or goes', async ({ page }) => {
+        const writes = writesOut(page);
+        await openShowcase(page, { accepts: true });
+        const anna = await personId(page, 'Anna');
+        await page.evaluate((id) => {
+            const tm = window.Strom.TreeManager;
+            tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: 'manual' });
+            window.Strom.DataManager.updatePerson(id, { birthPlace: 'Praha' });
+        }, anna);
+        await page.locator('#bb-view-more').tap();
+        const chat = page.locator('#sheet-research-item-chat');
+        await expect(chat).toBeVisible();
+        await expectOff(page, chat, 'agent', 'Continue with the agent');
+        const send = page.locator('#research-sheet-state button');
+        await expect(send).toHaveAttribute('data-showcase-off', 'none');
+        await expect(send).toHaveAttribute('data-showcase-label', 'Send changes');
+        await expect(send).toHaveAttribute('aria-disabled', 'true');
+        await expect(send).toHaveAttribute('aria-describedby', 'sample-why research-sheet-state-text');
+        await send.tap({ force: true });
+        await expect(why(page)).toBeVisible();
+        await expect(why(page).locator('.what')).toHaveText('In full research: Send changes');
+        await expect(page.locator('#research-changes-panel')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(why(page)).toBeHidden();
+        await chat.tap({ force: true });
+        await expect(why(page)).toBeVisible();
+        await expect(why(page).locator('.what')).toHaveText('In full research: Continue with the agent · AI + terminal');
+        expect(await launched(page)).toEqual([]);
+        expect(writes).toEqual([]);
+    });
+
     test('the bottom sheet: Research › greyed, a tap says why, Escape closes', async ({ page }) => {
         await openShowcase(page);
         await card(page, 'Josef').tap();

@@ -197,6 +197,11 @@ let titlesCatchingUp = false;
 const olderAsked = new Set<string>();
 /** The state block's actions that send the tree (greyed in the showcase). */
 const BLOCK_SEND_ACTIONS = new Set(['send', 'sendThenLoad', 'retry', 'sendAgain', 'startAndSend']);
+
+/** A state block's action that sends the tree (greyed in the showcase, wherever the block's action is drawn). */
+export function isBlockSendAction(action: string): boolean {
+    return BLOCK_SEND_ACTIONS.has(action);
+}
 /** Researches whose write answers said their `parent` (researchHeadBeforeWrite asks no /status for them). */
 const parentSaid = new Set<string>();
 /** Researches whose write answers said their new head (they commit the app's writes). */

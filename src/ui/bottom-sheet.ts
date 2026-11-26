@@ -21,6 +21,7 @@ import { menuItemBody, menuItemAria, menuItemOffAttrs, PersonMenuAction } from '
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
+import { markShowcaseOff } from './sample-why.js';
 import { getSelection, selectionText } from './view-selection-ui.js';
 import { selectionOffered } from './selection-picker-ui.js';
 import { satelliteResearchMenu } from '../windows/window-research-menu.js';
@@ -913,6 +914,11 @@ export const bottomSheetMethods = uiModule({
                 act.setAttribute('aria-describedby', 'research-sheet-state-text');
                 if (st.action.research) setResearchOpenLabel(act, st.action.label, { size: 16, ai: st.action.ai });
                 else act.textContent = st.action.label;
+                if (st.action.showcase) {
+                    // The showcase: in sight greyed, a tap says why (the bubble stops the click before it runs).
+                    markShowcaseOff(act, st.action.showcase, st.action.label);
+                    act.setAttribute('aria-describedby', 'sample-why research-sheet-state-text');
+                }
                 act.addEventListener('click', () => {
                     this.hideBottomSheet();
                     st.action.run();
@@ -927,6 +933,7 @@ export const bottomSheetMethods = uiModule({
                     btn.setAttribute('aria-disabled', 'true');
                     btn.addEventListener('click', (e) => e.stopImmediatePropagation(), { capture: true });
                 }
+                if (row.showcase) markShowcaseOff(btn, row.showcase, row.label);
                 list.appendChild(btn);
             }
             allRow = document.createElement('button');
