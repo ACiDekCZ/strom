@@ -260,13 +260,15 @@ export const mapHousesMethods = uiModule({
      */
     showHouseOnMap(house: TreeHouse, research: HouseResearch | null): void {
         const at = mapHouseLocation(house, DataManager.getData().houses, research);
-        if (!at) { this.closeHousePage(); this.showPlaceOnMap(house.townKey); return; }
+        // To the map: the page and every dialog under it close (as the Houses window's way to the tree).
+        this.closeHousePage({ restore: false });
+        this.closeHousesWindow(false);
+        if (!at) { this.showPlaceOnMap(house.townKey); return; }
         SettingsManager.setMapHouses(true);
         // A house of people outside the map's scope: the whole tree.
         const scope = this.mapScopePersons();
         if (scope && !house.personIds.some(id => scope.has(id))) this.rememberMapScope('tree');
         if (this.mapTimeOn) this.setMapTimeOn(false);
-        this.closeHousePage();
         this.mapCenter = { lat: at.lat, lon: at.lon };
         this.mapZoom = Math.min(MAP_HOUSE_ZOOM, HOUSE_MAP_MAX_ZOOM);
         this.closeMapPopup();

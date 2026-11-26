@@ -481,7 +481,12 @@ export const housePageMethods = uiModule({
             `<button type="button" class="pp-menu-item${narrow ? ' pp-menu-item--narrow' : ''}" role="menuitem" data-hp-menu="${key}">${html ? label : esc(label)}</button>`;
         const sep = '<div class="pp-menu-sep" role="separator"></div>';
         const groups = [
-            [item('save', P.save, true), item('book', P.openInBook), canEdit ? item('name', P.nameMenu) : ''].join(''),
+            [
+                item('save', P.save, true), item('book', P.openInBook),
+                // The Map tab with the Family houses layer and the house in the middle (spec 030 §9).
+                this.houseOnMapPossible(house, this.housePageResearch(house)) ? item('map', P.onMap) : '',
+                canEdit ? item('name', P.nameMenu) : '',
+            ].join(''),
             b ? [
                 houseFeature(b.features, 'house.material') ? item('attach', H.attach) : '',
                 houseFeature(b.features, 'house.import') && researchDeviceAllows('house')
@@ -517,6 +522,7 @@ export const housePageMethods = uiModule({
             this.openBookDialog({ kind: 'menu' }, undefined, { output: 'book', selection: { kind: 'house', place: house.ref.town, house: house.text } });
             return;
         }
+        if (key === 'map') { this.showHouseOnMap(house, this.housePageResearch(house)); return; }
         if (key === 'name') {
             if (!page || DataManager.isReadOnly()) return;
             page.editingName = true;
