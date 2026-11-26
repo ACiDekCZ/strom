@@ -3586,6 +3586,13 @@ export const researchUiMethods = uiModule({
 
     /** A card's agent badge: the followed research's panel, unfolded. */
     showLiveResearchNow(): void {
+        // A window of its own (spec 097 §1–§3): the research the main window follows is followed here by this
+        // window's own state (attached, its strip saying so); it has no research panel of its own.
+        if (isBridgelessWindow()) {
+            const followed = liveSession();
+            if (followed && !followed.ended) this.setLiveFollow(true);
+            return;
+        }
         if (!live || live.ended) return;
         live.collapsed = false;
         this.renderLivePanel();

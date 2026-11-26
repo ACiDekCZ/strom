@@ -34,6 +34,11 @@ import { importOriginParts } from './fact-status.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { researchHere } from './research-ui.js';
 import { uiModule } from './module.js';
+import { REVERT_TIMEOUT_MS, type RevertResult } from '../research-revert.js';
+import { FACT_REVERT_ACTION, readRevertResult, satMainForward } from '../windows/window-sat-research.js';
+
+/** How much longer than the bridge's own limit a window of its own waits for the main window's answer (it loads too). */
+const MAIN_WAIT_EXTRA_MS = 30_000;
 
 const esc = (s: string): string => s
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -310,12 +315,35 @@ export const factOriginMethods = uiModule({
         const label = originFactLabel(person, fact);
         states.set(key, { kind: 'reverting' });
         this.refreshPersonReliability();
-        const result = await this.researchRevertFact(personId, fact, model.ref, model.part);
+        const result = await this.factRevertWrite(personId, fact, model.ref, model.part);
         const out = revertOutcome(result);
         states.set(key, out.state);
         if (out.toast === 'reverted') this.showToast(strings.origin.toast(label), 5000);
         else if (out.toast === 'already') this.showToast(strings.origin.already, 5000);
         this.refreshPersonReliability();
+    },
+
+    /**
+     * The revert through the research's bridge: this window's, or in a window of its own the main window's (its
+     * answer read back; none in time: not reverted here, said as an error).
+     */
+    async factRevertWrite(personId: PersonId, fact: string, ref: string, part?: FactPart): Promise<RevertResult> {
+        const main = satMainForward();
+        if (!main) return this.researchRevertFact(personId, fact, ref, part);
+        const answer = await main.ask(FACT_REVERT_ACTION, { personId, fact }, REVERT_TIMEOUT_MS + MAIN_WAIT_EXTRA_MS);
+        return readRevertResult(answer) ?? { kind: 'error', status: 0, code: 'network', reason: '' };
+    },
+
+    /**
+     * A window of its own asked for Revert (`fact-revert`): the earlier value as this window's tree has it, put
+     * back as its own Revert does (the research's version loaded here). Nothing to put back here: refused.
+     */
+    async revertFactHere(personId: PersonId, fact: string): Promise<RevertResult & { loaded?: 'quiet' | 'later' }> {
+        const person = DataManager.getPerson(personId);
+        const sources = DataManager.getData().sources ?? {};
+        const model = wasRowModel(person?.researchOrigins?.[fact], id => !!sources[id]);
+        if (!person || !model?.ref) return { kind: 'error', status: 0, code: 'invalid', reason: '' };
+        return this.researchRevertFact(personId, fact, model.ref, model.part);
     },
 
     /** The import's file under today's side of a conflict about a family tree's value ('' when not known). */

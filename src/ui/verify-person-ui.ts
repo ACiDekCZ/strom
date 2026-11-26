@@ -45,6 +45,7 @@ import { uiModule } from './module.js';
 import { runBusy } from './busy.js';
 import { factVerifyStartedHere, factWaitsForVerify, markVerifyPending, verifyKindName } from './verify-ui.js';
 import { verifyRefusalText } from '../verify-refusal.js';
+import { VERIFY_PERSON_ACTION, satMainForward } from '../windows/window-sat-research.js';
 
 export const VERIFY_PERSON_DIALOG_ID = 'verify-person-modal';
 export const VERIFY_BULK_DIALOG_ID = 'verify-bulk-modal';
@@ -423,6 +424,14 @@ export const verifyPersonMethods = uiModule({
      * that hold the person's waiting facts to the head of the queue.
      */
     showVerifyPersonDialog(personId: PersonId, opts: { prioritize?: boolean } = {}): void {
+        // A window of its own (no bridge here: the preview could not be read): the main window's preview of
+        // the person, through its bridge, the main window forward.
+        const main = satMainForward();
+        if (main) {
+            this.hideContextMenu();
+            main.run(VERIFY_PERSON_ACTION, { personId, ...(opts.prioritize ? { prioritize: true } : {}) }, true);
+            return;
+        }
         const now = this.verifyBridgeNow();
         const person = DataManager.getPerson(personId);
         const ref = person ? personResearchRef(person) : null;

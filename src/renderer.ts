@@ -112,6 +112,7 @@ import { updateBulkFamilySwitches } from './ui/bulk-family-ui.js';
 import { pillUnderFinger } from './card-tap.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { VIEW_STEP_EVENT } from './windows/window-focus.js';
+import { getWindowRole } from './windows/window-role.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 import { rememberOpenedFocus, updateDefaultFocusButtons } from './ui/default-focus.js';
@@ -5286,6 +5287,8 @@ class TreeRendererClass {
         // the connection badges off (also skips the per-tree decrypt cost).
         if (DataManager.isViewMode()) return null;
         if (!SettingsManager.getCardSignals().crossTree) return null;
+        // A window of its own shows one tree (its ⇄ would switch that window to another tree): no ⇄ there.
+        if (getWindowRole() === 'satellite') return null;
 
         // Cached per tree (stamped by lastModifiedAt): loading + decrypting
         // every tree's data on every render was a real cost on big setups.

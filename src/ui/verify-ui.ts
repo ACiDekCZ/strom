@@ -22,9 +22,9 @@ import { formatFlexDate } from '../dates.js';
 import { shownName } from '../person-name.js';
 import type { LifeEvent, PartnershipId, PersonId } from '../types.js';
 import { FactHolder, factCitations, isPartnership, localIsoDay } from '../import-origin.js';
-import { factConfirmation, factConfirmMark, factPendingPosition, factSourceIds, factValueSignature, factVerifyInfo, factVerifyReaders, type FactVerifyInfo } from '../verify.js';
+import { factConfirmation, factConfirmMark, factPendingPosition, factSourceIds, factValueSignature, factVerifyInfo, factVerifyReaders, personResearchRef, type FactVerifyInfo } from '../verify.js';
 import { confirmRefusalText, verifyRefusalText } from '../verify-refusal.js';
-import { postFactConfirm, postVerify, type FactConfirmResult, type VerifyFact, type VerifyResult } from '../research-verify.js';
+import { VERIFY_TIMEOUT_MS, postFactConfirm, postVerify, type FactConfirmResult, type VerifyFact, type VerifyResult } from '../research-verify.js';
 import { verifyFeaturesHere, type VerifyResearch } from '../verify-offer.js';
 import type { FactReliability, ReliabilityInput, ReliabilityStepName } from '../reliability.js';
 import { type FactOffer, factOffer, verifyFactKind, verifyRecordText, verifyTogetherKind } from '../verify-ui-model.js';
@@ -37,6 +37,9 @@ import { lastBridgeStatus } from './research-sync-ui.js';
 import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import type { ToastWorkEnd } from './toast.js';
+import {
+    FACT_CONFIRM_ACTION, VERIFY_PERSON_ACTION, readFactConfirmResult, satMainForward,
+} from '../windows/window-sat-research.js';
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const lowerFirst = (t: string): string => (t ? t.charAt(0).toLocaleLowerCase() + t.slice(1) : t);
@@ -45,6 +48,23 @@ type Lang = 'cs' | 'en' | 'de' | 'pl';
 function uiLang(): Lang {
     const l = getCurrentLanguage();
     return l === 'cs' || l === 'de' || l === 'pl' ? l : 'en';
+}
+
+/** How much longer than the bridge's own limit a window of its own waits for the main window's answer. */
+const MAIN_WAIT_EXTRA_MS = 15_000;
+
+/**
+ * The person whose "Verify facts" takes a fact: its own, or for a couple's fact the partner the research
+ * knows (the first one else). Null: none in the tree.
+ */
+export function verifyFactPerson(target: FactPillTarget): PersonId | null {
+    const data = DataManager.getData();
+    if ('personId' in target && target.personId) return data.persons[target.personId as PersonId] ? target.personId as PersonId : null;
+    const pid = 'partnershipId' in target ? target.partnershipId : undefined;
+    const couple = pid ? data.partnerships[pid as PartnershipId] : undefined;
+    if (!couple) return null;
+    const ids = [couple.person1Id, couple.person2Id].filter(id => !!data.persons[id]);
+    return ids.find(id => personResearchRef(data.persons[id])) ?? ids[0] ?? null;
 }
 
 /** The clock of the waiting row (12 px, the pill's own is 10 px). */
@@ -518,6 +538,15 @@ export const verifyUiMethods = uiModule({
 
     /** "Verify": the preview from a dry run of the research, in the same tip. */
     verifyOpenPreview(v: FactView): void {
+        // A window of its own (no bridge here: the preview could not be read): the main window's preview of the
+        // fact's person, through its bridge, the main window forward.
+        const main = satMainForward();
+        if (main) {
+            const personId = verifyFactPerson(v.target);
+            closeStatusTip();
+            if (personId) main.run(VERIFY_PERSON_ACTION, { personId, ...(!v.offer.verify && v.offer.prioritize ? { prioritize: true } : {}) }, true);
+            return;
+        }
         const tip = document.querySelector('#status-tip');
         const eid = v.offer.eid;
         if (!tip || !eid) return;
@@ -563,6 +592,19 @@ export const verifyUiMethods = uiModule({
     },
 
     /**
+     * The fact confirmed against the scan (or taken back) through the research's bridge: this window's, or in a
+     * window of its own the main window's (its answer read back). Null: no bridge, or no answer.
+     */
+    async factConfirmWrite(eid: string, confirm: boolean, txt: string | null): Promise<FactConfirmResult | null> {
+        const main = satMainForward();
+        if (main) {
+            const answer = await main.ask(FACT_CONFIRM_ACTION, { eid, confirm, ...(txt ? { txt } : {}) }, VERIFY_TIMEOUT_MS + MAIN_WAIT_EXTRA_MS);
+            return readFactConfirmResult(answer);
+        }
+        return this.postResearchBridgeWrite((base, features) => postFactConfirm(base, eid, confirm, { features, txt }));
+    },
+
+    /**
      * "Confirm against the scan" (`confirm`) or its "Undo": through the
      * research when the fact is its (by its id), else the app's own
      * confirmation. Undone: a toast with "Redo".
@@ -605,8 +647,8 @@ export const verifyUiMethods = uiModule({
         // The research's mark of the value shown (`3 _TXT`): it confirms only that value (facts.confirm.value).
         const holderNow = holderOf(v.target);
         const txt = holderNow ? factConfirmMark(holderNow, v.fact) : null;
-        const result: FactConfirmResult | null = await this.postResearchBridgeWrite(
-            (base, features) => postFactConfirm(base, eid, confirm, { features, txt }));
+        const viaMain = !!satMainForward();
+        const result = await this.factConfirmWrite(eid, confirm, txt);
         if (tipState?.key === v.key) tipState = null;
         if (!result?.ok) {
             const why = result ? confirmRefusalText(result.code) : strings.verify.confirmFailed;
@@ -615,7 +657,8 @@ export const verifyUiMethods = uiModule({
             // to it, the reason in a toast. A value changed here (not sent) only says why.
             if (result?.code === 'confirm.changed' && result.status !== 0) {
                 if (tip && document.querySelector('#status-tip') === tip) closeStatusTip();
-                void this.researchLoadNewer();
+                // Written through the main window: it loads the research's version there (this window follows it).
+                if (!viaMain) void this.researchLoadNewer();
                 if (opts.inToast) return { ok: false, text: why, retry: false };
                 this.showToast(why, 8000, { alert: true, kind: 'verify-confirm' });
                 return undefined;

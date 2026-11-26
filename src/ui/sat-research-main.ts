@@ -7,10 +7,13 @@
  */
 
 import {
-    CARD_SIGNAL_ACTION, HOUSES_OPEN_ACTION, PLACES_LIVE_ACTION, PLACES_OPEN_ACTION, PLACES_QUEUE_ACTION,
-    readCardSignalArgs, readHousesOpenArgs, readPlacesLiveArgs, readPlacesOpenArgs, readPlacesQueueArgs, registerMainResearchAction,
+    CARD_SIGNAL_ACTION, FACT_CONFIRM_ACTION, FACT_REVERT_ACTION, HOUSES_OPEN_ACTION, PLACES_LIVE_ACTION, PLACES_OPEN_ACTION,
+    PLACES_QUEUE_ACTION, VERIFY_PERSON_ACTION, readCardSignalArgs, readFactConfirmArgs, readFactRevertArgs, readHousesOpenArgs,
+    readPlacesLiveArgs, readPlacesOpenArgs, readPlacesQueueArgs, readVerifyPersonArgs, registerMainResearchAction,
 } from '../windows/window-sat-research.js';
 import type { PlacesIdentifyBody, PlacesIdentifyResult, PlacesReadResult } from '../places-bridge.js';
+import type { FactConfirmResult } from '../research-verify.js';
+import type { RevertResult } from '../research-revert.js';
 import type { LiveWaiting } from '../research-link.js';
 import type { PersonId } from '../types.js';
 import type { MapScope } from './map-ui.js';
@@ -30,6 +33,12 @@ export interface SatResearchMainDeps {
     showPersonWaiting(items: readonly LiveWaiting[]): void;
     openWaitingStoryCompare(personId: PersonId): boolean;
     showResearchWaiting(): void;
+    /** "Verify facts" of a person: the preview of what the research would verify (or "Verify first"). */
+    showVerifyPersonDialog(personId: PersonId, opts?: { prioritize?: boolean }): void;
+    /** A fact confirmed against the scan (or taken back) through this window's bridge (null: no bridge here). */
+    factConfirmWrite(eid: string, confirm: boolean, txt: string | null): Promise<FactConfirmResult | null>;
+    /** A fact's family tree value put back through this window's bridge, as its own Revert does. */
+    revertFactHere(personId: PersonId, fact: string): Promise<RevertResult & { loaded?: 'quiet' | 'later' }>;
 }
 
 /** Register every action a satellite may ask the main window for. */
@@ -74,5 +83,25 @@ export function registerSatelliteResearchActions(ui: SatResearchMainDeps): void 
             } else ui.openCardSignal(personId, a.signal);
             return true;
         },
+    });
+    // "Verify facts" of a satellite's person (its card's tip, menu, a fact's tip): this window's preview, through its bridge.
+    registerMainResearchAction(VERIFY_PERSON_ACTION, {
+        read: readVerifyPersonArgs,
+        run: (a) => {
+            ui.showVerifyPersonDialog(a.personId as PersonId, a.prioritize ? { prioritize: true } : {});
+            return true;
+        },
+    });
+    // "Confirm against the scan" or its Undo of a satellite's fact: written through this window's bridge, the
+    // bridge's answer back to the satellite, whose tip says it as this window's would.
+    registerMainResearchAction(FACT_CONFIRM_ACTION, {
+        read: readFactConfirmArgs,
+        run: (a) => ui.factConfirmWrite(a.eid, a.confirm, a.txt ?? null),
+    });
+    // Revert of a satellite's fact: put back through this window's bridge (the earlier value as this window's
+    // tree has it), the research's version loaded here as after its own Revert; the outcome back to the satellite.
+    registerMainResearchAction(FACT_REVERT_ACTION, {
+        read: readFactRevertArgs,
+        run: (a) => ui.revertFactHere(a.personId as PersonId, a.fact),
     });
 }

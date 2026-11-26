@@ -15,6 +15,8 @@
  */
 
 import type { PlaceCheckFlag, PlacesIdentifyBody } from '../places-bridge.js';
+import type { FactConfirmErrorCode, FactConfirmResult } from '../research-verify.js';
+import type { RevertResult } from '../research-revert.js';
 import { researchLinkActionOf } from '../research-link.js';
 import { isBridgelessWindow } from '../research-device.js';
 
@@ -276,4 +278,113 @@ export function relayedPlacesLink(url: string): RelayedResearchLink | null {
     const params: Record<string, string> = {};
     for (const [k, v] of Object.entries(r.params)) if (typeof v === 'string') params[k] = v;
     return { link: r.link, params };
+}
+
+/** "Verify facts" of a satellite's person (the card's tip, its menu, a fact's tip): the main window's preview. */
+export const VERIFY_PERSON_ACTION = 'verify-person';
+
+export interface VerifyPersonArgs {
+    personId: string;
+    /** "Verify first": the waiting facts' tasks moved to the head of the queue. */
+    prioritize?: boolean;
+}
+
+/** `verify-person`'s arguments as they came (null: malformed). */
+export function readVerifyPersonArgs(raw: unknown): VerifyPersonArgs | null {
+    const a = argsObject(raw);
+    if (!a || Object.keys(a).some(k => k !== 'personId' && k !== 'prioritize')) return null;
+    if (!personIdOf(a.personId)) return null;
+    if (a.prioritize !== undefined && typeof a.prioritize !== 'boolean') return null;
+    return { personId: a.personId, ...(a.prioritize ? { prioritize: true } : {}) };
+}
+
+/** "Confirm against the scan" (or its Undo) of a satellite's fact: written through the main window's bridge. */
+export const FACT_CONFIRM_ACTION = 'fact-confirm';
+
+export interface FactConfirmArgs {
+    /** The research's id of the fact. */
+    eid: string;
+    confirm: boolean;
+    /** The research's mark of the value shown ('changed': the value is not the one the mark stands for). */
+    txt?: string;
+}
+
+/** `fact-confirm`'s arguments as they came (null: malformed). */
+export function readFactConfirmArgs(raw: unknown): FactConfirmArgs | null {
+    const a = argsObject(raw);
+    if (!a || Object.keys(a).some(k => k !== 'eid' && k !== 'confirm' && k !== 'txt')) return null;
+    if (typeof a.eid !== 'string' || !a.eid || a.eid.length > MAX_TEXT || typeof a.confirm !== 'boolean') return null;
+    if (a.txt !== undefined && (typeof a.txt !== 'string' || !a.txt || a.txt.length > MAX_TEXT)) return null;
+    return { eid: a.eid, confirm: a.confirm, ...(typeof a.txt === 'string' ? { txt: a.txt } : {}) };
+}
+
+const CONFIRM_CODES: readonly FactConfirmErrorCode[] = [
+    'factconfirm.invalid', 'factconfirm.unknown', 'factconfirm.retracted', 'factconfirm.merged', 'confirm.changed',
+    'busy', 'locked', 'network', 'invalid', 'unsupported', 'unknown',
+];
+
+const textOf = (v: unknown): v is string => typeof v === 'string' && v.length <= MAX_TEXT;
+
+/** The main window's answer to `fact-confirm` as it came (null: none, or not one). */
+export function readFactConfirmResult(raw: unknown): FactConfirmResult | null {
+    const r = argsObject(raw);
+    if (!r) return null;
+    if (r.ok === true) {
+        if (!textOf(r.fact) || !textOf(r.owner) || !textOf(r.head)) return null;
+        if (r.confirmed !== undefined && !textOf(r.confirmed)) return null;
+        if (r.parent !== undefined && !textOf(r.parent)) return null;
+        return {
+            ok: true, fact: r.fact, owner: r.owner, head: r.head,
+            ...(typeof r.confirmed === 'string' ? { confirmed: r.confirmed } : {}), ...(typeof r.parent === 'string' ? { parent: r.parent } : {}),
+        };
+    }
+    if (r.ok !== false || !CONFIRM_CODES.includes(r.code as FactConfirmErrorCode)) return null;
+    if (typeof r.status !== 'number' || !textOf(r.reason)) return null;
+    return { ok: false, code: r.code as FactConfirmErrorCode, status: r.status, reason: r.reason };
+}
+
+/** Revert of a satellite's fact (the family tree's value put back): through the main window's bridge. */
+export const FACT_REVERT_ACTION = 'fact-revert';
+
+export interface FactRevertArgs {
+    personId: string;
+    /** The fact's key (name, sex, birth, death, event:<id>); its earlier value is read in the main window. */
+    fact: string;
+}
+
+/** `fact-revert`'s arguments as they came (null: malformed). */
+export function readFactRevertArgs(raw: unknown): FactRevertArgs | null {
+    const a = argsObject(raw);
+    if (!a || Object.keys(a).some(k => k !== 'personId' && k !== 'fact')) return null;
+    if (!personIdOf(a.personId) || typeof a.fact !== 'string' || !a.fact || a.fact.length > 200) return null;
+    return { personId: a.personId, fact: a.fact };
+}
+
+/** The main window's answer to `fact-revert` as it came (null: none, or not one). */
+export function readRevertResult(raw: unknown): (RevertResult & { loaded?: 'quiet' | 'later' }) | null {
+    const r = argsObject(raw);
+    if (!r) return null;
+    if (r.loaded !== undefined && r.loaded !== 'quiet' && r.loaded !== 'later') return null;
+    const loaded: { loaded?: 'quiet' | 'later' } = r.loaded === 'quiet' || r.loaded === 'later' ? { loaded: r.loaded } : {};
+    const reason = textOf(r.reason) ? r.reason : '';
+    switch (r.kind) {
+        case 'ok':
+            return textOf(r.head) && textOf(r.parent) ? { kind: 'ok', head: r.head, parent: r.parent, ...loaded } : null;
+        case 'nothing':
+            return { kind: 'nothing', reason, ...loaded };
+        case 'unknown':
+            return { kind: 'unknown', reason };
+        case 'busy':
+            return { kind: 'busy', reason, ...(typeof r.retryAfter === 'number' ? { retryAfter: r.retryAfter } : {}) };
+        case 'writeHeld':
+            // What holds writing as the main window read it: the other computer's name is what the row says.
+            if (r.computer !== undefined && !textOf(r.computer)) return null;
+            return { kind: 'writeHeld', reason, ...(typeof r.computer === 'string' && r.computer ? { computer: r.computer } : {}) };
+        case 'noBridge':
+            return { kind: 'noBridge' };
+        case 'error':
+            return { kind: 'error', status: typeof r.status === 'number' ? r.status : 0, code: textOf(r.code) ? r.code : '', reason };
+        default:
+            return null;
+    }
 }
