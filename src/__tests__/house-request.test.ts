@@ -3,7 +3,7 @@
  * and the setting, its mark, the houses going with a request and the dialog's estimate.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLanguage } from '../strings.js';
+import { setLanguage, strings } from '../strings.js';
 import type { TreeHouse } from '../houses.js';
 import { sanitizeLiveHouses } from '../research-link.js';
 import {
@@ -99,6 +99,14 @@ describe('The request\'s estimate', () => {
         expect(houseRequestEstimate(measured ? { ...measured, measured: false } : undefined, 1, false)).toEqual({ minutes: 50, usd: null });
         // Without the research's estimate: its defaults (30 min a house, 20 min a town).
         expect(houseRequestEstimate(undefined, 2, false)).toEqual({ minutes: 80, usd: null });
+    });
+
+    it('the price, the time and "at most 3" stay whole on a line break (cs/en/de/pl)', () => {
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            setLanguage(lang);
+            expect(strings.houses.req.max).toMatch(/\S\u00a03$/);
+            expect(houseRequestCostText({ minutes: 50, usd: 2.1 })).toMatch(/50\u00a0(min|Min\.) \(≈\u00a02[.,]1\u00a0USD\)/);
+        }
     });
 
     it('the sentence in cs and en', () => {

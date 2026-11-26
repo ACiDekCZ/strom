@@ -90,7 +90,7 @@ export const plPart14: Pick<StringsType, 'houses'> = {
             againWhat: 'Przeszukane źródła nie są przeszukiwane ponownie; tylko nowe i jeszcze nieprzeszukane.',
             cost: (dur: string, usd: string | null) => `Jedna sesja badań, około ${dur}${usd ? ` (≈\u00a0${usd}\u00a0USD)` : ''}. Korzysta z subskrypcji AI agenta badań.`,
             neighbours: 'Sąsiednie domy rodziny w miejscowości zostaną opracowane razem',
-            max: 'najwyżej 3',
+            max: 'najwyżej\u00a03',
             attach: 'Dołącz materiał… (opcjonalnie)',
             modeQueue: 'Dom trafi przez most na początek kolejki badań, bez okna terminala.',
             go: 'Ustal historię',
