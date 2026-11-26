@@ -78,6 +78,26 @@ export const plPart14: Pick<StringsType, 'houses'> = {
             waiting: 'czeka na odpowiedź', held: 'odłożone', takeover: 'własna kwerenda czeka na przejęcie',
         },
         takeoverNote: 'agent przejmie ją w następnej sesji',
+        auto: {
+            title: 'Historia domów',
+            desc: 'Badania same opracują domy bezpośrednich przodków, w których rodzina mieszkała co najmniej dwa pokolenia lub 30 lat, a najstarszy zapis ma ponad 100 lat. Pozostałe domy tylko na żądanie.',
+            durMinutes: (m: number) => `${m} min`,
+            durHours: (h: number) => `${h} h`,
+            estimate: (n: number, t: number, dur: string, usd: string | null) =>
+                `Zadanie obejmie ${nPl(n, 'dom', 'domy', 'domów')} w ${t} ${t === 1 ? 'miejscowości' : 'miejscowościach'} · około ${dur} pracy agenta${usd ? ` (≈ ${usd} USD)` : ''} · korzysta z subskrypcji AI`,
+            confirmOnTitle: 'Włączyć historię domów?',
+            confirmOn: (n: number, t: number, dur: string, usd: string | null) =>
+                `Zadanie obejmie ${nPl(n, 'dom', 'domy', 'domów')} w ${t} ${t === 1 ? 'miejscowości' : 'miejscowościach'}, około ${dur} pracy agenta${usd ? ` (≈ ${usd} USD)` : ''}. Korzysta z subskrypcji AI. Kolejne domy dojdą same, gdy spełnią próg.`,
+            confirmOnNone: 'Korzysta z subskrypcji AI. Domy dojdą same, gdy spełnią próg.',
+            on: 'Włącz',
+            off: 'Wyłącz',
+            onSummary: (n: number, d: number, r: number, q: number) =>
+                `Włączone · ${nPl(n, 'dom', 'domy', 'domów')}: ${d} gotowe, ${r} w badaniu, ${q} w kolejce`,
+            housesLink: 'Domy ›',
+            confirmOffTitle: 'Wyłączyć historię domów?',
+            confirmOff: 'Oczekujące zadania domów zostaną odłożone, gotowe wyniki zostają.',
+            held: (n: number) => `Odłożono: ${nPl(n, 'zadanie', 'zadania', 'zadań')} domów. ${n === 1 ? 'Wróci' : 'Wrócą'} po włączeniu.`,
+        },
         answer: 'Odpowiedz',
         attach: 'Dołącz materiał…',
         attachTitle: 'Dołącz materiał do domu',

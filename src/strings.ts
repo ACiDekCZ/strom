@@ -119,6 +119,11 @@ export function joinOr(lang: Language, parts: string[]): string {
 
 /** Czech count form shorthand: `${n} ${word}`. */
 const nCs = (n: number, one: string, few: string, other: string): string => `${n} ${plural('cs', n, one, few, other)}`;
+/** "v 1 obci", "ve 3 obcích", "v 5 obcích": `ve` where the number is read from dv-, tř-, čt- or st- (2–4, 12–14, 20–49, 100–499). */
+const townsInCs = (t: number): string => {
+    const ve = (t >= 2 && t <= 4) || (t >= 12 && t <= 14) || (t >= 20 && t <= 49) || (t >= 100 && t <= 499);
+    return `${ve ? 've' : 'v'} ${t} ${t === 1 ? 'obci' : 'obcích'}`;
+};
 /** English count form shorthand: `${n} ${word}`. */
 const nEn = (n: number, one: string, other: string): string => `${n} ${plural('en', n, one, other)}`;
 /** English ordinal: 1st, 2nd, 3rd, 4th, 11th, 21st. */
@@ -13332,6 +13337,29 @@ const stringsEN = {
             waiting: 'waiting for an answer', held: 'postponed', takeover: 'own research waiting to be taken over',
         },
         takeoverNote: 'the agent takes it over in its next session',
+        // The setting "House history" in Research for this tree (spec 030 §6, K6.1); `dur` and `usd` come formatted.
+        auto: {
+            title: 'House history',
+            desc: 'The research itself processes houses of direct ancestors where the family lived for at least two generations or 30 years and the oldest record is more than 100 years old. Other houses only on request.',
+            durMinutes: (m: number) => `${m} min`,
+            durHours: (h: number) => `${h} h`,
+            estimate: (n: number, t: number, dur: string, usd: string | null) =>
+                `The task covers ${nEn(n, 'house', 'houses')} in ${nEn(t, 'town', 'towns')} · about ${dur} of agent work${usd ? ` (≈ ${usd} USD)` : ''} · uses the AI subscription`,
+            confirmOnTitle: 'Turn on house history?',
+            confirmOn: (n: number, t: number, dur: string, usd: string | null) =>
+                `The task covers ${nEn(n, 'house', 'houses')} in ${nEn(t, 'town', 'towns')}, about ${dur} of agent work${usd ? ` (≈ ${usd} USD)` : ''}. Uses the AI subscription. Further houses are added automatically once they meet the threshold.`,
+            confirmOnNone: 'Uses the AI subscription. Houses are added automatically once they meet the threshold.',
+            on: 'Turn on',
+            off: 'Turn off',
+            onSummary: (n: number, d: number, r: number, q: number) =>
+                `On · ${nEn(n, 'house', 'houses')}: ${d} done, ${r} being researched, ${q} queued`,
+            housesLink: 'Houses ›',
+            confirmOffTitle: 'Turn off house history?',
+            confirmOff: 'Waiting house tasks are postponed; finished results stay.',
+            held: (n: number) => n === 1
+                ? 'Postponed: 1 house task. It returns when turned on.'
+                : `Postponed: ${n} house tasks. They return when turned on.`,
+        },
         answer: 'Answer',
         attach: 'Attach material…',
         attachTitle: 'Attach material to the house',
@@ -26102,6 +26130,26 @@ const stringsCZ: StringsType = {
             waiting: 'čeká na odpověď', held: 'odloženo', takeover: 'rešerše čeká na převzetí',
         },
         takeoverNote: 'převezme agent v příštím sezení',
+        auto: {
+            title: 'Historie domů',
+            desc: 'Výzkum sám zpracuje domy přímých předků, kde rodina žila aspoň dvě generace nebo 30 let a nejstarší zápis je starší než 100 let. Ostatní domy jen na vyžádání.',
+            durMinutes: (m: number) => `${m} min`,
+            durHours: (h: number) => `${h} h`,
+            estimate: (n: number, t: number, dur: string, usd: string | null) =>
+                `Úkol dostane ${nCs(n, 'dům', 'domy', 'domů')} ${townsInCs(t)} · asi ${dur} práce agenta${usd ? ` (≈ ${usd} USD)` : ''} · čerpá předplatné AI`,
+            confirmOnTitle: 'Zapnout historii domů?',
+            confirmOn: (n: number, t: number, dur: string, usd: string | null) =>
+                `Úkol dostane ${nCs(n, 'dům', 'domy', 'domů')} ${townsInCs(t)}, asi ${dur} práce agenta${usd ? ` (≈ ${usd} USD)` : ''}. Čerpá předplatné AI. Další domy přibudou samy, až splní práh.`,
+            confirmOnNone: 'Čerpá předplatné AI. Domy přibudou samy, až splní práh.',
+            on: 'Zapnout',
+            off: 'Vypnout',
+            onSummary: (n: number, d: number, r: number, q: number) =>
+                `Zapnuto · ${nCs(n, 'dům', 'domy', 'domů')}: ${d} hotovo, ${r} zkoumá se, ${q} ve frontě`,
+            housesLink: 'Domy ›',
+            confirmOffTitle: 'Vypnout historii domů?',
+            confirmOff: 'Čekající úkoly domů se odloží, hotové výsledky zůstanou.',
+            held: (n: number) => `Odloženo: ${nCs(n, 'úkol', 'úkoly', 'úkolů')} domů. Po zapnutí se vrátí.`,
+        },
         answer: 'Odpovědět',
         attach: 'Přiložit materiál…',
         attachTitle: 'Přiložit materiál k domu',
@@ -38779,6 +38827,28 @@ const stringsDE: StringsType = {
             waiting: 'wartet auf Antwort', held: 'zurückgestellt', takeover: 'eigene Recherche wartet auf Übernahme',
         },
         takeoverNote: 'der Agent übernimmt sie in der nächsten Sitzung',
+        auto: {
+            title: 'Hausgeschichte',
+            desc: 'Die Forschung bearbeitet selbst die Häuser direkter Vorfahren, in denen die Familie mindestens zwei Generationen oder 30 Jahre lebte und deren ältester Eintrag älter als 100 Jahre ist. Andere Häuser nur auf Anforderung.',
+            durMinutes: (m: number) => `${m} Min.`,
+            durHours: (h: number) => `${h} Std.`,
+            estimate: (n: number, t: number, dur: string, usd: string | null) =>
+                `Der Auftrag umfasst ${nDe(n, 'Haus', 'Häuser')} in ${nDe(t, 'Ort', 'Orten')} · etwa ${dur} Arbeit des Agenten${usd ? ` (≈ ${usd} USD)` : ''} · verbraucht das KI-Abo`,
+            confirmOnTitle: 'Hausgeschichte einschalten?',
+            confirmOn: (n: number, t: number, dur: string, usd: string | null) =>
+                `Der Auftrag umfasst ${nDe(n, 'Haus', 'Häuser')} in ${nDe(t, 'Ort', 'Orten')}, etwa ${dur} Arbeit des Agenten${usd ? ` (≈ ${usd} USD)` : ''}. Verbraucht das KI-Abo. Weitere Häuser kommen automatisch hinzu, sobald sie die Schwelle erreichen.`,
+            confirmOnNone: 'Verbraucht das KI-Abo. Häuser kommen automatisch hinzu, sobald sie die Schwelle erreichen.',
+            on: 'Einschalten',
+            off: 'Ausschalten',
+            onSummary: (n: number, d: number, r: number, q: number) =>
+                `Ein · ${nDe(n, 'Haus', 'Häuser')}: ${d} fertig, ${r} in Arbeit, ${q} in der Warteschlange`,
+            housesLink: 'Häuser ›',
+            confirmOffTitle: 'Hausgeschichte ausschalten?',
+            confirmOff: 'Wartende Hausaufträge werden zurückgestellt, fertige Ergebnisse bleiben.',
+            held: (n: number) => n === 1
+                ? 'Zurückgestellt: 1 Hausauftrag. Nach dem Einschalten kehrt er zurück.'
+                : `Zurückgestellt: ${n} Hausaufträge. Nach dem Einschalten kehren sie zurück.`,
+        },
         answer: 'Antworten',
         attach: 'Material anhängen…',
         attachTitle: 'Material zum Haus anhängen',

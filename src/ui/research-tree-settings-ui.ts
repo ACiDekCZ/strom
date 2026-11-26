@@ -39,6 +39,8 @@ import { isBetaBuildHere } from '../pwa.js';
 import { runLimit, runLimitCap, runLimitOn } from '../research-runs.js';
 import { postRunLimit, runLimitRaise, RUN_LIMIT_MIN } from '../research-runs-write.js';
 import { commandLine } from './research-live-ui.js';
+import { houseStatus, houseFeature, setHousesAuto } from '../house-bridge.js';
+import { housesAutoConfirmOn, housesAutoEstimate, housesAutoSummary } from './houses-auto-view.js';
 
 const SETTINGS_ID = 'research-tree-settings-modal';
 const ASK_ID = 'research-mode-ask-modal';
@@ -60,6 +62,14 @@ let storiesListening = false;
  * a write on its way (`busy`, `sending`), the row gone after the research said the tree is an archive (`gone`).
  */
 const census: { rid: string; note?: string; want?: boolean; wantHeld?: number | null; busy?: boolean; sending?: boolean; gone?: boolean } = { rid: '' };
+
+/**
+ * "House history" (spec 030 §6, K6.1), the row under Census records in Sources: the same parts as `census`, the
+ * tree of the dialog (`tree`: "Houses ›" only for the open tree) and its question open (`asking`).
+ */
+const houses: {
+    rid: string; tree?: TreeId; note?: string; want?: boolean; wantHeld?: number | null; busy?: boolean; sending?: boolean; gone?: boolean; asking?: boolean;
+} = { rid: '' };
 
 /**
  * "The agent goes through files sent to the research by itself" (spec 130 K2.1, K1.3: batches, single files, scans): the same parts as `census` — the
@@ -121,6 +131,7 @@ const HYPOS_PEND = 'tree:hypos';
 const READ_TASK_PEND = 'tree:readtask';
 const STORIES_PEND = 'tree:stories';
 const CENSUS_PEND = 'tree:census';
+const HOUSES_PEND = 'tree:houses';
 const RUNS_PEND = 'tree:runs';
 
 /**
@@ -557,6 +568,9 @@ export const researchTreeSettingsMethods = uiModule({
         this.renderResearchStoriesRow();
         census.rid = link.id;
         delete census.note; delete census.want; delete census.wantHeld; delete census.busy; delete census.sending; delete census.gone;
+        houses.rid = link.id;
+        houses.tree = treeId;
+        delete houses.note; delete houses.want; delete houses.wantHeld; delete houses.busy; delete houses.sending; delete houses.gone; delete houses.asking;
         this.renderResearchCensusRow();
         intake.rid = link.id;
         delete intake.note; delete intake.want; delete intake.busy; delete intake.sending; delete intake.gone;
@@ -819,10 +833,14 @@ export const researchTreeSettingsMethods = uiModule({
         const ctx = this.historyManageContext();
         const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
         const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
-        if (census.gone || !features.includes(CENSUS_FEATURE) || (rid && this.researchAgentlessFor(rid))) {
+        const censusShown = !(census.gone || !features.includes(CENSUS_FEATURE) || (rid && this.researchAgentlessFor(rid)));
+        // "House history" (spec 030 §6) shares the group, in its own host under the census row.
+        const housesShown = this.researchHousesShown();
+        if (!censusShown && !housesShown) {
             host.innerHTML = '';
             return;
         }
+        const active = document.activeElement?.id ?? '';
         const h = strings.history;
         const up = this.researchBridgeUp(rid);
         // Null: the research has the feature but did not say a valid state (the row off, no sentence of tasks).
@@ -838,14 +856,15 @@ export const researchTreeSettingsMethods = uiModule({
         host.innerHTML = `
             <fieldset class="research-transcripts research-census">
                 <legend>${esc(h.censusSection)}</legend>
-                <label class="settings-checkbox research-census-row"${pend ? pendAttrs(CENSUS_PEND).replace(' aria-disabled="true"', '') : ''}>
+                ${censusShown ? `<label class="settings-checkbox research-census-row"${pend ? pendAttrs(CENSUS_PEND).replace(' aria-disabled="true"', '') : ''}>
                     <input type="checkbox" id="research-census-on"${on ? ' checked' : ''}${!up ? ' disabled' : pend ? ' aria-disabled="true"' : ''}>
                     <span class="settings-text">
                         <span class="settings-name">${esc(h.censusTitle)}</span>
                         <span class="settings-desc">${esc(h.censusDesc)}</span>${pend ? pendStatusHtml(CENSUS_PEND) : ''}
                     </span>
                 </label>
-                ${note ? `<p class="research-stories-note research-census-note" id="research-census-note"><span>${esc(note)}</span></p>` : ''}
+                ${note ? `<p class="research-stories-note research-census-note" id="research-census-note"><span>${esc(note)}</span></p>` : ''}` : ''}
+                ${housesShown ? '<div class="research-houses-host" id="research-houses-host"></div>' : ''}
             </fieldset>`;
         const input = host.querySelector<HTMLInputElement>('#research-census-on');
         // Locked while on its way: a click changes nothing (the row drawn again as it stands).
@@ -854,6 +873,132 @@ export const researchTreeSettingsMethods = uiModule({
             void this.setResearchCensus(input.checked);
         });
         if (focused) input?.focus({ preventScroll: true });
+        if (housesShown) {
+            this.renderResearchHousesRow();
+            if (active.startsWith('research-houses-')) host.querySelector<HTMLElement>(`#${active}`)?.focus({ preventScroll: true });
+        }
+    },
+
+    /** Whether "House history" is offered: `house.auto`, not an archive nor a research waiting for its agent, not gone. */
+    researchHousesShown(): boolean {
+        const rid = houses.rid;
+        if (!rid || houses.gone || houses.rid !== census.rid || this.researchAgentlessFor(rid)) return false;
+        const ctx = this.historyManageContext();
+        const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
+        const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
+        return houseFeature(features, 'house.auto');
+    },
+
+    /**
+     * Spec 030 §6 (K6.1): "House history" under Census records — only with `house.auto` (not in an archive nor a
+     * research waiting for its agent, like census records). Off: the estimate of what the setting gives the agent
+     * (`/status.houses.auto` + `estimate`; the price only once measured); on: the tasks by state and "Houses ›"
+     * (the open tree only); switched off with tasks set aside: how many. Without the bridge inactive with its
+     * sentence. No mark: the write goes through the bridge, no terminal.
+     */
+    renderResearchHousesRow(): void {
+        const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-houses-host`);
+        const shown = this.researchHousesShown();
+        // The group draws the host: drawn again when the row comes or goes.
+        if (!!host !== shown) { this.renderResearchCensusRow(); return; }
+        if (!host) return;
+        const rid = houses.rid;
+        const ctx = this.historyManageContext();
+        const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
+        const said = houseStatus(last);
+        const a = strings.houses.auto;
+        const up = this.researchBridgeUp(rid);
+        if (houses.want !== undefined && said?.on === houses.want) { delete houses.want; delete houses.wantHeld; }
+        const on = houses.sending ?? houses.want ?? said?.on === true;
+        const held = houses.want !== undefined ? houses.wantHeld ?? null : said?.counts.held ?? null;
+        const pend = !!houses.busy;
+        const note = !up ? strings.history.storiesBridgeDown
+            : houses.note ?? (!on && !pend && held !== null && held > 0 ? a.held(held) : '');
+        const estimate = up && !on && !pend ? housesAutoEstimate(said) : null;
+        const atRest = up && on && !pend && houses.want === undefined && said?.on === true;
+        const openable = atRest && houses.tree !== undefined && TreeManager.getActiveTreeId() === houses.tree;
+        const focused = document.activeElement?.id ?? '';
+        host.innerHTML = `
+            <label class="settings-checkbox research-census-row research-houses-row"${pend ? pendAttrs(HOUSES_PEND).replace(' aria-disabled="true"', '') : ''}>
+                <input type="checkbox" id="research-houses-on"${on ? ' checked' : ''}${!up ? ' disabled' : pend ? ' aria-disabled="true"' : ''}>
+                <span class="settings-text">
+                    <span class="settings-name">${esc(a.title)}</span>
+                    <span class="settings-desc">${esc(a.desc)}</span>${estimate ? `<span class="research-houses-est" id="research-houses-est">${esc(estimate)}</span>` : ''}${pend ? pendStatusHtml(HOUSES_PEND) : ''}
+                </span>
+            </label>
+            ${atRest ? `<p class="research-houses-st" id="research-houses-st"><span>${esc(housesAutoSummary(said!.counts))}</span>${openable
+                ? `<button type="button" class="link-button research-houses-open" id="research-houses-open">${esc(a.housesLink)}</button>` : ''}</p>` : ''}
+            ${note ? `<p class="research-stories-note research-houses-note" id="research-houses-note"><span>${esc(note)}</span></p>` : ''}`;
+        const input = host.querySelector<HTMLInputElement>('#research-houses-on');
+        input?.addEventListener('change', () => {
+            if (houses.busy || houses.asking) { this.renderResearchHousesRow(); return; }
+            void this.switchResearchHouses(input.checked);
+        });
+        host.querySelector<HTMLButtonElement>('#research-houses-open')?.addEventListener('click', () => {
+            this.closeResearchTreeSettings();
+            this.showHousesWindow({});
+        });
+        if (focused.startsWith('research-houses-')) host.querySelector<HTMLElement>(`#${focused}`)?.focus({ preventScroll: true });
+    },
+
+    /**
+     * Spec 030 §6: switching asks first, both ways (on: what the setting gives the agent and its cost; off: waiting
+     * tasks are set aside); Cancel writes nothing and the switch stays as the research says.
+     */
+    async switchResearchHouses(on: boolean): Promise<void> {
+        const rid = houses.rid;
+        const a = strings.houses.auto;
+        const ctx = this.historyManageContext();
+        const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
+        houses.asking = true;
+        let ok = false;
+        try {
+            ok = await this.showConfirm(
+                on ? housesAutoConfirmOn(houseStatus(last)) : a.confirmOff,
+                on ? a.confirmOnTitle : a.confirmOffTitle,
+                { confirmLabel: on ? a.on : a.off },
+            );
+        } finally {
+            delete houses.asking;
+        }
+        if (!ok || houses.rid !== rid) { this.renderResearchHousesRow(); return; }
+        await this.setResearchHouses(on);
+    },
+
+    /**
+     * Spec 030 §6: `POST /houses {on}` at once, both ways (§4.5); a refusal says why under the row and the switch
+     * stays as the research says (an archive: the row goes), like census records.
+     */
+    async setResearchHouses(on: boolean): Promise<void> {
+        const rid = houses.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || houses.busy) { this.renderResearchHousesRow(); return; }
+        houses.busy = true;
+        houses.sending = on;
+        delete houses.note;
+        startPend(HOUSES_PEND, { label: on ? strings.busy.turningOn : strings.busy.turningOff, redraw: () => this.renderResearchHousesRow() });
+        this.renderResearchHousesRow();
+        const r = await setHousesAuto(base, on, ctx!.features);
+        if (houses.rid !== rid) { dropPend(HOUSES_PEND); return; }
+        await endPend(HOUSES_PEND);
+        delete houses.busy;
+        delete houses.sending;
+        if (r.ok) {
+            houses.want = r.houses?.on ?? on;
+            houses.wantHeld = r.houses?.counts.held ?? null;
+        } else {
+            const W = strings.live.waitingWrite;
+            switch (r.code) {
+                case 'archive': houses.gone = true; break;
+                case 'busy': houses.note = strings.history.errBusy; break;
+                case 'held': houses.note = this.researchWriteHeldText(r.held!, false).toast; break;
+                case 'locked': houses.note = W.locked; break;
+                case 'full': houses.note = r.reason || W.fileFull; break;
+                default: houses.note = r.reason || W.writeFailed;
+            }
+        }
+        this.renderResearchHousesRow();
     },
 
     /**
