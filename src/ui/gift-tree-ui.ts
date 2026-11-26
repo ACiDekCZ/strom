@@ -54,6 +54,7 @@ import { barEl } from './prog-bar.js';
 import { spinEl } from './busy.js';
 import { svgToPngBlob } from './svg-png.js';
 import { fanPhotoPortrait } from './fan-view.js';
+import type { SelectionRef } from '../view-selection.js';
 
 export const GIFT_MODAL_ID = 'gift-modal';
 
@@ -69,6 +70,8 @@ export interface GiftTreeOpenOptions {
     recipients?: PersonId[];
     mode?: GiftMode;
     listId?: string;
+    /** The window's selection (098) as the list of recipients. */
+    selection?: SelectionRef;
     step?: number;
 }
 

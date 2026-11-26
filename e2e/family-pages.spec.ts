@@ -501,7 +501,7 @@ test.describe('family pages: the entries', () => {
         const viaMenu = async (): Promise<void> => {
             await page.locator('.actions-menu-btn').click();
             await page.locator('#actions-family-row').click();
-            await expect(page.locator('#actions-family-submenu [role="menuitem"]')).toHaveText(['Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
+            await expect(page.locator('#actions-family-submenu [role="menuitem"]')).toHaveText(['Give a family tree…', 'Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
             await page.locator('#actions-pages-row').click();
         };
         await viaMenu();
@@ -625,7 +625,7 @@ test.describe('family pages: the entries on a phone', () => {
         await page.locator('#sheet-family').click();
         const sub = page.locator('.bottom-sheet-subpage');
         // A phone has Materials first (the desktop keeps it beside For the family ›).
-        await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText([/^Materials\s*0$/, 'Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
+        await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText(['Give a family tree…', /^Materials\s*0$/, 'Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
         const row = page.locator('#sheet-pages');
         expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await row.click();

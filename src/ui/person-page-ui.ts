@@ -38,6 +38,7 @@ import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, type FieldKey } f
 import { pageImageWait } from './image-slot.js';
 import { uiModule } from './module.js';
 import { canEditPortrait, portraitWholePhoto } from './portrait-actions-ui.js';
+import { canGiftTree } from './gift-tree-ui.js';
 import type { SetRef } from './family-pages-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { personSubtitle } from './person-sources-ui.js';
@@ -1110,7 +1111,9 @@ export const personPageMethods = uiModule({
             + (canEdit && this.personPageCanChangePortrait(personId) ? item('portrait', P.changePortrait) : '')
             // Edit portrait crop (spec 107 §2): only an editable person with a portrait.
             + (canEdit && DataManager.getPerson(personId)?.photo ? item('crop', P.editCrop) : '')
-            + item('focus', P.focus);
+            + item('focus', P.focus)
+            // Give a family tree… (spec 093 §1 [3]): a person with family; never on an exported page.
+            + (!DataManager.isReadOnly() && canGiftTree(personId) ? item('gift', strings.giftTree.menu) : '');
         menu.hidden = false;
         overlayEl()?.querySelector('.pp-more')?.setAttribute('aria-expanded', 'true');
         [...menu.querySelectorAll<HTMLElement>('.pp-menu-item')].find(el => el.getClientRects().length > 0)?.focus();
@@ -1163,6 +1166,9 @@ export const personPageMethods = uiModule({
         } else if (key === 'focus') {
             this.closePersonPage({ focus: false });
             this.runPersonMenuAction(personId, 'focus');
+        } else if (key === 'gift') {
+            // The guide opens over the page; the page stays under it.
+            this.showGiftTree({ personId });
         }
     },
 

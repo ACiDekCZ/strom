@@ -1111,6 +1111,9 @@
         body.view-mode .actions-menu-dropdown #actions-help-row,
         body.view-mode .actions-menu-dropdown #actions-settings-row { display: flex !important; }
         body.view-mode .actions-menu-dropdown #actions-settings-divider { display: block !important; }
+        /* Give a family tree… changes nothing but is not offered on an exported page (spec 093 §1). */
+        body.view-mode .actions-menu-dropdown #actions-family-submenu > #actions-gift-row,
+        body.view-mode .actions-menu-dropdown #actions-family-submenu > #actions-gift-divider { display: none !important; }
         /* Small dot on the ⋯ trigger so the anniversaries signal survives the
            move out of the tree switcher. */
         .actions-menu-dot {
@@ -6374,6 +6377,10 @@
             transition: background 0.15s, color 0.15s;
         }
         .splitfam-mode-hint { margin: 0 0 14px; font-size: 12px; color: var(--text-faint); line-height: 1.5; }
+        /* Give a family tree… (spec 093 §1 [4]): one quiet sentence with its link under the perspective's hint. */
+        .splitfam-gift { margin: -6px 0 14px; font-size: 12px; color: var(--text-light); line-height: 1.5; }
+        .splitfam-gift b { font-weight: 600; color: var(--text); }
+        .splitfam-gift .link-button { font-size: inherit; }
         /* A phone (and a phone held sideways): the three cuts share the row (in de they were wider than the dialog
            by a few px, the last one cut off); a label too long for its share wraps inside its cell. */
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
@@ -37195,6 +37202,11 @@
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
                     </div>
                     <div class="actions-submenu actions-family-submenu" id="actions-family-submenu" role="menu" data-i18n-aria-label="menu.forFamily">
+                        <!-- Give a family tree… (spec 093 §1 [2]): the first row, a line apart from the outputs for the whole tree. -->
+                        <div class="tree-switcher-action" id="actions-gift-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showGiftTree()" tabindex="0" role="menuitem">
+                            <span data-i18n="giftTree.menu"></span>
+                        </div>
+                        <div class="tree-switcher-divider" id="actions-gift-divider" role="separator"></div>
                         <div class="tree-switcher-action" id="actions-book-row" onclick="window.Strom.UI.treeActionBook()" tabindex="0" role="menuitem">
                             <span data-i18n="book.menu"></span>
                         </div>

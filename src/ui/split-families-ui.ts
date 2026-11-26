@@ -33,6 +33,7 @@ import { computeUnder } from './canvas-busy.js';
 import { SPLIT_SHOWN_AT_ONCE } from './split-ui.js';
 import { busyProg } from './busy-prog.js';
 import { modalBackHtml, wireModalBack } from './modal-back.js';
+import { canGiftTree } from './gift-tree-ui.js';
 
 /** Everything the shared split-families dialog needs, whatever opened it. */
 interface SplitFamiliesRun {
@@ -207,6 +208,8 @@ export const splitFamiliesMethods = uiModule({
                 <p class="splitfam-mode-hint">${{
                     surname: s.modeSurnameHint, lineage: s.modeLineageHint, perspective: s.modePerspectiveHint,
                 }[this.splitFamiliesMode]}</p>
+                ${this.splitFamiliesMode === 'perspective' && this.splitFamiliesGiftOffered(run)
+                    ? `<p class="note splitfam-gift"><b>${strings.giftTree.splitLead}</b> <button type="button" class="link-button" id="splitfam-gift">${strings.giftTree.menu}</button></p>` : ''}
                 ${this.splitFamiliesMode === 'perspective' ? this.splitFamiliesPerspectiveHtml(run) : ''}
                 <div class="splitfam-list">
                     ${components.map((c, i) => this.splitFamiliesRowHtml(c, i)).join('')}
@@ -252,6 +255,12 @@ export const splitFamiliesMethods = uiModule({
             };
         });
         if (this.splitFamiliesMode === 'perspective') this.bindSplitFamiliesPerspective(overlay, run);
+        // Give a family tree… (spec 093 §1 [4]): the dialog closes, the guide opens for the person chosen here.
+        overlay.querySelector<HTMLButtonElement>('#splitfam-gift')?.addEventListener('click', () => {
+            const personId = run.focusPersonId;
+            this.closeSplitFamiliesDialog();
+            this.showGiftTree({ personId });
+        });
         overlay.querySelectorAll('.splitfam-check').forEach(box => {
             (box as HTMLInputElement).onchange = () => this.updateSplitFamiliesFooter();
         });
@@ -276,6 +285,11 @@ export const splitFamiliesMethods = uiModule({
     },
 
     /** The 'perspective' cut's config block: depth, base people, cut list. */
+    /** "Give a family tree…" under the perspective's hint: the open tree, a person with family, data that can be read out. */
+    splitFamiliesGiftOffered(run: SplitFamiliesRun): boolean {
+        return run.treeId === TreeManager.getActiveTreeId() && !DataManager.isReadOnly() && canGiftTree(run.focusPersonId);
+    },
+
     splitFamiliesPerspectiveHtml(run: SplitFamiliesRun): string {
         const s = strings.splitFamilies;
         const persp = this.splitFamiliesPerspectiveOpts(run);

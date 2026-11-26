@@ -110,6 +110,8 @@ export const plPart13: Pick<StringsType, 'giftTree'> = {
         create: 'Utwórz paczkę',
         last: (d: string) => `Ostatnio ${d} – te same ustawienia.`,
         restart: 'Zacznij od nowa z domyślnymi',
+        menuList: 'Podarować rodowód każdej osobie…',
+        splitLead: 'Tylko dla jednej osoby, bez dzielenia drzewa:',
         guide: {
             stepsH: 'Kroki',
             stepDone: 'gotowe',

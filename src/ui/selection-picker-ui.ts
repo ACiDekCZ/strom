@@ -183,6 +183,8 @@ function pickerMarkup(): SelectionPickerMarkup {
         focus: focus ? personRows(focus.id, strings.selection.focusSub) : [],
         lines, lists, block,
         canSave: !!ref && ref.kind !== 'list' && !DataManager.listsReadOnly(),
+        // A package for each person of the selection (spec 093 §1): a computer only, never on an exported page.
+        ...(ref && !isPhoneBar() && !DataManager.isReadOnly() && countOf(ref) > 0 ? { gift: strings.giftTree.menuList } : {}),
         texts: pickerTexts(),
     };
 }
@@ -327,6 +329,11 @@ export const selectionPickerMethods = uiModule({
                 e.preventDefault();
                 close();
                 this.showPersonLists();
+            }
+            if (t.closest('.sp-selpick-gift') && ref) {
+                e.preventDefault();
+                close();
+                this.showGiftTree({ mode: 'list', selection: ref });
             }
         }, { signal });
     },

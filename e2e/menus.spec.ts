@@ -119,7 +119,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(family).toBeVisible();
         await expect(family).toHaveAttribute('role', 'menu');
         expect((await family.locator('[role="menuitem"]').allInnerTexts()).map(t => t.trim()))
-            .toEqual(['Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
+            .toEqual(['Give a family tree…', 'Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
         // Opened by a click, then the other flyout: only one is open.
         await page.locator('#actions-family-row').click();
         await expect(page.locator('#actions-family-wrap')).toHaveClass(/submenu-open/);
@@ -144,15 +144,17 @@ test.describe('actions menu "Tree:" submenu', () => {
         // → opens the flyout and moves the focus onto its first item.
         await row.press('ArrowRight');
         await expect(wrap).toHaveClass(/submenu-open/);
+        await expect(page.locator('#actions-gift-row')).toBeFocused();
+        // ↓ / ↑ walk inside the flyout only (Give a family tree… first, spec 093 §1; the family pages right after the book, 026 §9.6).
+        await page.keyboard.press('ArrowDown');
         await expect(page.locator('#actions-book-row')).toBeFocused();
-        // ↓ / ↑ walk inside the flyout only (the family pages right after the book, 026 §9.6).
         await page.keyboard.press('ArrowDown');
         await expect(page.locator('#actions-pages-row')).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(page.locator('#actions-tree-pages-row')).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(page.locator('#actions-poster-row')).toBeFocused();
-        for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowUp');
+        for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowUp');
         await expect(page.locator('#actions-slideshow-row')).toBeFocused();
         // ← closes the flyout and returns to its row.
         await page.keyboard.press('ArrowLeft');
@@ -160,14 +162,14 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(row).toBeFocused();
         // ↓ on the row goes to the next row of the menu, not into the flyout.
         await page.keyboard.press('ArrowDown');
-        await expect(page.locator('#actions-book-row')).not.toBeFocused();
+        await expect(page.locator('#actions-gift-row')).not.toBeFocused();
         const next = await page.evaluate(() => document.activeElement?.closest('.actions-submenu') === null
             && document.activeElement?.closest('#actions-menu-dropdown') !== null);
         expect(next).toBe(true);
         // Enter opens it the same way; Escape closes the flyout first, then the menu.
         await row.focus();
         await row.press('Enter');
-        await expect(page.locator('#actions-book-row')).toBeFocused();
+        await expect(page.locator('#actions-gift-row')).toBeFocused();
         await page.keyboard.press('Escape');
         await expect(wrap).not.toHaveClass(/submenu-open/);
         await expect(dropdown).toHaveClass(/active/);

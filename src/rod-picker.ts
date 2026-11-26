@@ -259,6 +259,8 @@ export interface SelectionPickerMarkup {
     block?: { title: string; count: number; person: string; generations?: number } | null;
     /** "Save the selection as a list…" offered (a selection that is not a list, lists that can change). */
     canSave: boolean;
+    /** "Give a family tree to each person…" (spec 093 §1): its label when offered (a computer, a selection with people). */
+    gift?: string;
     texts: SelectionPickerTexts;
 }
 
@@ -376,7 +378,8 @@ export function selectionPickerHtml(m: SelectionPickerMarkup): string {
             + `</span></div>`;
     }
     const foot = `<div class="sp-selpick-foot">${m.canSave ? `<button type="button" class="sp-rodpick-savebtn sp-selpick-save">${esc(t.saveList)}</button>` : ''}`
-        + `<button type="button" class="sp-rodpick-savebtn sp-selpick-manage">${esc(t.manage)}</button></div>`;
+        + `<button type="button" class="sp-rodpick-savebtn sp-selpick-manage">${esc(t.manage)}</button>`
+        + `${m.gift ? `<button type="button" class="sp-rodpick-savebtn sp-selpick-gift">${esc(m.gift)}</button>` : ''}</div>`;
     return `<details class="sp-rodpick sp-selpick" data-other-mode="expand">`
         + `<summary class="sp-rodpick-btn" aria-label="${esc(t.pickLabel)}">${selectionPickSummaryHtml(m.label, t)}<span class="sp-rodpick-chev" aria-hidden="true">▾</span></summary>`
         + `<div class="sp-rodpick-pop"><div class="sp-rodpick-f"><input class="sp-rodpick-q" type="search" placeholder="${esc(t.search)}"`

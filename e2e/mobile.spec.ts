@@ -217,7 +217,7 @@ test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family
     await expect(sub).toBeVisible();
     await expect(sub.locator('.sheet-subhead-title')).toHaveText('For the family');
     // Materials head the page on a phone (the desktop has them beside For the family ›).
-    await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText([/^Materials\s*0$/, 'Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
+    await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText(['Give a family tree…', /^Materials\s*0$/, 'Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
     await expect(sheet.locator(':scope > .bottom-sheet-items')).toBeHidden();
     await sub.locator('.sheet-back').tap();
     await expect(sub).toHaveCount(0);

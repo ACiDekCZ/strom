@@ -441,6 +441,8 @@ export const bottomSheetMethods = uiModule({
             ? { label: s.materials.menu, id: 'sheet-materials', value: this.materialsAppCount().toLocaleString(getCurrentLanguage()), run: () => this.openMaterials() }
             : null;
         const familyRow: MenuRow = { label: s.menu.forFamily, id: 'sheet-family', run: () => {}, page: { title: s.menu.forFamily, rows: [
+            // Give a family tree… (spec 093 §1 [7]): first, for the person in focus; not on an exported page.
+            ...(active && !viewMode ? [{ label: s.giftTree.menu, id: 'sheet-gift', run: () => this.showGiftTree() }] : []),
             ...(materialsRow && isPhoneBar() ? [materialsRow] : []),
             ...(active || viewMode ? [bookRow, pagesRow, treePagesRow] : []),
             { label: s.menu.poster, id: 'sheet-poster', run: () => this.showPosterDialog() },

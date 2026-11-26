@@ -12860,6 +12860,10 @@ const stringsEN = {
         create: 'Create package',
         last: (d: string) => `Last time ${d} – same settings.`,
         restart: 'Start over with defaults',
+        /** Lists of people and the window's selection (§1 [5]): a package for each person. */
+        menuList: 'Give a family tree to each person…',
+        /** Split into families › From a person's view (§1 [4]): the sentence before the link. */
+        splitLead: 'Only for one person, without splitting the tree:',
         /** The guide's own texts: the summary, step 1 "For whom" and step 3 "Living people". */
         guide: {
             stepsH: 'Steps',
@@ -25373,6 +25377,8 @@ const stringsCZ: StringsType = {
         create: 'Vytvořit balíček',
         last: (d: string) => `Naposledy ${d} – stejné nastavení.`,
         restart: 'Začít znovu s výchozím',
+        menuList: 'Darovat rodokmen každé osobě…',
+        splitLead: 'Jen pro jednu osobu, bez rozdělení stromu:',
         guide: {
             stepsH: 'Kroky',
             stepDone: 'hotovo',
@@ -37788,6 +37794,8 @@ const stringsDE: StringsType = {
         create: 'Paket erstellen',
         last: (d: string) => `Zuletzt am ${d} – gleiche Einstellungen.`,
         restart: 'Mit Standard neu beginnen',
+        menuList: 'Jeder Person einen Stammbaum schenken…',
+        splitLead: 'Nur für eine Person, ohne den Baum zu teilen:',
         guide: {
             stepsH: 'Schritte',
             stepDone: 'erledigt',

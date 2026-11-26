@@ -25,6 +25,7 @@ import { listIsAuto } from '../person-lists-data.js';
 import { keptByRuleLoss } from '../person-lists.js';
 import { strings } from '../strings.js';
 import type { UIClass } from './index.js';
+import { isPhoneBar } from '../breakpoints.js';
 
 /** A row of a list's ⋯ menu (the same rows in the popup and in the phone's sheet). */
 export interface ListMenuRow {
@@ -77,7 +78,7 @@ export const personListHooks: PersonListHooks = {
         ui.closePersonLists();
         ui.showSelectionOnMap({ kind: 'list', listId });
     },
-    listMenu: [freezeAndChecklistRows, exportRows],
+    listMenu: [freezeAndChecklistRows, exportRows, giftRows],
 };
 
 /**
@@ -138,5 +139,18 @@ function exportRows(ui: UIClass, list: PersonList): ListMenuRow[] {
             { id: 'export-ged', label: t.export.ged, run: () => { ui.closePersonLists(); ui.showExportDialogForList(list.id); } },
             { id: 'export-csv', label: t.export.csv, run: () => { ui.exportPersonListCsv(list.id); } },
         ],
+    }];
+}
+
+/**
+ * Give a family tree to each person… (spec 093 §1 [5], §7): after Export, a
+ * package for each person of the list. Making many packages runs on a
+ * computer only, so a phone does not offer it.
+ */
+function giftRows(ui: UIClass, list: PersonList): ListMenuRow[] {
+    if (isPhoneBar() || DataManager.isReadOnly() || !DataManager.getPersonListIds(list.id).length) return [];
+    return [{
+        id: 'gift', label: strings.giftTree.menuList,
+        run: () => { ui.closePersonLists(); ui.showGiftTree({ mode: 'list', listId: list.id }); },
     }];
 }

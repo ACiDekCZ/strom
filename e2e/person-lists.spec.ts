@@ -112,7 +112,7 @@ test.describe('Lists of people: a computer', () => {
 
         // ⋯ of the list: Open in Table · Rename · Duplicate · Tick off done · Delete.
         await d.locator('.pl-more').click();
-        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'On the map', 'Rename', 'Duplicate', 'Tick off done', 'Export›', 'Delete']);
+        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'On the map', 'Rename', 'Duplicate', 'Tick off done', 'Export›', 'Give a family tree to each person…', 'Delete']);
         await d.locator('.pl-menu [data-run="dup"]').click();
         await expect(rowNames(page)).toHaveText(['Added in the last 30 days', 'Ancestors – Quillon', 'Letters to the archive', 'Letters to the archive (2)']);
         await expect(d.locator('.pl-row', { hasText: 'Letters to the archive (2)' })).toHaveAttribute('aria-selected', 'true');
@@ -254,7 +254,7 @@ test.describe('Lists of people: a computer', () => {
         await d.locator('.pl-row', { hasText: 'Ancestors – Quillon' }).click();
         await d.locator('.pl-more').click();
         // Add condition… (spec 136 §9) before Freeze.
-        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'On the map', 'Rename', 'Duplicate', 'Add condition…', 'FreezeBecomes fixed with the people it has now', 'Export›', 'Delete']);
+        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'On the map', 'Rename', 'Duplicate', 'Add condition…', 'FreezeBecomes fixed with the people it has now', 'Export›', 'Give a family tree to each person…', 'Delete']);
         await expect(d.locator('.pl-rule .pl-rule-k')).toHaveText('Based on');
         await expect(d.locator('.pl-rule .pl-link')).toHaveText(['Edit rule…', 'Add condition…']);
         await d.locator('.pl-menu [data-run="freeze"]').click();
