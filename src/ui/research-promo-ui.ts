@@ -18,7 +18,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
-import { researchSiteUrl, researchLinkMark } from '../research-link.js';
+import { inShowcase, researchSiteUrl, researchLinkMark } from '../research-link.js';
 import {
     ResearchPromoContext,
     isPromoAvailable,
@@ -270,6 +270,13 @@ export const researchPromoMethods = uiModule({
      * menu trigger it came from.
      */
     showResearchInfoDialog(): void {
+        // The showcase (spec 143 K4.1): its research's overview, only read; nothing set up for it.
+        if (inShowcase()) {
+            this.closeActionsMenu();
+            this.hideBottomSheet();
+            this.openResearchOverview();
+            return;
+        }
         // A tree that has its research already, on a phone or tablet: not the way to install it — where
         // the research is and what a phone can do (finding 2 of the mobile round).
         const link = TreeManager.getActiveTreeMetadata()?.research;

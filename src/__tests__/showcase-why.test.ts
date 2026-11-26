@@ -263,6 +263,34 @@ describe("the showcase's lines", () => {
     });
 });
 
+describe('the promo on a showcase', () => {
+    function fakeUi() {
+        const calls: string[] = [];
+        const ui = {
+            calls,
+            closeActionsMenu: () => calls.push('close-menu'), hideBottomSheet: () => calls.push('hide-sheet'),
+            openResearchOverview: () => calls.push('overview'),
+            hideWhatsNewCard: () => calls.push('whats-new'), dismissResearchNew: () => calls.push('dismiss-new'),
+            researchAdoptActiveAvailable: () => false, showAlert: async () => { calls.push('alert'); },
+            showResearchInstall: () => calls.push('install'),
+        };
+        return ui;
+    }
+
+    it('Start or Open the research opens the overview, only read; no install is offered', async () => {
+        const { researchInstallMethods } = await import('../ui/research-install-ui.js');
+        const { researchPromoMethods } = await import('../ui/research-promo-ui.js');
+        const a = fakeUi();
+        researchInstallMethods.showResearchInstall.call(a as never, 'install');
+        expect(a.calls).toEqual(['close-menu', 'hide-sheet', 'overview']);
+        const b = fakeUi();
+        researchPromoMethods.showResearchInfoDialog.call(b as never);
+        expect(b.calls).toEqual(['close-menu', 'hide-sheet', 'overview']);
+        expect(b.calls).not.toContain('install');
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+});
+
 describe('time in the showcase', () => {
     it("the research's now is the showcase's as-of time; outside it the clock", () => {
         expect(researchNow()).toBe(AS_OF);

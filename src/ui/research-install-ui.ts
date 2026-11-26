@@ -18,7 +18,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeId } from '../types.js';
-import { newAdoptToken, researchNewUrl, researchLinkMark } from '../research-link.js';
+import { inShowcase, newAdoptToken, researchNewUrl, researchLinkMark } from '../research-link.js';
 import { isPromoAvailable } from '../research-promo.js';
 import { announcedResearchScheme } from '../research-device.js';
 import {
@@ -180,6 +180,11 @@ export const researchInstallMethods = uiModule({
     showResearchInstall(step?: InstallStep, opts: { name?: string } = {}): void {
         this.closeActionsMenu();
         this.hideBottomSheet();
+        // The showcase (spec 143 K4.1): its research is only read — the overview, never an install over it.
+        if (inShowcase()) {
+            this.openResearchOverview();
+            return;
+        }
         this.hideWhatsNewCard();
         this.dismissResearchNew();
         document.getElementById(INSTALL_DIALOG_ID)?.remove();
