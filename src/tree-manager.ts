@@ -1322,6 +1322,11 @@ class TreeManagerClass {
         }
     }
 
+    /** The tree's latest write failed and none of its writes landed since (e.g. no room left). */
+    hasFailedWrite(id: TreeId): boolean {
+        return this.failedWrites.has(id);
+    }
+
     /** Put a state on the tree's write queue (see saveTreeData). */
     private queueWrite(id: TreeId, entry: { data: StromData; base: ResearchBase | null }): void {
         this.queuedWrites.set(id, (this.queuedWrites.get(id) ?? 0) + 1);

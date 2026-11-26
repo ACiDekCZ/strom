@@ -72,7 +72,7 @@ export interface TreeActionRow {
     next?: boolean;
 }
 
-export type TreeActionGroupKey = 'overview' | 'research' | 'settings' | 'structure' | 'manage' | 'delete' | 'trees';
+export type TreeActionGroupKey = 'sample' | 'overview' | 'research' | 'settings' | 'structure' | 'manage' | 'delete' | 'trees';
 
 export interface TreeActionGroup {
     key: TreeActionGroupKey;
@@ -176,7 +176,11 @@ export const treeActionsMethods = uiModule({
         const exportRows: TreeActionRow[] = by.export
             ? [{ key: 'export', label: s.export, run: () => this.showExportDialogFromManager(id) }] : [];
 
+        // A newer version of a sample tree known here (spec 143 §2): its update first, in Manage trees only.
+        const newerSample = source === 'manager' && editable && tree.sample ? this.showcaseNewerVersion(id) : null;
         const groups: TreeActionGroup[] = [
+            ...(newerSample ? [{ key: 'sample' as const, rows: [{ key: 'sampleUpdate', label: strings.sample.updateMenu(newerSample), editOnly: true,
+                run: () => void this.updateShowcase(id) }] }] : []),
             ...(by.structureFirst ? [{ key: 'structure' as const, rows: [...structureRows, ...exportRows] }] : []),
             { key: 'overview', rows: [
                 { key: 'overview', label: strings.treeOverview.menu, run: () => void this.showTreeOverview(id, { parent }) },

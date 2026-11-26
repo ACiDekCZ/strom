@@ -229,6 +229,7 @@ import { researchLoadMethods } from './research-load-ui.js';
 import { tourMethods, TourStepDef } from './tour.js';
 import { releaseNotesMethods } from './release-notes-ui.js';
 import { helpMethods } from './help-ui.js';
+import { showcaseOpenMethods } from './showcase-open-ui.js';
 import { setUIGetter } from '../ui-ref.js';
 
 export class UIClass {
@@ -1324,6 +1325,10 @@ Object.assign(UIClass.prototype, releaseNotesMethods);
 type HelpMethods = typeof helpMethods;
 export interface UIClass extends HelpMethods {}
 Object.assign(UIClass.prototype, helpMethods);
+
+type ShowcaseOpenMethods = typeof showcaseOpenMethods;
+export interface UIClass extends ShowcaseOpenMethods {}
+Object.assign(UIClass.prototype, showcaseOpenMethods);
 
 export const UI = new UIClass();
 

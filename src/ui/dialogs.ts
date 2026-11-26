@@ -252,6 +252,8 @@ export const dialogsMethods = uiModule({
             cancelLabel?: string;
             /** Shown above the message, small (what the dialog is about). */
             subtitle?: string;
+            /** `warning`: something did not happen — the warning dot before the title. */
+            tone?: 'warning';
         } = {}
     ): Promise<string | null> {
         return new Promise((resolve) => {
@@ -264,8 +266,9 @@ export const dialogsMethods = uiModule({
                 resolve(null);
                 return;
             }
-            modal.className = 'modal-overlay dialog-confirm' + (extra.aside ? ' dialog-has-aside' : '');
-            titleEl.textContent = title;
+            modal.className = 'modal-overlay ' + (extra.tone === 'warning' ? 'dialog-warning' : 'dialog-confirm') + (extra.aside ? ' dialog-has-aside' : '');
+            if (extra.tone === 'warning') titleEl.innerHTML = `<span class="dialog-dot" aria-hidden="true"></span>${this.escapeHtml(title)}`;
+            else titleEl.textContent = title;
             messageEl.textContent = message;
             if (extra.subtitle) {
                 const sub = document.createElement('span');

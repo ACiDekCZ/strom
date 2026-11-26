@@ -431,6 +431,11 @@ const stringsEN = {
         whyWhat: (action: string, mark: string) => `In full research: ${action} · ${mark}`,
         howTo: 'How to ↗',
         copy: 'Copy',
+        notNow: 'Not now',
+        updateMenu: (version: string) => `Update the sample (${version})…`,
+        updated: (version: string) => `The sample is updated to version ${version}.`,
+        reasonHttp: (code: number) => `the server answered with error ${code}`,
+        reasonInterrupted: 'the download was interrupted',
     },
 
     // Family book
@@ -13385,6 +13390,11 @@ const stringsCZ: StringsType = {
         whyWhat: (action: string, mark: string) => `V plném výzkumu: ${action} · ${mark}`,
         howTo: 'Jak na to ↗',
         copy: 'Kopírovat',
+        notNow: 'Teď ne',
+        updateMenu: (version: string) => `Aktualizovat ukázku (${version})…`,
+        updated: (version: string) => `Ukázka je aktualizovaná na verzi ${version}.`,
+        reasonHttp: (code: number) => `server odpověděl chybou ${code}`,
+        reasonInterrupted: 'stahování se přerušilo',
     },
 
     // Family book
@@ -26002,6 +26012,11 @@ const stringsDE: StringsType = {
         whyWhat: (action: string, mark: string) => `In der vollen Forschung: ${action} · ${mark}`,
         howTo: 'Anleitung ↗',
         copy: 'Kopieren',
+        notNow: 'Jetzt nicht',
+        updateMenu: (version: string) => `Beispiel aktualisieren (${version})…`,
+        updated: (version: string) => `Das Beispiel ist auf Version ${version} aktualisiert.`,
+        reasonHttp: (code: number) => `der Server antwortete mit Fehler ${code}`,
+        reasonInterrupted: 'der Download wurde unterbrochen',
     },
 
     // Family book

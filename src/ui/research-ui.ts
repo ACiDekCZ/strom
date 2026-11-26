@@ -62,6 +62,7 @@ import {
 } from '../research-link.js';
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
+import { showcaseLangParam } from '../showcase-download.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink, type ResearchLinkMarkParams } from '../research-link.js';
 import { deviceEventSource, isDeviceTunnelled } from '../device/device-bridge.js';
@@ -2180,6 +2181,8 @@ export const researchUiMethods = uiModule({
             const importUrl = params.get('import-url');
             const liveUrl = params.get('live');
             const sendUrl = params.get('send');
+            // ?demo=<lang>: the showcase of that language (spec 143); any other value is ignored.
+            const demoLang = showcaseLangParam(params.get('demo'));
             // A hand-over this tab was in before a reload comes first — before the old bridge or research.
             const adoptUrl = params.get('adopt') ?? (importUrl === null && liveUrl === null && sendUrl === null && !params.has('open') ? pendingAdopt() : null);
             if (importUrl !== null || liveUrl !== null || sendUrl !== null || adoptUrl !== null || params.has('open')) {
@@ -2190,6 +2193,14 @@ export const researchUiMethods = uiModule({
                     url.searchParams.delete('send');
                     url.searchParams.delete('adopt');
                     url.searchParams.delete('open');
+                    history.replaceState(null, '', url.toString());
+                } catch { /* keep the address as it is */ }
+            }
+            // ?demo= leaves the address at once, any value (a reload never downloads the showcase again).
+            if (params.has('demo')) {
+                try {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('demo');
                     history.replaceState(null, '', url.toString());
                 } catch { /* keep the address as it is */ }
             }
@@ -2204,7 +2215,7 @@ export const researchUiMethods = uiModule({
             this.initLaunchQueue(startSearch);
             this.initResearchVersionChannel(importUrl !== null || liveUrl !== null || adoptUrl !== null);
             const reveal = (): void => document.documentElement.classList.remove('external-opening');
-            const explicit = liveUrl !== null || importUrl !== null || sendUrl !== null || adoptUrl !== null || params.has('open');
+            const explicit = liveUrl !== null || importUrl !== null || sendUrl !== null || adoptUrl !== null || params.has('open') || demoLang !== null;
             // Something else was asked for in this tab: the old bridge is over.
             if (explicit) forgetLiveBridge();
             const resume = explicit ? null : rememberedLiveBridge();
@@ -2212,6 +2223,7 @@ export const researchUiMethods = uiModule({
             else if (adoptUrl !== null) { reveal(); opening = this.adoptFromResearch(adoptUrl); }
             else if (liveUrl !== null) opening = this.startLiveFollow(liveUrl).finally(reveal);
             else if (importUrl !== null) opening = this.importResearchFromUrl(importUrl).finally(reveal);
+            else if (demoLang !== null && !params.has('open')) { reveal(); opening = this.openShowcaseFromUrl(demoLang); }
             // A reload while following: follow the same bridge again, quietly.
             else if (resume !== null) opening = this.startLiveFollow(resume, { resume: true }).finally(reveal);
             else reveal();
@@ -2291,7 +2303,11 @@ export const researchUiMethods = uiModule({
         const liveUrl = params.get('live');
         const importUrl = params.get('import-url');
         const adoptUrl = params.get('adopt');
-        if (sendUrl === null && liveUrl === null && importUrl === null && adoptUrl === null) return null;
+        const demoLang = showcaseLangParam(params.get('demo'));
+        if (sendUrl === null && liveUrl === null && importUrl === null && adoptUrl === null) {
+            // The installed app launched with ?demo=<lang> (spec 143): the showcase.
+            return demoLang !== null ? this.openShowcaseFromUrl(demoLang).catch(() => undefined) : null;
+        }
         // Something else was asked for: the old bridge is over.
         forgetLiveBridge();
         this.settleResearchVersion();

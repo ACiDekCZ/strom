@@ -39,6 +39,8 @@ export interface ToastOptions {
     /** A third one after them (an output's "Cancel" beside "Try again" and "Continue without", spec 116 §8). */
     third?: { label: string; run: () => void };
     hold?: boolean;
+    /** The actions under the sentence even when fewer than three (an offer with its "Not now"). */
+    actionsBelow?: boolean;
     /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
     notice?: boolean;
     /** Said as an alert (`role="alert"`): something asked for did not happen. */
@@ -151,7 +153,7 @@ function fillToast(toast: HTMLElement, message: string, opts: ToastOptions, onAc
         toast.appendChild(actions);
         // Three actions (an output's "Try again · Continue without N photos · Cancel", spec 116 §8) do not fit
         // beside the sentence: the group goes under it, so the sentence keeps the toast's width.
-        if (acts.length >= 3) toast.classList.add('toast--actions-below');
+        if (acts.length >= 3 || opts.actionsBelow) toast.classList.add('toast--actions-below');
     }
     if (opts.closable) {
         const close = document.createElement('button');

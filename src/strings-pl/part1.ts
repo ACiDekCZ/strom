@@ -170,6 +170,11 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         whyWhat: (action: string, mark: string) => `W pełnych badaniach: ${action} · ${mark}`,
         howTo: 'Jak to zrobić ↗',
         copy: 'Kopiuj',
+        notNow: 'Nie teraz',
+        updateMenu: (version: string) => `Zaktualizuj przykład (${version})…`,
+        updated: (version: string) => `Przykład zaktualizowano do wersji ${version}.`,
+        reasonHttp: (code: number) => `serwer odpowiedział błędem ${code}`,
+        reasonInterrupted: 'pobieranie zostało przerwane',
     },
 
     // Family book
