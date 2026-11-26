@@ -17,7 +17,8 @@ import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { inDeviceMode } from './device-mode-ui.js';
 import type { PersonId, ResearchHypothesis } from '../types.js';
-import { HYPOTHESES_ACCEPT_LINK_FEATURE, LiveWaiting, researchLinkMark } from '../research-link.js';
+import { HYPOTHESES_ACCEPT_LINK_FEATURE, LiveWaiting, researchLinkMark, showcaseActionMark, showcaseOff } from '../research-link.js';
+import { markShowcaseOff } from './sample-why.js';
 import type { HypothesisPick } from '../research-hypothesis-pick.js';
 import { researchHypotheses, isOpenHypothesis } from '../view-links.js';
 import {
@@ -72,6 +73,11 @@ function hypothesisPersonIds(id: string, first?: string): PersonId[] {
 }
 
 /** The keyboard back where it was after a redraw (the elements carry `data-focus-key`). */
+/** A choice of a hypothesis in the showcase (spec 143 K4.1): greyed with its mark, a click says why; else as it is. */
+function showcaseChoice(btn: HTMLButtonElement, label: string): HTMLButtonElement {
+    return showcaseOff('hypothesis') ? markShowcaseOff(btn, showcaseActionMark('hypothesis'), label) : btn;
+}
+
 function refocus(key: string | undefined): void {
     if (!key) return;
     const target = document.querySelector<HTMLElement>(`#research-overview [data-focus-key="${CSS.escape(key)}"]`);
@@ -447,7 +453,7 @@ export const hypothesisWaitingMethods = uiModule({
                 btn.setAttribute('aria-label', `${w.id} · ${r.hypoPickAria(v.id)}`);
                 btn.disabled = v.pick === 'off';
                 btn.onclick = () => this.askWaitingHypothesis(h, 'decide', v.id);
-                row.appendChild(btn);
+                row.appendChild(showcaseChoice(btn, r.hypoPick));
                 // Only some versions keep the tree as it is: each of those says so (K1.6).
                 if (v.keepsTree && !plan.keepsTree) row.appendChild(el('span', 'hwr-version-note', r.hypoKeepsTree));
                 if (v.waiting && rid) {
@@ -469,7 +475,7 @@ export const hypothesisWaitingMethods = uiModule({
                 const ask = hypothesisAcceptAsk(proposal);
                 this.askWaitingHypothesis(h, ask.do, ask.do === 'decide' ? ask.variant : undefined);
             };
-            actions.appendChild(btn);
+            actions.appendChild(showcaseChoice(btn, proposal ? r.hypoAccept(proposal) : r.hypoAcceptNone));
         }
         if (plan.leave && h) {
             const btn = setResearchActionLabel(el('button', 'secondary hwr-leave'), r.hypoLeave, terminal);
@@ -477,7 +483,7 @@ export const hypothesisWaitingMethods = uiModule({
             btn.dataset.focusKey = `hwr:${w.id}:leave`;
             btn.disabled = plan.leave === 'off';
             btn.onclick = () => this.askWaitingHypothesis(h, 'keep-open');
-            actions.appendChild(btn);
+            actions.appendChild(showcaseChoice(btn, r.hypoLeave));
         }
         if (plan.text) {
             const words = plan.text === 'merge' ? r.hypoMerge : plan.text === 'remote' ? r.hypoRemote : r.hypoVersions(h?.variants?.length ?? 0);

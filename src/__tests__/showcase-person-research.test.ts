@@ -160,7 +160,7 @@ describe("a hypothesis's card in the showcase", () => {
     });
 
     it("today's card (an older research): its way into the research greyed", () => {
-        const html = personResearchMethods.researchHypothesisTodayHtml.call(fakeUi() as never, hypothesis({ pickable: false } as Partial<ResearchHypothesis>), 'old');
+        const html = personResearchMethods.researchHypothesisTodayHtml.call(fakeUi() as never, hypothesis({ pickable: undefined } as unknown as Partial<ResearchHypothesis>), 'old');
         expect(buttons(html, 'data-hypo-do="decide"')[0]).toContain('data-showcase-off="terminal"');
     });
 });
@@ -176,5 +176,40 @@ describe("a conflict in the showcase", () => {
         expect(researchSyncMethods.researchConflictDecideMode.call(ui as never)).toBe('link');
         showcase = false;
         expect(researchSyncMethods.researchConflictDecideMode.call(ui as never)).toBe('bridge');
+    });
+});
+
+describe("a hypothesis in the showcase's What waits", () => {
+    it('Choose, Accept the proposal and Leave open stay in sight greyed with their mark; a click says why', async () => {
+        const { DataManager } = await import('../data.js');
+        const { hypothesisWaitingMethods: m } = await import('../ui/hypothesis-waiting-ui.js');
+        const h = hypothesis({ proposal: { variant: 'B', text: 'Two records agree.' } } as unknown as Partial<ResearchHypothesis>);
+        const data = vi.spyOn(DataManager, 'getData').mockReturnValue({ persons: { p1: { id: 'p1', research: { hypotheses: [h] } } } } as never);
+        let asked = 0;
+        const ui = {
+            ...m, activeResearchId: () => 'r1',
+            researchHypothesisPickable: () => 'pick',
+            askWaitingHypothesis: () => { asked++; },
+            showPersonResearchDialog: () => {},
+            closeResearchOverview: () => {},
+        };
+        try {
+            const row = m.hypothesisWaitingRow.call(ui as never, { id: 'H0022', what: h.title, person: 'p1' } as never, 'panel' as never, null);
+            const off = row.querySelectorAll('[data-showcase-off]');
+            expect(off.length).toBeGreaterThan(0);
+            for (const b of off) {
+                expect(b.getAttribute('data-showcase-off')).toBe('terminal');
+                expect(b.getAttribute('aria-disabled')).toBe('true');
+            }
+            const labels = [...off].map(b => b.getAttribute('data-showcase-label'));
+            expect(labels).toContain('Leave open');
+            expect(showcaseOffEvent(fakeEvent('click', off[0]))).toBe(true);
+            expect(asked).toBe(0);
+            showcase = false;
+            const plain = m.hypothesisWaitingRow.call(ui as never, { id: 'H0022', what: h.title, person: 'p1' } as never, 'panel' as never, null);
+            expect(plain.querySelectorAll('[data-showcase-off]')).toHaveLength(0);
+        } finally {
+            data.mockRestore();
+        }
     });
 });
