@@ -32496,6 +32496,33 @@
             .gift-seg-photos { max-width: none; }
         }
 
+        /* Step 5 (§6): the language and the motif in one row, the message with "Insert the template again",
+           the signature and the date in one row, the cover page's preview on the right. */
+        .gift-cols.is-s5 { grid-template-columns: minmax(0, 1fr) 400px; }
+        .gift-letter { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+        .gift-letter-top, .gift-letter-sig { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; min-width: 0; }
+        .gift-modal .gift-letter-lang { flex: 0 1 200px; min-width: 0; }
+        .gift-letter-motif { flex: 0 1 300px; min-width: 0; }
+        .gift-modal .gift-field:not(.gift-others).gift-letter-sal .gift-input { max-width: 300px; }
+        .gift-letter-msg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+        .gift-modal .gift-letter-msg-head .link-button { padding: 0; margin: 0; font-size: 12.5px; white-space: nowrap; }
+        .gift-modal .gift-field:not(.gift-others) .gift-textarea {
+            max-width: none; width: 100%; height: 230px; box-sizing: border-box; resize: vertical; font: inherit; font-size: 14px; line-height: 1.5;
+        }
+        .gift-modal .gift-letter-sign { flex: 1 1 220px; min-width: 0; }
+        .gift-modal .gift-letter-sign .gift-input { max-width: none; }
+        .gift-modal .gift-letter-date { flex: 0 1 200px; min-width: 0; }
+        .gift-numbers-h { margin-top: 4px; font-size: 13px; }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .gift-cols.is-s5 { grid-template-columns: minmax(0, 1fr) 300px; }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .gift-cols.is-s5 { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
+            .gift-modal .gift-letter-lang, .gift-letter-motif, .gift-modal .gift-letter-date { flex: 1 1 100%; }
+            .gift-modal .gift-letter-msg-head .link-button { display: inline-flex; align-items: center; min-height: 44px; }
+            .gift-modal .gift-field:not(.gift-others) .gift-textarea { height: 200px; }
+        }
+
         /* "Save as HTML" (§5.1): a small dialog, a bottom sheet on a phone. */
         @media (min-width: 641px) { .modal.modal--sm.pp-export { width: 480px; max-width: min(480px, 94vw); } }
         .pp-export .ppx-sec { margin: 0 0 16px; }

@@ -231,3 +231,37 @@ test('step 4: the parts with their sizes, photos, the ZIP as a tree; Book settin
     await expect(dialog.locator('#gift-sub')).toHaveText('step 4 of 6: What the package holds');
     await expect(dialog.locator('[data-part="gedcom"]')).not.toBeChecked();
 });
+
+test('step 5: the template by language and motif, an own message in the live preview, the template inserted again', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await sampleOnDaniel(page);
+    await cardAction(page, 'Daniel', 'gift-tree');
+    const dialog = page.locator('#gift-modal');
+    await dialog.locator('#gift-nav [data-step="5"]').click();
+    await expect(dialog.locator('#gift-sub')).toHaveText('step 5 of 6: Cover letter');
+
+    const message = dialog.locator('[data-gk="letter-message"]');
+    const template = await message.inputValue();
+    expect(template.length).toBeGreaterThan(40);
+    await expect(dialog.locator('[data-gk="letter-reinsert"]')).toBeHidden();
+    await expect(dialog.locator('.gift-numbers')).toContainText('From the family tree, not the whole tree:');
+
+    // The motif changes the template.
+    await dialog.locator('[data-gk="motif-xmas"]').click();
+    await expect(dialog.locator('[data-gk="motif-xmas"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(message).not.toHaveValue(template);
+
+    // An own message: in the preview a moment later; "Insert the template again" brings the template back.
+    await message.fill('A short note for the family archive.');
+    await expect(dialog.locator('[data-gk="letter-reinsert"]')).toBeVisible();
+    await expect.poll(() => dialog.locator('.gift-thumb-frame').getAttribute('srcdoc')).toContain('A short note for the family archive.');
+    await dialog.locator('[data-gk="letter-reinsert"]').click();
+    await expect(message).not.toHaveValue('A short note for the family archive.');
+    await expect(dialog.locator('[data-gk="letter-reinsert"]')).toBeHidden();
+
+    // The letter's language: the template in German, the file names too.
+    await dialog.locator('[data-gk="letter-lang"]').selectOption('de');
+    await expect(message).toHaveValue(/[äöüß]|Familie|Weihnacht/);
+    await dialog.locator('#gift-nav [data-step="6"]').click();
+    await expect(dialog.locator('[data-gk="file-name"]')).toHaveValue('Stammbaum – Daniel Berg – 2026.zip');
+});

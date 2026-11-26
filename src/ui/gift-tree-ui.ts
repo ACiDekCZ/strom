@@ -21,20 +21,20 @@ import { filterAndSort } from '../person-picker.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { formatTreeSize } from '../format.js';
 import { iconSvg } from '../icons.js';
-import { type PrivacyMode } from '../privacy.js';
+import { inferBirthUpperBounds, isLivingPerson, type PrivacyMode } from '../privacy.js';
 import { giftPersonKey, loadGiftMemory } from '../gift-memory.js';
 import {
     buildGiftPackage, estimateGiftSize, GiftOutOfMemory, giftFileNames, giftNamesLabel, giftStepsFor, isAbortError,
     type GiftPackageEnv, type GiftPackageResult, type GiftPartKey, type GiftProgress, type GiftSizeEstimate, type GiftStep,
 } from '../gift-package.js';
-import { buildGiftCover, giftDefaultSalutation } from '../gift-cover.js';
+import { buildGiftCover, giftDefaultSalutation, giftFacts } from '../gift-cover.js';
 import { AppExporter } from '../export.js';
 import { appFontFaceCss, POSTER_LINE_FACES, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { bookItalicFontCss } from '../book-font.js';
 import { bookOptionsFromMemory, loadBookMemory, pagesChoicesFromMemory } from '../book-memory.js';
 import {
     GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftBranchCandidates, giftCutData, giftCutIds, giftDepthCounts,
-    type GiftBranch, type GiftCut, type GiftDepth, type GiftLang, type GiftSettings,
+    type GiftBranch, type GiftCut, type GiftDepth, type GiftLang, type GiftLetter, type GiftSettings,
 } from '../gift-tree.js';
 import { ancestorGenerations, descentParentIds } from '../lineage.js';
 import { findRelationship } from '../kinship.js';
@@ -42,7 +42,7 @@ import { giftBranchAdds, giftPreviewModel, type GiftPreviewModel, type GiftPrevi
 import { giftPreviewCentreOn, renderGiftPreview, type GiftPreviewView } from './gift-preview.js';
 import {
     GIFT_GUIDE_STEPS, giftCanProceed, giftDepthIndex, giftFullSet, giftGoTo, giftGuideStart, giftHasFamily,
-    giftCoverPreviewHtml, giftIsoDate, giftLivingModel, giftRecipients, giftRemember, giftResolvedSettings,
+    giftCoverPreviewHtml, giftIsoDate, giftLivingModel, giftRecipients, giftRemember, giftResolvedLetter, giftResolvedSettings,
     giftSuggestedPartner, giftSummary, giftToggleFull,
     type GiftLivingModel, type GiftMode, type GiftState, type GiftSummary,
 } from '../gift-guide.js';
@@ -113,6 +113,8 @@ interface GiftUi {
     /** Step 4's estimates for these settings. */
     estKey: string;
     est: { now: GiftSizeEstimate; all: GiftSizeEstimate } | null;
+    /** Step 5's typing: the cover page's preview drawn again a moment later. */
+    letterTimer: number;
 }
 
 interface GiftCutInfo {
@@ -489,7 +491,7 @@ export const giftTreeMethods = uiModule({
             g, data, focusId, listId: opts.listId, query: '', listWhy: false, closePicker: null,
             summaryKey: '', summary: null, livingKey: '', living: null, mq: null, onMq: null,
             branchesScreen: false, view: null, viewKey: '', expanded: new Set(), cutInfo: null,
-            relKey: '', rel: new Map(), dropPreview: null, run: null, carry: null, coverKey: '', coverHtml: '', estKey: '', est: null,
+            relKey: '', rel: new Map(), dropPreview: null, run: null, carry: null, coverKey: '', coverHtml: '', estKey: '', est: null, letterTimer: 0,
         };
         if (opts.step && giftCanProceed(g, data)) giftGoTo(g, opts.step);
         // A window turned between phone and wider: the steps drawn again (the greyed list choice, the footer).
@@ -564,6 +566,7 @@ export const giftTreeMethods = uiModule({
             // Closed while making: the making stops and nothing stays (the package's own cleanup).
             u.run?.ctrl?.abort();
             u.run = null;
+            if (u.letterTimer) clearTimeout(u.letterTimer);
             if (u.mq && u.onMq) u.mq.removeEventListener('change', u.onMq);
             if (giftCanProceed(u.g, u.data)) giftRemember(u.g, summaryOf(u).persons, new Date());
         }
@@ -871,6 +874,7 @@ export const giftTreeMethods = uiModule({
             else if (g.step === 2) this.giftRenderCut(pane);
             else if (g.step === 3) this.giftRenderLiving(pane);
             else if (g.step === 4) this.giftRenderParts(pane);
+            else if (g.step === 5) this.giftRenderLetter(pane);
             else if (g.step === 6) this.giftRenderReview(pane);
             else pane.appendChild(el('h3', 'gift-h3', names[g.step - 1]));
             pane.scrollTop = top;
@@ -1046,6 +1050,168 @@ export const giftTreeMethods = uiModule({
             if (before !== 'fan') void TreeRenderer.setViewMode(before);
         });
         btn.click();
+    },
+
+    // ---- Step 5: Cover letter (§6) ----
+
+    giftRenderLetter(pane: HTMLElement): void {
+        const u = ui!;
+        const s = u.g.settings;
+        const t = strings.giftTree;
+        const L = t.letter;
+        const G = t.guide;
+        const cols = el('div', 'gift-cols is-s5');
+        const left = el('div', 'gift-col gift-letter');
+        const right = el('div', 'gift-col gift-cover-col');
+        const letter = s.letter;
+        const persons = giftRecipients(u.g).map(id => u.data.persons[id]).filter((p): p is Person => !!p);
+
+        // The letter's language and the motif.
+        const top = el('div', 'gift-letter-top');
+        const langField = el('label', 'gift-field gift-letter-lang');
+        langField.appendChild(el('span', 'gift-label', L.langH));
+        const select = el('select', 'gift-select');
+        select.dataset.gk = 'letter-lang';
+        for (const code of ['cs', 'en', 'de', 'pl'] as GiftLang[]) {
+            const o = el('option', undefined, L.langName[code]);
+            o.value = code;
+            o.selected = letter.lang === code;
+            select.appendChild(o);
+        }
+        select.addEventListener('change', () => {
+            const next = select.value as GiftLang;
+            const was = persons.length ? giftDefaultSalutation(persons.length === 1 ? persons[0] : persons, letter.lang) : '';
+            const salutation = persons.length && letter.salutation === was
+                ? giftDefaultSalutation(persons.length === 1 ? persons[0] : persons, next) : letter.salutation;
+            s.letter = { ...s.letter, lang: next, salutation };
+            this.giftRender();
+        });
+        langField.appendChild(select);
+        const motif = el('div', 'gift-field gift-letter-motif');
+        motif.appendChild(el('span', 'gift-label', L.motifH));
+        motif.appendChild(giftSegment(L.motifH, 'motif', (['none', 'xmas'] as const).map(m => ({ key: m, label: L.motif[m], on: letter.motif === m })), (key) => {
+            s.letter = { ...s.letter, motif: key as GiftLetter['motif'] };
+            this.giftRender();
+        }));
+        top.append(langField, motif);
+        left.appendChild(top);
+
+        // The salutation the template puts in.
+        const salField = el('label', 'gift-field gift-letter-sal');
+        salField.appendChild(el('span', 'gift-label', L.salutationH));
+        const sal = el('input', 'gift-input');
+        sal.type = 'text';
+        sal.value = letter.salutation;
+        sal.dataset.gk = 'letter-salutation';
+        sal.addEventListener('input', () => {
+            s.letter = { ...s.letter, salutation: sal.value };
+            this.giftLetterChanged();
+        });
+        salField.appendChild(sal);
+        left.appendChild(salField);
+
+        // The message: the template until rewritten; "Insert the template again".
+        const msgField = el('div', 'gift-field gift-letter-msg');
+        const msgHead = el('div', 'gift-letter-msg-head');
+        const msgLabel = el('label', 'gift-label', L.messageH);
+        msgLabel.htmlFor = 'gift-letter-message';
+        const again = button('link-button gift-reinsert', L.reinsert, () => {
+            s.letter = { ...s.letter, message: '' };
+            this.giftRender();
+            document.getElementById('gift-letter-message')?.focus({ preventScroll: true });
+        });
+        again.dataset.gk = 'letter-reinsert';
+        again.hidden = !letter.message;
+        msgHead.append(msgLabel, again);
+        const area = el('textarea', 'gift-input gift-textarea');
+        area.id = 'gift-letter-message';
+        area.dataset.gk = 'letter-message';
+        const template = giftResolvedLetter(u.data, { ...s, letter: { ...letter, message: '' } }).message;
+        area.value = letter.message || template;
+        area.addEventListener('input', () => {
+            s.letter = { ...s.letter, message: area.value === template ? '' : area.value };
+            again.hidden = !s.letter.message;
+            this.giftLetterChanged();
+        });
+        msgField.append(msgHead, area, el('p', 'gift-note', L.messageNote));
+        left.appendChild(msgField);
+
+        // The signature and the date.
+        const sigRow = el('div', 'gift-letter-sig');
+        const sigField = el('label', 'gift-field gift-letter-sign');
+        sigField.appendChild(el('span', 'gift-label', G.signatureShort));
+        const sig = el('input', 'gift-input');
+        sig.type = 'text';
+        sig.value = letter.signature;
+        sig.dataset.gk = 'letter-signature';
+        sig.addEventListener('input', () => {
+            s.letter = { ...s.letter, signature: sig.value };
+            this.giftLetterChanged();
+        });
+        sigField.appendChild(sig);
+        const dateField = el('label', 'gift-field gift-letter-date');
+        dateField.appendChild(el('span', 'gift-label', L.dateH));
+        const date = el('input', 'gift-input');
+        date.type = 'date';
+        date.value = letter.date;
+        date.dataset.gk = 'letter-date';
+        date.addEventListener('change', () => {
+            if (!date.value) return;
+            s.letter = { ...s.letter, date: date.value };
+            this.giftRender();
+        });
+        dateField.appendChild(date);
+        sigRow.append(sigField, dateField);
+        left.appendChild(sigRow);
+
+        // What the letter's figures are.
+        left.appendChild(el('h3', 'gift-h3 gift-numbers-h', L.numbersH));
+        left.appendChild(el('p', 'gift-note gift-numbers', this.giftNumbersLine()));
+
+        const head = el('div', 'gift-cover-head');
+        head.appendChild(el('h3', 'gift-h3', L.previewH));
+        const open = button('link-button gift-open-cover', L.openWindow, () => this.giftOpenCover());
+        open.dataset.gk = 'open-cover';
+        head.appendChild(open);
+        right.appendChild(head);
+        right.appendChild(this.giftCoverThumb());
+
+        cols.append(left, right);
+        pane.appendChild(cols);
+    },
+
+    /** The letter typed: the side's summary stays, the cover page's preview follows a moment later. */
+    giftLetterChanged(): void {
+        const u = ui;
+        if (!u) return;
+        if (u.letterTimer) clearTimeout(u.letterTimer);
+        u.letterTimer = setTimeout(() => {
+            u.letterTimer = 0;
+            if (ui !== u) return;
+            const frame = document.querySelector<HTMLIFrameElement>(`#${GIFT_MODAL_ID} .gift-thumb-frame`);
+            if (frame) frame.srcdoc = this.giftCoverHtml();
+        }, 400) as unknown as number;
+    },
+
+    /** "From the family tree, not the whole tree: 84 people, 7 generations, the oldest ancestor …". */
+    giftNumbersLine(): string {
+        const u = ui!;
+        const L = strings.giftTree.letter;
+        const G = strings.giftTree.guide;
+        const s = u.g.settings;
+        const cut = giftCutData(u.data, s.cut);
+        const recipients = s.cut.recipients.filter(id => !!cut.persons[id]);
+        const f = giftFacts(cut, recipients, lang(), new Date());
+        const items = [`${f.persons} ${G.persons(f.persons)}`, `${f.generations} ${G.generations(f.generations)}`];
+        if (f.oldest) {
+            const p = cut.persons[f.oldest.id];
+            if (p && !isLivingPerson(p, new Date().getFullYear(), inferBirthUpperBounds(cut))) {
+                const when = f.oldest.year === null ? '' : f.oldest.approx ? `${strings.giftTree.cover.about} ${f.oldest.year}` : String(f.oldest.year);
+                items.push(L.oldest(f.oldest.name, [when, f.oldest.place ?? ''].filter(Boolean).join(', ')));
+            }
+        }
+        items.push(L.placesAndPath, L.byGeneration);
+        return L.numbers(items.join(', '));
     },
 
     // ---- Step 6: Preview and create (§8) ----
