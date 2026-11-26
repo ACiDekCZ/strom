@@ -963,13 +963,15 @@
         }
         #current-tree-tag:not([hidden]) { display: contents; }
         #current-tree-tag[hidden] { display: none; }
-        /* With the tag the pill is wider and the name keeps more of itself (desktop 210 px, tablet 140 px). */
+        /* With the tag the pill is wider and the name keeps more of itself (desktop 210 px, tablet 140 px).
+           The name's cap bounds the pill: a fixed pill width (300 px) cut a long name under its cap beside
+           "Beispiel", which the toolbar fit read as a squeeze and capped the name at 56 px at any width. */
         @media (min-width: 1025px) {
-            .toolbar .tree-switcher-btn:has(.tree-sample-tag) { max-width: min(300px, 100%); }
+            .toolbar .tree-switcher-btn:has(.tree-sample-tag) { max-width: 100%; }
             .toolbar .tree-switcher-btn:has(.tree-sample-tag) .tree-name { max-width: 210px; }
         }
         @media (min-width: 641px) and (max-width: 1024px) and (min-height: 501px) {
-            .toolbar .tree-switcher-btn:has(.tree-sample-tag) { max-width: min(300px, 100%); }
+            .toolbar .tree-switcher-btn:has(.tree-sample-tag) { max-width: 100%; }
             .toolbar .tree-switcher-btn:has(.tree-sample-tag) .tree-name { max-width: 140px; }
         }
         .bottom-sheet-label > .tree-sample-tag { display: inline-block; margin-left: 8px; vertical-align: 1px; }

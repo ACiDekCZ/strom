@@ -102,6 +102,20 @@ test.describe('the "Sample" tag of a sample tree (spec 143 §1)', () => {
         await expect(row.locator('.tree-manager-item-origin')).toHaveAttribute('data-origin', 'none');
     });
 
+    test('on a computer a long name keeps its own cap beside the tag: the toolbar does not take the tag for a squeeze', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.loadDemoTree());
+        await expect(card(page, 'Johan')).toBeVisible();
+        await page.evaluate(() => window.Strom.TreeManager.renameTree(window.Strom.TreeManager.getActiveTreeId()!, 'Sample – the Berg family of Voss, Norway'));
+        await page.evaluate(() => window.Strom.UI.updateTreeSwitcher());
+        await expect(page.locator('#current-tree-name')).toHaveText('Sample – the Berg family of Voss, Norway');
+        // The pill holds the name at its 210 px cap, the tag, the gaps and the caret (a 300 px pill cut the
+        // name under its cap, which the fit read as a squeeze and capped the name at 56 px at any width).
+        await expect(page.locator('.toolbar')).not.toHaveClass(/toolbar-squeeze-name/);
+        await expect.poll(() => page.evaluate(() => Math.round(document.getElementById('current-tree-name')!.getBoundingClientRect().width))).toBeGreaterThanOrEqual(205);
+    });
+
     test('a showcase (its mark from the file\'s header): the tag, its date in Manage trees and its view-only research line', async ({ page }) => {
         await page.clock.setFixedTime(new Date('2026-11-20T10:00:00Z'));
         await openApp(page);

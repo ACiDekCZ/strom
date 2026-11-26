@@ -800,7 +800,7 @@ test.describe('the tree switcher and the search field are equally high (T54 H4)'
 
             test('the same height and middle; folded to the magnifier, that is as high too', async ({ page }) => {
                 await openApp(page);
-                await page.getByRole('button', { name: 'Beispiel-Stammbaum ausprobieren' }).click();
+                await page.getByRole('button', { name: 'Kleines Beispiel ausprobieren' }).click();
                 await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
                 await settleLayout(page);
                 const h = await heights(page);
@@ -828,7 +828,7 @@ test.describe('Esc folds the search opened from the magnifier back to it', () =>
 
             test('the field closes, the magnifier has the focus, the query stays', async ({ page }) => {
                 await openApp(page);
-                await page.getByRole('button', { name: 'Beispiel-Stammbaum ausprobieren' }).click();
+                await page.getByRole('button', { name: 'Kleines Beispiel ausprobieren' }).click();
                 await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
                 await settleLayout(page);
                 // The search folded to the magnifier (fit step toolbar-squeeze-3).
