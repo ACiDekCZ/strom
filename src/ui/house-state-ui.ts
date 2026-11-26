@@ -6,12 +6,14 @@
  */
 
 import { strings, getCurrentLanguage, type Language } from '../strings.js';
-import { houseTitle, type TreeHouse } from '../houses.js';
+import { collectHouses, houseTitle, type TreeHouse } from '../houses.js';
+import { houseOfQuestion, houseTaskView, type HouseTaskView } from '../house-tasks.js';
+import type { LiveQueueItem } from '../research-link.js';
 import { houseGroupIds } from '../houses-view.js';
 import { placeKey } from '../places.js';
 import { formatPlaceDate } from '../place-identity.js';
 import { formatFlexDate } from '../dates.js';
-import { fetchHouses, houseFeature, houseStatus, type HouseListRow, type HouseResearch, type HouseState, type HouseWork } from '../house-bridge.js';
+import { fetchHouses, houseCache, houseFeature, houseStatus, type HouseListRow, type HouseResearch, type HouseState, type HouseWork } from '../house-bridge.js';
 import { houseOutputFilter } from '../house-privacy.js';
 import { DataManager } from '../data.js';
 import type { HouseUserData, StromData } from '../types.js';
@@ -169,6 +171,53 @@ export const houseStateMethods = uiModule({
             if (row) return row;
         }
         return null;
+    },
+
+    /**
+     * The queue's tasks of houses in words (spec 030 §14), for one drawing of a list: the tree's houses
+     * are read once, at the first task of a house.
+     */
+    houseTaskViews(): (q: Pick<LiveQueueItem, 'id' | 'text' | 'taskKind' | 'house'>) => HouseTaskView | null {
+        let houses: TreeHouse[] | null = null;
+        return q => {
+            if (q.taskKind !== 'house') return null;
+            const b = this.houseResearchBridge();
+            if (b) this.houseStatesSync();
+            const rows = b && list?.base === b.base ? list.rows : [];
+            const towns = b ? houseCache(b.base).townTasks : null;
+            return houseTaskView(q, {
+                rows,
+                treeHouse: key => {
+                    houses ??= collectHouses(DataManager.getData());
+                    return houses.find(h => h.id === key) ?? houses.find(h => houseGroupIds(h).includes(key as TreeHouse['id'])) ?? null;
+                },
+                townOfTask: t => towns?.get(t) ?? null,
+            });
+        };
+    },
+
+    /** After a queued task of a house: "House page ›", after a town's frame "Houses in this town ›" (spec 030 §14). */
+    appendHouseTaskLink(text: HTMLElement, v: HouseTaskView | null): void {
+        if (!v || (!v.house && !v.town)) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'link-button live-queue-house';
+        btn.textContent = v.house ? strings.houses.familyHouses.page : strings.houses.townHouses;
+        if (v.house) btn.dataset.house = v.house;
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            if (v.house) this.openHouse(v.house);
+            else if (v.town) this.showTownHouses(v.town);
+        };
+        text.append(' ', btn);
+    },
+
+    /** The research's row of the house a waiting item asks about (spec 030 §14), or null. */
+    houseOfWaiting(id: string): HouseListRow | null {
+        const b = this.houseResearchBridge();
+        if (!b) return null;
+        this.houseStatesSync();
+        return list?.base === b.base ? houseOfQuestion(id, list.rows) : null;
     },
 
     /** The research's rows of one town (its placeKey). */

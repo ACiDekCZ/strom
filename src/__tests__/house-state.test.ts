@@ -99,7 +99,7 @@ describe('the task kind house', () => {
     it('is a kind of the queue with a label in every language', () => {
         expect(QUEUE_TASK_KINDS).toContain('house');
         for (const lang of ['cs', 'en', 'de', 'pl'] as const) expect(getStringsForLang(lang).live.taskKinds.house).toBeTruthy();
-        expect(getStringsForLang('cs').live.taskKinds.house).toBe('Dům');
+        expect(getStringsForLang('cs').live.taskKinds.house).toBe('Domy');
     });
 
     it('kind=house goes only to a research with the feature', () => {

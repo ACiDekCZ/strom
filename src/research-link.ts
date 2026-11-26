@@ -4481,6 +4481,8 @@ export interface LiveQueueItem {
     kind?: LiveQueueKind;
     /** Its kind of work (`queue.kind`, spec 065 K7.4): an unknown word is `other`; absent: not said. */
     taskKind?: QueueTaskKind;
+    /** The house a task of a house is of (spec 030 §14): its key as `GET /houses` gives it; none for a town's frame. */
+    house?: string;
     /** The one book the task waits for or works in ("B0002", spec 105); absent: none or several. */
     book?: string;
     /** Put forward by "Downloaded book first" (`queue.sameBook`): the book of the last session (spec 105). */
@@ -5439,6 +5441,8 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
         // What it makes (a story, history): only the kinds known here.
         const kind = r.kind === 'story' || r.kind === 'history' ? r.kind : null;
         const taskKind = queueTaskKindOf(r.taskKind);
+        // The house of a task of a house (spec 030 §14): its key "<town>|<number>"; a town's frame has none.
+        const house = taskKind === 'house' ? queueHouseKey(r.house) : null;
         // The book of the task (spec 105): only a valid id.
         const book = researchBookRef(r.book);
         const sameBook = researchBookRef(r.sameBook);
@@ -5451,12 +5455,17 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
             id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(off ? { offLine: off } : {}), ...(helps ? { helps } : {}),
             ...(branch ? { branch } : {}), ...(own ? { own } : {}), ...(why ? { why } : {}), ...(pos ? { pos } : {}),
-            ...(kind ? { kind } : {}), ...(taskKind ? { taskKind } : {}), ...(book ? { book } : {}), ...(sameBook ? { sameBook } : {}),
+            ...(kind ? { kind } : {}), ...(taskKind ? { taskKind } : {}), ...(house ? { house } : {}), ...(book ? { book } : {}), ...(sameBook ? { sameBook } : {}),
             ...(run ? { run } : {}),
             ...(heldBy ? { heldBy } : {}), ...(archiveHeld ? { archiveHeld } : {}),
         });
     }
     return out;
+}
+
+/** A house's key in a queued task ("belokamen|16"), or null. */
+function queueHouseKey(v: unknown): string | null {
+    return typeof v === 'string' && /^[^|\s][^|]{0,199}\|[^|]{1,200}$/.test(v) && v === v.trim() ? v : null;
 }
 
 const HELPS_BY: readonly string[] = ['question', 'joins', 'agent', 'partner', 'branch'];

@@ -589,6 +589,8 @@ export class HouseResearchCache {
     private byKey = new Map<HouseId, HouseResearch>();
     private keyOfId = new Map<string, HouseId>();
     list: { rev: string; houses: HouseListRow[] } | null = null;
+    /** The towns of the towns' frame tasks met (task T… → the town's name; spec 030 §14: the queue names them). */
+    readonly townTasks = new Map<string, string>();
 
     get(keyOrId: string): HouseResearch | undefined {
         return this.byKey.get(keyOrId) ?? this.byKey.get(this.keyOfId.get(keyOrId) ?? '');
@@ -601,6 +603,7 @@ export class HouseResearchCache {
         if (other?.id && other.id !== house.id) this.keyOfId.delete(other.id);
         this.byKey.set(house.key, house);
         if (house.id) this.keyOfId.set(house.id, house.key);
+        if (house.town?.task) this.townTasks.set(house.town.task, house.town.place?.name || house.place.name);
     }
 
     /** A new list: the rows' keys carry the results read under an old key of the same id. */
@@ -617,6 +620,7 @@ export class HouseResearchCache {
     clear(): void {
         this.byKey.clear();
         this.keyOfId.clear();
+        this.townTasks.clear();
         this.list = null;
     }
 }
@@ -924,7 +928,10 @@ export async function requestHouse(base: string, house: string, more: readonly s
     }, HOUSE_WRITE_TIMEOUT_MS);
     if (!res) return { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
     if (res.text === TIMED_OUT) return { ok: false, code: 'timeout', status: 0, reason: '', bridgeCode: '' };
-    return houseRequestReply(res.status, jsonOf(res.text), features, { house: key, with: withKeys }, check);
+    const reply = houseRequestReply(res.status, jsonOf(res.text), features, { house: key, with: withKeys }, check);
+    // The town's frame asked for with it: the queue names its task by the town.
+    if (reply.ok && reply.town && reply.house) houseCache(base).townTasks.set(reply.town, reply.house.place.name);
+    return reply;
 }
 
 /**

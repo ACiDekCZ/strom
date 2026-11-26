@@ -2296,6 +2296,13 @@ export const researchOverviewMethods = uiModule({
         if (w.kind === 'story') head.appendChild(el('span', 'live-kind-story', L.kindStory));
         else if (w.kind === 'branch') head.appendChild(el('span', 'live-kind live-kind--decide', L.waitBranchKind));
         else if (w.section || w.kind) head.appendChild(waitingKindLabel(w));
+        // A question of a house (spec 030 §14): the kind "Houses" with it.
+        const houseQ = w.kind === 'story' || w.kind === 'branch' || w.kind === 'aside' ? null : this.houseOfWaiting(w.id);
+        if (houseQ) {
+            const tag = el('span', 'live-kind live-kind--house', strings.live.taskKinds.house ?? '');
+            tag.dataset.house = houseQ.key;
+            head.appendChild(tag);
+        }
         head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s) : w.what);
         row.appendChild(head);
         const meta = el('span', 'research-overview__waiting-meta');
@@ -2504,14 +2511,24 @@ export const researchOverviewMethods = uiModule({
         if (audit) detail.appendChild(audit);
         const meta = el('div', 'research-overview__waiting-meta');
         const person = personByRefn(w.person);
+        // A question of a house (spec 030 §14): "House čp. 16 ›" to its page (the tree's house only).
+        const houseRow = this.houseOfWaiting(w.id);
+        const house = houseRow ? this.treeHouseOf(houseRow.key) : null;
         if (person) {
             const link = el('button', 'live-person-link');
             link.innerHTML = fitNameHtml(person, fullName(person));
             link.type = 'button';
             link.onclick = () => this.overviewShowPerson(person.id, mode);
             meta.appendChild(link);
-        } else {
+        } else if (!house) {
             meta.appendChild(el('span', 'research-overview__muted', L.wholeResearch));
+        }
+        if (house) {
+            const link = el('button', 'link-button house-page-link live-waiting-house', strings.houses.integration.houseLink(house.text));
+            link.type = 'button';
+            link.dataset.house = house.id;
+            link.onclick = () => this.openHouse(house.id);
+            meta.appendChild(link);
         }
         const dir = taskDirectionName(s, w.research);
         if (dir) meta.appendChild(el('span', 'research-overview__dir', `· ${dir}`));

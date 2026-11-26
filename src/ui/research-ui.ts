@@ -672,8 +672,13 @@ export function queueKindText(q: Pick<LiveQueueItem, 'kind'>): string {
     return q.kind ? strings.live.queueKind[q.kind] ?? '' : '';
 }
 
-/** The small tag of a queued task's kind after its text (null: no kind said). */
-export function queueKindTag(q: Pick<LiveQueueItem, 'kind'>): HTMLElement | null {
+/** The small tag of a queued task's kind after its text (null: no kind said); a task of a house "Houses" (spec 030 §14). */
+export function queueKindTag(q: Pick<LiveQueueItem, 'kind'> & { taskKind?: LiveQueueItem['taskKind'] }): HTMLElement | null {
+    if (!q.kind && q.taskKind === 'house') {
+        const tag = el('span', 'live-queue-kind', queueKindName('house'));
+        tag.dataset.kind = 'house';
+        return tag;
+    }
     const text = queueKindText(q);
     if (!text) return null;
     const tag = el('span', 'live-queue-kind', text);
@@ -6092,6 +6097,7 @@ export const researchUiMethods = uiModule({
         // One width for every number of the list (the widest place's digits): the texts start in one column.
         const widest = shownNext.reduce((m, q, i) => Math.max(m, placeAt(q, i)), 0);
         if (widest >= 10) ul.style.setProperty('--live-queue-num', `${String(widest).length}ch`);
+        const houseTask = this.houseTaskViews();
         shownNext.forEach((q, i) => {
             const li = el('li', 'live-queue-row');
             li.dataset.task = q.id;
@@ -6101,12 +6107,14 @@ export const researchUiMethods = uiModule({
             const num = el('span', 'live-queue-num', String(place));
             if ((placeOf || list) && !renumbered) num.setAttribute('aria-label', L.branchQueuePos(place));
             li.appendChild(num);
-            const text = el('span', 'live-queue-text', q.text);
+            const house = houseTask(q);
+            const text = el('span', 'live-queue-text', house?.text ?? q.text);
             // The panel, two or more lines at work: the task's line first.
             const glyph = directions ? '' : lineGlyphFor(s, q.research);
             if (glyph) text.prepend(el('span', 'live-queue-dir', `${glyph} `));
             const kind = queueKindTag(q);
             if (kind) text.append(' ', kind);
+            this.appendHouseTaskLink(text, house);
             markQueueNextRow(li, text, q, s);
             const dir = multi ? taskDirectionName(s, q.research) : '';
             if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
@@ -6136,9 +6144,11 @@ export const researchUiMethods = uiModule({
             const li = el('li', 'live-queue-row live-queue-row--parked');
             li.dataset.task = q.id;
             if (search) li.tabIndex = -1;
-            const text = el('span', 'live-queue-text', `${r.parkedPrefix} ${q.text}`);
+            const house = houseTask(q);
+            const text = el('span', 'live-queue-text', `${r.parkedPrefix} ${house?.text ?? q.text}`);
             const kind = queueKindTag(q);
             if (kind) text.append(' ', kind);
+            this.appendHouseTaskLink(text, house);
             appendQueueNote(text, q, s);
             li.appendChild(text);
             if (canTask) {
@@ -6406,6 +6416,7 @@ export const researchUiMethods = uiModule({
         const canOrder = taskOrderOffered(s);
         // Set-aside ones last (the research's order), without a place.
         const items = [...list.items.filter(q => q.state === 'next'), ...list.items.filter(q => q.state === 'parked')];
+        const houseTask = this.houseTaskViews();
         const widest = items.reduce((m, q) => Math.max(m, q.pos ?? 0), 0);
         if (widest >= 10) ul.style.setProperty('--live-queue-num', `${String(widest).length}ch`);
         for (const q of items) {
@@ -6417,9 +6428,11 @@ export const researchUiMethods = uiModule({
             const num = el('span', 'live-queue-num', place !== undefined ? String(place) : '–');
             if (place !== undefined) num.setAttribute('aria-label', L.branchQueuePos(place));
             li.appendChild(num);
-            const text = el('span', 'live-queue-text', q.text);
+            const house = houseTask(q);
+            const text = el('span', 'live-queue-text', house?.text ?? q.text);
             const kind = queueKindTag(q);
             if (kind) text.append(' ', kind);
+            this.appendHouseTaskLink(text, house);
             if (!parked) markQueueNextRow(li, text, q, s);
             const dir = multi ? taskDirectionName(s, q.research) : '';
             if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
