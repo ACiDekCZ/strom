@@ -101,15 +101,8 @@ const femaleOf = (p: Person | undefined): boolean => p?.gender === 'female';
 export const housesMethods = uiModule({
     // ==================== HOOKS (spec 030 §2 fills them) ====================
 
-    /** The research's state of a house and its action, in the row's right column; empty: no column. */
-    renderHouseStateSlot(_house: TreeHouse): string {
-        return '';
-    },
-
-    /** A click inside the state column: true when it was handled. */
-    houseStateSlotClick(_target: HTMLElement, _house: TreeHouse): boolean {
-        return false;
-    },
+    // The research's state in the row's right column (renderHouseStateSlot, houseStateSlotClick) and in the
+    // detail (renderHouseResearchDetail, houseResearchDetailClick): src/ui/house-state-ui.ts.
 
     /** The research's rows of a house's ⋯ menu (above the line). */
     houseMenuResearchItems(_house: TreeHouse): HouseMenuItem[] {
@@ -310,6 +303,12 @@ export const housesMethods = uiModule({
             const id = person.dataset.personId ?? '';
             this.closeHousesWindow(false);
             this.focusFromMap(id);
+            return;
+        }
+        const research = t.closest<HTMLElement>('.house-research');
+        if (research) {
+            const h = state.byId.get(research.closest<HTMLElement>('.house-detail')?.dataset.house ?? '');
+            if (h) this.houseResearchDetailClick(t, h);
             return;
         }
         const records = t.closest<HTMLElement>('.house-more-records');
@@ -526,6 +525,7 @@ export const housesMethods = uiModule({
                 ${line ? `<p class="house-facts">${this.escapeHtml(line)}</p>` : ''}
                 <div class="house-people">${rows}</div>
                 ${rest > 0 ? `<button type="button" class="house-more-records">${this.escapeHtml(s.moreRecords(rest))}</button>` : ''}
+                ${this.renderHouseResearchDetail(h)}
             </div>`;
     },
 

@@ -1,0 +1,114 @@
+/**
+ * The research's state of a house (spec 030 §2, K7.5): the badge of every state (none = only a house the research
+ * lists; queued with work "takeover" = own research waiting to be taken over; waiting with its "Answer"), the
+ * town's summary in Places, and the task kind `house` in the queue (`kind=house`, `known=house`).
+ */
+import { describe, it, expect, afterEach } from 'vitest';
+import { houseStateHtml, houseTownStatesText } from '../ui/house-state-ui.js';
+import { queuePageQuery } from '../research-queue-pages.js';
+import { QUEUE_TASK_KINDS } from '../research-link.js';
+import { getStringsForLang, setLanguage } from '../strings.js';
+
+afterEach(() => setLanguage('cs'));
+
+const text = (html: string): string => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+describe('houseStateHtml', () => {
+    it('draws nothing for a house the research does not list', () => {
+        setLanguage('cs');
+        expect(houseStateHtml(null, { lang: 'cs' })).toBe('');
+        expect(houseStateHtml(undefined, { lang: 'cs', answer: true })).toBe('');
+    });
+
+    it('none: "not researched" as a quiet text', () => {
+        setLanguage('cs');
+        const html = houseStateHtml({ state: 'none' }, { lang: 'cs' });
+        expect(html).toContain('class="hs is-text"');
+        expect(text(html)).toBe('nezkoumáno');
+    });
+
+    it('queued, running (with its dot), held', () => {
+        setLanguage('cs');
+        expect(text(houseStateHtml({ state: 'queued' }, { lang: 'cs' }))).toBe('ve frontě');
+        const running = houseStateHtml({ state: 'running' }, { lang: 'cs' });
+        expect(running).toContain('hs-pulse');
+        expect(text(running)).toBe('zkoumá se');
+        const held = houseStateHtml({ state: 'held' }, { lang: 'cs' });
+        expect(held).toContain('is-text');
+        expect(text(held)).toBe('odloženo');
+    });
+
+    it('done with its date in the app\'s language', () => {
+        setLanguage('cs');
+        expect(text(houseStateHtml({ state: 'done', at: '2027-03-12T10:20:00Z' }, { lang: 'cs' }))).toBe('hotovo 12. 3. 2027');
+        setLanguage('en');
+        expect(text(houseStateHtml({ state: 'done', at: '2027-03-12' }, { lang: 'en' }))).toBe('done 12 Mar 2027');
+        expect(text(houseStateHtml({ state: 'done' }, { lang: 'en' }))).toBe('done');
+    });
+
+    it('queued with work "takeover": waiting to be taken over, with its note', () => {
+        setLanguage('cs');
+        const html = houseStateHtml({ state: 'queued', work: 'takeover' }, { lang: 'cs' });
+        expect(html).toContain('data-state="takeover"');
+        expect(text(html)).toBe('rešerše čeká na převzetí převezme agent v příštím sezení');
+        expect(text(houseStateHtml({ state: 'queued', work: 'house' }, { lang: 'cs' }))).toBe('ve frontě');
+    });
+
+    it('waiting: a warning tag; "Answer" (no mark) carries the question\'s task', () => {
+        setLanguage('en');
+        const row = { state: 'waiting' as const, question: { id: 'T0042', text: 'Which number?' } };
+        const html = houseStateHtml(row, { lang: 'en', answer: true });
+        expect(html).toContain('class="hs is-wait"');
+        expect(html).toContain('data-question="T0042"');
+        expect(text(html)).toBe('waiting for an answer Answer');
+        expect(html).not.toMatch(/research-open-mark|ai-badge/);
+        expect(houseStateHtml(row, { lang: 'en' })).not.toContain('house-answer');
+        expect(houseStateHtml({ state: 'waiting' }, { lang: 'en', answer: true })).not.toContain('house-answer');
+    });
+
+    it('escapes the question\'s text', () => {
+        setLanguage('en');
+        const html = houseStateHtml({ state: 'waiting', question: { id: 'T1', text: '<b>"x"</b>' } }, { lang: 'en', answer: true });
+        expect(html).not.toContain('<b>');
+        expect(html).toContain('&lt;b&gt;&quot;x&quot;');
+    });
+
+    it('every language has every state', () => {
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            const st = getStringsForLang(lang).houses.st;
+            for (const v of [st.none, st.queued, st.running, st.done('x'), st.waiting, st.held, st.takeover]) expect(v.length).toBeGreaterThan(1);
+            expect(getStringsForLang(lang).houses.answer.length).toBeGreaterThan(1);
+        }
+    });
+});
+
+describe('houseTownStatesText', () => {
+    it('counts a town\'s houses per state, the states without a house left out', () => {
+        setLanguage('cs');
+        expect(houseTownStatesText([{ state: 'done' }, { state: 'running' }, { state: 'none' }, { state: 'none' }], 'cs')).toBe('1 hotovo, 1 zkoumá se');
+        expect(houseTownStatesText([{ state: 'none' }], 'cs')).toBe('');
+        expect(houseTownStatesText([], 'cs')).toBe('');
+    });
+});
+
+describe('the task kind house', () => {
+    const house = ['house'];
+    const both = ['census', 'house'];
+
+    it('is a kind of the queue with a label in every language', () => {
+        expect(QUEUE_TASK_KINDS).toContain('house');
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) expect(getStringsForLang(lang).live.taskKinds.house).toBeTruthy();
+        expect(getStringsForLang('cs').live.taskKinds.house).toBe('Dům');
+    });
+
+    it('kind=house goes only to a research with the feature', () => {
+        expect(queuePageQuery({ kind: 'house' }, 0, 50, house).toString()).toBe('count=50&kind=house');
+        expect(queuePageQuery({ kind: 'house' }, 0, 50, ['census']).has('kind')).toBe(false);
+        expect(queuePageQuery({ kind: 'house' }, 0, 50).has('kind')).toBe(false);
+    });
+
+    it('kind=other leaves house tasks out with known=house (and census too)', () => {
+        expect(queuePageQuery({ kind: 'other' }, 0, 50, house).toString()).toBe('count=50&kind=other&known=house');
+        expect(queuePageQuery({ kind: 'other' }, 0, 50, both).toString()).toBe('count=50&kind=other&known=census%2Chouse');
+    });
+});

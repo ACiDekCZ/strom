@@ -13,7 +13,7 @@
  * the others forgotten. A request for a list no longer shown is aborted.
  */
 
-import { CENSUS_FEATURE, LiveQueueItem, QUEUE_TASK_KINDS, holdsSaid, sanitizeQueue, withAppVersion, type QueueTaskKind } from './research-link.js';
+import { CENSUS_FEATURE, HOUSE_FEATURE, LiveQueueItem, QUEUE_TASK_KINDS, holdsSaid, sanitizeQueue, withAppVersion, type QueueTaskKind } from './research-link.js';
 import { BRIDGE_ANSWER_MS } from './bridge-ask.js';
 
 /** Tasks asked per page. */
@@ -154,12 +154,16 @@ export function queuePageQuery(filter: QueueFilter, from: number, count: number,
     if (filter.research) q.set('research', filter.research);
     if (filter.state) q.set('state', filter.state);
     const census = !!features?.includes(CENSUS_FEATURE);
+    // House tasks (spec 030 §2.9): a kind of its own only with `house`, as census with `census`.
+    const house = !!features?.includes(HOUSE_FEATURE);
     // Only a kind known here: the bridge refuses any other word (400 queue.query).
-    if (filter.kind && (QUEUE_TASK_KINDS as readonly string[]).includes(filter.kind) && (filter.kind !== 'census' || census)) {
+    if (filter.kind && (QUEUE_TASK_KINDS as readonly string[]).includes(filter.kind)
+        && (filter.kind !== 'census' || census) && (filter.kind !== 'house' || house)) {
         q.set('kind', filter.kind);
         // `other` without `known` is every kind the research has beyond the app's first list (spec 065):
-        // census is counted on its own here, so it is left out of `other` too (spec 106).
-        if (filter.kind === 'other' && census) q.set('known', 'census');
+        // census and house are counted on their own here, so they are left out of `other` too (spec 106, 030).
+        const known = [...(census ? ['census'] : []), ...(house ? ['house'] : [])];
+        if (filter.kind === 'other' && known.length) q.set('known', known.join(','));
     }
     const query = filter.q ? queueQuery(filter.q) : '';
     if (query) q.set('q', query);

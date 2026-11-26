@@ -429,7 +429,9 @@ export const placesManagerMethods = uiModule({
 
     /** "Houses in this town ›" of a town with a numbered house: opens the Houses window on it. */
     placeTownHousesHtml(town: string): string {
-        return `<button type="button" class="place-act place-town-houses" data-town="${this.escapeHtml(town)}">${this.escapeHtml(strings.houses.townHouses)}</button>`;
+        // With the research's houses (spec 030 K7.5): how many of the town's houses are in each state.
+        return `<button type="button" class="place-act place-town-houses" data-town="${this.escapeHtml(town)}">${this.escapeHtml(strings.houses.townHouses)}</button>`
+            + this.placeTownHouseStatesHtml(town);
     },
 
     renderPlaceGroup(g: DialogGroup, byKey: ReadonlyMap<string, ManagerPlace>): string {

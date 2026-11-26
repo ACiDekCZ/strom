@@ -1856,7 +1856,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         queueSearchCancel: 'Wyczyść wyszukiwanie',
         queueSearchAllDirs: 'Szukaj we wszystkich liniach',
         taskKinds: { verify: 'Weryfikacja', records: 'Metryki', census: 'Spis ludności', material: 'Materiał', places: 'Miejsca', enrich: 'Źródła poza metrykami',
-            request: 'Zapytania', story: 'Opowieści', history: 'Historia', other: 'Inne' } as Record<string, string>,
+            request: 'Zapytania', story: 'Opowieści', history: 'Historia', house: 'Dom', other: 'Inne' } as Record<string, string>,
         taskKindLabel: 'Rodzaj zadania',
         taskKindClear: 'Pokaż wszystkie rodzaje zadań',
         queueSearchInKind: (k: string) => `rodzaj ${k}`,

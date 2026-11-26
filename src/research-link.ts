@@ -3510,6 +3510,8 @@ export const CENSUS_FEATURE = 'census';
  */
 export const HOUSE_FEATURES = ['house', 'house.material', 'house.confirm', 'house.import'] as const;
 export type HouseFeature = typeof HOUSE_FEATURES[number];
+/** `/status.features`: the houses' reads, `/status.houses` and the task kind `house` (`kind=house`, `known=house`). */
+export const HOUSE_FEATURE: HouseFeature = 'house';
 
 /** The house tasks by their state (`/status.houses.counts`). */
 export interface LiveHouseCounts {
@@ -4363,7 +4365,7 @@ export const WORK_LINK_FEATURE = 'work.link';
  */
 export const QUEUE_KIND_FEATURE = 'queue.kind';
 /** The kinds of work a queued task is, in the order their chips stand (`queue.kind`). */
-export const QUEUE_TASK_KINDS = ['verify', 'records', 'census', 'material', 'places', 'enrich', 'request', 'story', 'history', 'other'] as const;
+export const QUEUE_TASK_KINDS = ['verify', 'records', 'census', 'material', 'places', 'enrich', 'request', 'story', 'history', 'house', 'other'] as const;
 export type QueueTaskKind = typeof QUEUE_TASK_KINDS[number];
 /** A task's kind as the research says it: one known here, any other word `other` (a newer research), else null. */
 export function queueTaskKindOf(v: unknown): QueueTaskKind | null {

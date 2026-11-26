@@ -7501,6 +7501,27 @@
         }
         .house-tag .nm { font-family: var(--font-serif); color: var(--text); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .house-side { grid-column: 4; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; min-width: 0; }
+        /* The research's state of a house (spec 030 §2): a tag, a quiet text or a note; "Answer" as a link. */
+        .hs {
+            display: inline-flex; align-items: center; gap: 5px; padding: 0 6px; border: 1px solid var(--research-line);
+            border-radius: var(--r-tag); background: var(--research-soft); color: var(--research);
+            font-size: 11.5px; font-weight: 600; line-height: 18px; white-space: nowrap;
+        }
+        .hs.is-wait { border-color: var(--read-amber-line); background: var(--warning-soft); color: var(--warning-text); }
+        .hs.is-text { padding: 0; border: 0; background: none; font-size: 12.5px; font-weight: 400; color: var(--text-light); }
+        .hs-pulse { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .7; animation: hs-pulse 1.8s ease-in-out infinite; }
+        @keyframes hs-pulse { 0%, 100% { opacity: .7; } 50% { opacity: .25; } }
+        @media (prefers-reduced-motion: reduce) { .hs-pulse { animation: none; } }
+        .hs-note { font-size: 12px; color: var(--text-faint); }
+        .houses-modal button.hs-act {
+            padding: 0; border: 0; border-radius: 0; background: none; font: inherit; font-size: 12.5px; color: var(--warning-text);
+            text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+        }
+        .house-research { display: flex; flex-direction: column; gap: 8px; }
+        .house-research-state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+        .place-town-house-states { font-size: 12.5px; color: var(--text-light); }
+        @media (pointer: coarse) { .houses-modal button.hs-act { min-height: 32px; } }
+        @media (max-width: 640px) { .hs { white-space: normal; } .house-side .hs-note { text-align: right; } }
         .houses-modal button.house-more-btn {
             grid-column: 5; width: 28px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm);
             background: var(--surface); color: var(--text-light); font-size: 15px; line-height: 1; cursor: pointer;
