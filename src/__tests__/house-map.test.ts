@@ -151,7 +151,7 @@ describe('house map — the section', () => {
         expect(housePositionText({ lang: 'en', location: POINT, how: 'confirmed', research: research() })).toBe('Location confirmed');
         const high = (how: string) => research({ location: { lat: 1, lon: 2, certainty: 'high', how, confirmed: null, sources: [] } });
         expect(housePositionText({ lang: 'cs', location: POINT, research: high('today-number') })).toBe('Poloha podle dnešního čísla domu · jistota vysoká');
-        expect(housePositionText({ lang: 'en', location: POINT, research: high('old-map') })).toBe('Location from the research · high certainty');
+        expect(housePositionText({ lang: 'en', location: POINT, research: high('old-map') })).toBe('Location from research · high certainty');
         expect(houseLocationUnsure({ location: POINT, research: high('old-map') })).toBe(false);
         expect(houseLocationUnsure({ location: POINT, how: 'manual', research: research() })).toBe(false);
     });

@@ -108,7 +108,7 @@ describe('the round\'s texts (questions 2, 10, 12, 28, 30, 44)', () => {
             return [m.posManual, m.posConfirmed, m.posSure];
         };
         expect(pos('cs')).toEqual(['Poloha zadaná ručně', 'Poloha potvrzená', 'Poloha podle výzkumu · jistota vysoká']);
-        expect(pos('en')).toEqual(['Location set by hand', 'Location confirmed', 'Location from the research · high certainty']);
+        expect(pos('en')).toEqual(['Location set by hand', 'Location confirmed', 'Location from research · high certainty']);
         expect(pos('de')).toEqual(['Lage von Hand gesetzt', 'Lage bestätigt', 'Lage laut Forschung · hohe Sicherheit']);
         expect(pos('pl')).toEqual(['Położenie ustawione ręcznie', 'Położenie potwierdzone', 'Położenie według badań · wysoka pewność']);
     });

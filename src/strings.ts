@@ -13491,7 +13491,7 @@ const stringsEN = {
                 layers: 'Map layer', today: 'Today', ortho: 'Orthophoto today', aerial: 'Aerial 1950s',
                 onlyToday: 'Today’s map only; the research has no other layers for this country.',
                 posHigh: 'Location by today’s house number · high certainty',
-                posSure: 'Location from the research · high certainty',
+                posSure: 'Location from research · high certainty',
                 posUnsure: 'Location uncertain (the number may have changed)',
                 posManual: 'Location set by hand',
                 posConfirmed: 'Location confirmed',
