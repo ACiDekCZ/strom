@@ -147,6 +147,32 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         await expect(page.locator('#places-modal')).toHaveClass(/active/);
     });
 
+    for (const width of [1440, 1024]) {
+        test(`Places at ${width} px: a family house's row keeps its text readable beside its actions`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 900 });
+            await setup(page);
+            // A long double surname and the house's name after its farm (invented): the row's text column must not shrink to a few letters.
+            await page.evaluate(() => {
+                const dm = window.Strom.DataManager;
+                for (const p of Object.values(dm.getData().persons) as { id: string; firstName: string }[]) {
+                    if (p.firstName === 'Josef' || p.firstName === 'Jan') dm.updatePerson(p.id as never, { lastName: 'Prouzal-Kvitelkovský' } as never);
+                }
+                dm.setHouseUserData('belokamen|16', { name: 'U Prouzalů pod Kvitelkovým vrchem' }, 'seed');
+            });
+            // The town chosen: its row beside the place's detail, a narrower column.
+            await page.evaluate(() => window.Strom.UI.showPlacesManager('belokamen', undefined, 'tree'));
+            await page.locator('#places-modal .place-houses-wrap[data-town="belokamen"] .place-houses-toggle').click();
+            const r = page.locator(`#places-modal .place-houses-sub .r[data-house="${KEY}"]`);
+            await expect(r.locator('.m')).toContainText('Prouzal-Kvitelkovský');
+            await expect(r.locator('.house-req[data-house-act="request"]')).toBeVisible();
+            const m = await r.locator('.m').boundingBox();
+            expect(m!.width).toBeGreaterThanOrEqual(150);
+            // The text stays on few lines (a column a few letters wide wraps it into many).
+            const lines = await r.locator('.m').evaluate(el => Math.round(el.getBoundingClientRect().height / (parseFloat(getComputedStyle(el).lineHeight) || 18)));
+            expect(lines).toBeLessThanOrEqual(3);
+        });
+    }
+
     test('the person card: an address at a house of the tree opens the house', async ({ page }) => {
         await setup(page);
         await page.evaluate(() => {

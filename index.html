@@ -4041,18 +4041,24 @@
         }
         .place-houses .place-town-house-states { margin-left: 6px; }
         .place-houses-sub { margin: 2px 0 4px; border-radius: 8px; background: var(--sub); font-size: 13px; }
+        /* Number | name · period · surnames | state and actions; in a narrow column (a town row beside its map
+           side) the actions go under the text instead of squeezing it into a column a few letters wide. */
         .place-houses-sub .r {
-            display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: 4px 10px;
+            display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
             padding: 6px 10px; border-top: 1px solid var(--border);
         }
         .place-houses-sub .r:first-child { border-top: 0; }
-        .place-houses-sub .r > b { font-weight: 600; color: var(--text); }
-        .place-houses-sub .m { min-width: 0; color: var(--text-light); overflow-wrap: anywhere; }
-        .place-houses-sub .a { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; }
+        .place-houses-sub .r > b { flex: 0 0 auto; min-width: 64px; font-weight: 600; color: var(--text); }
+        .place-houses-sub .m { flex: 1 1 200px; min-width: 0; color: var(--text-light); overflow-wrap: break-word; }
+        .place-houses-sub .a {
+            display: inline-flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px;
+            margin-left: auto;
+        }
         @media (max-width: 640px) {
             .place-houses { margin-top: 8px; }
-            .place-houses-sub .r { grid-template-columns: minmax(0, 1fr); }
-            .place-houses-sub .a { justify-content: flex-start; }
+            .place-houses-sub .r > b { flex-basis: 100%; }
+            .place-houses-sub .m { flex-basis: 100%; }
+            .place-houses-sub .a { justify-content: flex-start; margin-left: 0; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .place-houses-sub .r { padding: 4px 10px; }
