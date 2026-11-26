@@ -12,7 +12,7 @@ import {
     ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, asideWaiting, sanitizeBooksAside, WAITING_GROUPS_FEATURE, sanitizeUpdate, sanitizeIntake, sanitizeBusy, LiveBusy,
     sanitizeAccepts, parseLiveBridge, researchDeviceState, deviceBridgeBase, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
     ResearchTreeKind, ResearchTreeState, sanitizeTreeKind, sanitizeTreeState,
-    researchConflictRef, sanitizeResearchClient, type SyncConflictSent,
+    researchConflictRef, sanitizeResearchClient, type SyncConflictSent, showcaseResearchKnown, showcaseBridgeBase,
 } from './research-link.js';
 import { ResearchConflict, ResearchSend } from './types.js';
 import type { NotWrittenItem } from './research-changes.js';
@@ -193,18 +193,21 @@ export interface StoredResearchBridge {
     tree?: StoredResearchTree;
 }
 
-/** `tree.kind` and `tree.state` of the last status, each only when the bridge said it. */
+/** `tree.kind`, `tree.state` and `tree.demo` of the last status, each only when the bridge said it. */
 export interface StoredResearchTree {
     kind?: ResearchTreeKind;
     state?: ResearchTreeState;
+    /** The showcase `strom demo` made (spec 143 K2): its tag, nothing of the agent's. */
+    demo?: true;
 }
 
 function storedTree(value: unknown): StoredResearchTree | undefined {
     if (!value || typeof value !== 'object') return undefined;
-    const v = value as { kind?: unknown; state?: unknown };
+    const v = value as { kind?: unknown; state?: unknown; demo?: unknown };
     const kind = sanitizeTreeKind(v.kind);
     const state = sanitizeTreeState(v.state);
-    return kind || state ? { ...(kind ? { kind } : {}), ...(state ? { state } : {}) } : undefined;
+    const demo = v.demo === true;
+    return kind || state || demo ? { ...(kind ? { kind } : {}), ...(state ? { state } : {}), ...(demo ? { demo: true as const } : {}) } : undefined;
 }
 
 /**
@@ -214,6 +217,7 @@ function storedTree(value: unknown): StoredResearchTree | undefined {
  * window it becomes then talks to the bridge.
  */
 export function hasStoredResearchBridge(researchId: string): boolean {
+    if (showcaseResearchKnown(researchId)) return true;
     try {
         const raw = localStorage.getItem(BRIDGE_KEY + researchId);
         if (!raw) return !!deviceTreeBridge(researchId);
@@ -231,6 +235,8 @@ function deviceTreeBridge(researchId: string): StoredResearchBridge | null {
 export function storedResearchBridge(researchId: string): StoredResearchBridge | null {
     // Another window of the app (spec 097 K1.3): only the main window talks to a bridge.
     if (bridgelessWindow) return null;
+    // A showcase (spec 143 K4): its snapshot answers in the page; nothing of it is stored as a bridge.
+    if (showcaseResearchKnown(researchId)) return { base: showcaseBridgeBase(researchId), accepts: null, head: '' };
     try {
         const raw = localStorage.getItem(BRIDGE_KEY + researchId);
         if (!raw) return deviceTreeBridge(researchId);
@@ -245,6 +251,8 @@ export function storedResearchBridge(researchId: string): StoredResearchBridge |
 }
 
 function writeBridge(researchId: string, value: StoredResearchBridge): void {
+    // A showcase's bridge is its snapshot in the page: never kept as a bridge of this computer.
+    if (showcaseResearchKnown(researchId)) return;
     try {
         localStorage.setItem(BRIDGE_KEY + researchId, JSON.stringify({
             base: value.base,
@@ -339,8 +347,14 @@ export function noteResearchBridgeStatus(researchId: string, accepts: ResearchAc
 }
 
 /** The tree as a status says it (`tree.kind`, `tree.state`), for noteResearchBridgeStatus. */
-export function researchTreeOfStatus(status: { treeKind?: ResearchTreeKind; treeState?: ResearchTreeState }): StoredResearchTree {
-    return { ...(status.treeKind ? { kind: status.treeKind } : {}), ...(status.treeState ? { state: status.treeState } : {}) };
+export function researchTreeOfStatus(status: { treeKind?: ResearchTreeKind; treeState?: ResearchTreeState; treeDemo?: true }): StoredResearchTree {
+    return { ...(status.treeKind ? { kind: status.treeKind } : {}), ...(status.treeState ? { state: status.treeState } : {}),
+        ...(status.treeDemo ? { demo: true as const } : {}) };
+}
+
+/** The research is the showcase `strom demo` made, as its last status said (spec 143 K2; read from storage only). */
+export function storedResearchDemo(researchId: string | null | undefined): boolean {
+    return !!researchId && storedResearchBridge(researchId)?.tree?.demo === true;
 }
 
 // ==================== "WHAT WILL BE SENT" FIRST (per tree, this browser) ====================

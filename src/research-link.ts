@@ -334,6 +334,8 @@ export function deviceAllows(action: ResearchDeviceAction, actions: readonly str
 
 /** Whether an action of the research is drawn here: always outside the device mode, on a device only what §6 allows. */
 export function researchDeviceAllows(action: ResearchDeviceAction): boolean {
+    // The showcase (spec 143 K4.1): what it does not show is hidden as on a device without the right.
+    if (inShowcase()) return researchShowcaseShown(action) !== 'hide';
     return deviceState ? deviceAllows(action, deviceState.actions) && !refusedOnDevice.has(action) : true;
 }
 
@@ -344,6 +346,7 @@ export function researchDeviceAllows(action: ResearchDeviceAction): boolean {
  * (a fix that is not paid, a task not talked over).
  */
 export function researchDeviceLinkAllows(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): boolean {
+    if (inShowcase()) return researchShowcaseShown(showcaseActionOfLink(action, p)) !== 'hide';
     if (!deviceState) return true;
     if (refusedOnDevice.has(action)) return false;
     if (computerLinkMark(action, p) === 'agent') return deviceState.actions.includes(DEVICE_AGENT_START);
@@ -404,6 +407,154 @@ export function noteResearchDeviceRefused(action: ResearchDeviceAction): void {
 /** The mark an action is drawn with here, or `hidden` (a device: only on the computer with the research). */
 export function researchDeviceMark(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): ResearchActionMark | 'hidden' {
     return researchDeviceLinkAllows(action, p) ? researchLinkMark(action, p) : 'hidden';
+}
+
+// ==================== THE SHOWCASE (spec 143 K4, K4.1) ====================
+
+/**
+ * How an action of the research is drawn in the showcase (a sample tree whose
+ * research is a snapshot in its file, only to be read):
+ * - `show`: as anywhere (reading);
+ * - `off`: one of the main actions, drawn greyed with its mark; a click only says why;
+ * - `hide`: not drawn (every other write, and the agent).
+ */
+export type ShowcaseShown = 'show' | 'off' | 'hide';
+
+/**
+ * What the showcase names besides the device's actions: the queue's order changed, "Process now", a task's
+ * "Don't know" / "Postpone" / ⋯, "Next in the queue" / "Do now", the branches' choices outside the lines,
+ * "Merge here", the switch following the research live, and its reads (the overview and its sections, what
+ * the research knows, the materials).
+ */
+export type ResearchShowcaseExtra = 'queue-order' | 'work-now' | 'waiting-defer' | 'queue-next' | 'branch-options' | 'merge-here'
+    | 'research-follow' | 'overview' | 'knows' | 'materials';
+
+export type ResearchShowcaseAction = ResearchDeviceAction | ResearchShowcaseExtra;
+
+/**
+ * The ten main actions of a research, greyed in the showcase (UIX §5): continue the research, send to the
+ * research, decide a conflict there, leave it to the agent, decide a hypothesis (pick a version, none holds,
+ * leave it open, open it again), answer what waits, change the queue's order, process now, a new line, ask
+ * the agent.
+ */
+export const SHOWCASE_MAIN_ACTIONS: readonly ResearchShowcaseAction[] = [
+    'work', 'send', 'conflict', 'conflict-agent', 'hypothesis', 'waiting-answer', 'queue-order', 'work-now', 'direction-new', 'chat',
+];
+
+/** §5 of the showcase's design: the main actions greyed, the reads shown, anything else hidden. */
+const SHOWCASE_ALLOWS: Readonly<Record<ResearchShowcaseAction, ShowcaseShown>> = {
+    // The main actions: seen greyed, each with its group's mark.
+    work: 'off', send: 'off', conflict: 'off', 'conflict-agent': 'off', hypothesis: 'off', 'waiting-answer': 'off',
+    'queue-order': 'off', 'work-now': 'off', 'direction-new': 'off', chat: 'off',
+    // Reading: the overview and its sections, what the research knows, the materials.
+    overview: 'show', knows: 'show', materials: 'show',
+    // Every other write and the agent's work: not drawn. The links need the research on this computer (the
+    // excerpt's or the original's viewer, the tree, a book's folder, the terminal), which the showcase has not.
+    excerpt: 'hide', media: 'hide', app: 'hide', live: 'hide', book: 'hide', direction: 'hide', hypotheses: 'hide',
+    'sync-undo-this': 'hide', 'fact-confirm': 'hide', 'verify-stop': 'hide', 'sources-split': 'hide', 'run-stop': 'hide',
+    'run-limit': 'hide', task: 'hide', places: 'hide', history: 'hide', fixes: 'hide', 'direction-work': 'hide',
+    verify: 'hide', 'verify-bulk': 'hide', 'material-sort': 'hide', 'read-document': 'hide',
+    open: 'hide', review: 'hide', research: 'hide', new: 'hide', update: 'hide', sessions: 'hide', story: 'hide',
+    'sync-undo': 'hide', setup: 'hide', finish: 'hide', archive: 'hide', seal: 'hide', experiment: 'hide', doctor: 'hide',
+    'history-kinds': 'hide', 'history-align': 'hide', house: 'hide', devices: 'hide', 'research-tools': 'hide',
+    'tree-settings': 'hide', 'load-version': 'hide',
+    'waiting-defer': 'hide', 'queue-next': 'hide', 'branch-options': 'hide', 'merge-here': 'hide', 'research-follow': 'hide',
+};
+
+/** How `action` is drawn in the showcase (an unknown name: hidden). */
+export function researchShowcaseShown(action: ResearchShowcaseAction): ShowcaseShown {
+    return SHOWCASE_ALLOWS[action] ?? 'hide';
+}
+
+/** The showcase's action of a link, by what it asks (`do=`): a conflict left to the agent is its own. */
+export function showcaseActionOfLink(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): ResearchShowcaseAction {
+    if (action === 'conflict' && p.conflictDo === 'agent') return 'conflict-agent';
+    return action;
+}
+
+/** Whether the open tree is a showcase (TreeMetadata.sample): set by the app (no import of its trees here). */
+let showcaseLookup: (() => boolean) | null = null;
+
+export function setInShowcaseLookup(fn: (() => boolean) | null): void {
+    showcaseLookup = fn;
+}
+
+/** The open tree is a showcase: its research is only read (from the snapshot of its file), nothing is ever sent. */
+export function inShowcase(): boolean {
+    if (!showcaseLookup) return false;
+    try {
+        return showcaseLookup();
+    } catch {
+        return false;
+    }
+}
+
+/** What says why an action does nothing in the showcase (its bubble, drawn by the UI); `el`: the control clicked. */
+let showcaseWhyHandler: ((el: HTMLElement | null, action: ResearchShowcaseAction | null) => void) | null = null;
+
+export function setShowcaseWhy(fn: ((el: HTMLElement | null, action: ResearchShowcaseAction | null) => void) | null): void {
+    showcaseWhyHandler = fn;
+}
+
+/** An action asked in the showcase: nothing is done, only why is said (when the UI says it). */
+export function showcaseWhy(el: HTMLElement | null = null, action: ResearchShowcaseAction | null = null): void {
+    try {
+        showcaseWhyHandler?.(el, action);
+    } catch { /* its own */ }
+}
+
+/** The path under the page's origin that stands for a showcase research's bridge (answered in the page, spec 143). */
+export const SHOWCASE_BRIDGE_PATH = '/__showcase/';
+
+/** The origin the showcase's bridges are under (null: no showcase bridge), and the researches that have one. */
+let showcaseOrigin: string | null = null;
+const showcaseResearches = new Set<string>();
+
+/** The origin of a showcase bridge: the page's own, or a name that leads nowhere when the page has none (a file). */
+export function showcaseOriginOf(origin: string): string {
+    return /^https?:\/\//.test(origin) ? origin.replace(/\/+$/, '') : 'https://showcase.invalid';
+}
+
+/** The showcase researches answered in this page (their snapshots kept), at `origin`; none: no showcase bridge. */
+export function setShowcaseBridges(origin: string | null, researches: readonly string[]): void {
+    showcaseResearches.clear();
+    for (const id of researches) showcaseResearches.add(id.toLowerCase());
+    showcaseOrigin = origin && showcaseResearches.size > 0 ? showcaseOriginOf(origin) : null;
+}
+
+/** The research has a showcase bridge here (its snapshot kept). */
+export function showcaseResearchKnown(researchId: string | null | undefined): boolean {
+    return !!researchId && showcaseOrigin !== null && showcaseResearches.has(researchId.toLowerCase());
+}
+
+/** The bridge of a showcase research: `<origin>/__showcase/<research>`. */
+export function showcaseBridgeBase(researchId: string, origin: string = showcaseOrigin ?? ''): string {
+    return `${origin.replace(/\/+$/, '')}${SHOWCASE_BRIDGE_PATH}${encodeURIComponent(researchId.toLowerCase())}`;
+}
+
+/**
+ * A URL of a showcase research's bridge: the research and the bridge's path after it (`status`,
+ * `queue?from=0`). Only for a research whose snapshot is kept, at its origin; anything else is null.
+ */
+export function parseShowcaseBridge(raw: unknown): { researchId: string; base: string; path: string } | null {
+    if (showcaseOrigin === null || typeof raw !== 'string' || raw.length > 4096) return null;
+    let url: URL;
+    try {
+        url = new URL(raw, showcaseOrigin);
+    } catch {
+        return null;
+    }
+    if (url.origin !== showcaseOrigin || url.username || url.password || !url.pathname.startsWith(SHOWCASE_BRIDGE_PATH)) return null;
+    const rest = url.pathname.slice(SHOWCASE_BRIDGE_PATH.length);
+    const slash = rest.indexOf('/');
+    let researchId: string;
+    try {
+        researchId = decodeURIComponent(slash < 0 ? rest : rest.slice(0, slash)).toLowerCase();
+    } catch {
+        return null;
+    }
+    if (!showcaseResearches.has(researchId)) return null;
+    return { researchId, base: showcaseBridgeBase(researchId), path: (slash < 0 ? '' : rest.slice(slash + 1)) + url.search };
 }
 
 /** A group of the research tools, in this order: look, assign work, run the agent (from free to paid). */
@@ -1256,6 +1407,8 @@ export function parseLoopbackUrl(raw: unknown): URL | null {
  * Any other address comes back as it was.
  */
 export function withAppVersion(raw: string, version: string = APP_VERSION): string {
+    // A showcase's bridge answers in the page (its origin may be 127.0.0.1 while testing): as it is.
+    if (parseShowcaseBridge(raw)) return raw;
     const url = parseLoopbackUrl(raw);
     if (!url || !version) return raw;
     url.searchParams.set('app', version);
@@ -1274,11 +1427,13 @@ export interface LiveBridgeUrls {
 
 /** Endpoints of the bridge at `raw` (`http://127.0.0.1:<port>/<token>`), or null. */
 export function parseLiveBridge(raw: unknown): LiveBridgeUrls | null {
-    const url = parseLoopbackUrl(raw);
+    // A showcase (spec 143 K4): its research's snapshot answers in the page, first (its origin may be a loopback one).
+    const showcase = parseShowcaseBridge(raw);
+    const url = showcase ? null : parseLoopbackUrl(raw);
     // A device (spec 094 P3): a tree's bridge through the gateway, at the device's own origin.
-    const device = url ? null : parseDeviceBridge(raw);
-    if (!url && !device) return null;
-    const base = device ? device.base : `${url!.origin}${url!.pathname.replace(/\/+$/, '')}`;
+    const device = url || showcase ? null : parseDeviceBridge(raw);
+    if (!url && !device && !showcase) return null;
+    const base = showcase ? showcase.base : device ? device.base : `${url!.origin}${url!.pathname.replace(/\/+$/, '')}`;
     return {
         base,
         status: `${base}/status`,
@@ -3394,6 +3549,11 @@ export interface LiveStatus {
     treeKind?: ResearchTreeKind;
     /** `tree.state` (with `tree.state` in `features`): a research, one waiting for its agent, or an archive. */
     treeState?: ResearchTreeState;
+    /**
+     * `tree.demo: true`: the research is the showcase `strom demo` made (spec 143 K2): read like a research,
+     * with nothing of the agent's offered; absent: any other research.
+     */
+    treeDemo?: true;
     /** `verify` (with `verify` in `features`, not for an archive or a waiting tree): facts by their re-verification state (spec 065). */
     verify?: LiveVerifyStatus;
     /** `seal` (with `seal.foreign` in `features`): the tree's key is on this computer, or it was sealed on another one. */
@@ -5813,11 +5973,11 @@ function historyEstimate(v: unknown): { minutes: [number, number]; usd?: [number
     return usd ? { minutes, usd } : { minutes };
 }
 
-/** `tree.kind` and `tree.state`, each read only when `features` names it. */
-function treeSaid(tree: Record<string, unknown> | null, features: string[] | null): Pick<LiveStatus, 'treeKind' | 'treeState'> {
+/** `tree.kind` and `tree.state`, each read only when `features` names it; `tree.demo` (no feature) only when true. */
+function treeSaid(tree: Record<string, unknown> | null, features: string[] | null): Pick<LiveStatus, 'treeKind' | 'treeState' | 'treeDemo'> {
     const kind = features?.includes(TREE_KIND_FEATURE) ? sanitizeTreeKind(tree?.kind) : null;
     const state = features?.includes(TREE_STATE_FEATURE) ? sanitizeTreeState(tree?.state) : null;
-    return { ...(kind ? { treeKind: kind } : {}), ...(state ? { treeState: state } : {}) };
+    return { ...(kind ? { treeKind: kind } : {}), ...(state ? { treeState: state } : {}), ...(tree?.demo === true ? { treeDemo: true as const } : {}) };
 }
 
 /** `accepts.read` stays only from a bridge that says it reads now (`read.now` in `features`). */
