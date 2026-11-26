@@ -123,6 +123,8 @@ describe('the cover page (§6)', () => {
         const xmas = coverOf({ lang: 'cs', motif: 'xmas' });
         expect(xmas).toContain('class="gl-page gl-xmas"');
         expect(xmas).toContain('<div class="gl-band"');
+        // The band sits in the header, so it grows with a long name or the numbers on two lines.
+        expect(xmas).toContain('<header class="sp-head gl-head"><div class="gl-band"');
         expect(xmas).toContain('<svg class="gl-twig"');
         expect(xmas).toContain('class="gl-orn"');
         expect(xmas).toContain('Vánoce 2026 · Rodokmen');

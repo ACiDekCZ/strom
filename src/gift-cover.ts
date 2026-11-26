@@ -50,8 +50,9 @@ body { font-family: var(--font-sans); font-size: 15px; line-height: 1.5; -webkit
 .gl-fnote { margin-top: 4px; font-size: 12.5px; color: var(--text-faint); }
 .gl-fn { color: var(--text-faint); overflow-wrap: anywhere; }
 .gl-print { display: none; }
-.gl-band { position: absolute; left: 0; right: 0; top: 0; height: 210px; background: var(--tint); }
-.gl-twig { position: absolute; top: 6px; right: 18px; }
+.gl-xmas .gl-head { position: relative; isolation: isolate; }
+.gl-band { position: absolute; z-index: -1; top: -40px; bottom: -16px; left: 50%; width: 100vw; transform: translateX(-50%); background: var(--tint); }
+.gl-twig { position: absolute; z-index: 1; top: 6px; right: 18px; }
 .gl-xmas .gl-file { padding-top: 40px; }
 .gl-xmas .gl-head { min-height: 150px; }
 .gl-orn { display: flex; align-items: center; gap: 10px; color: var(--rod-bar); }
@@ -74,7 +75,7 @@ body { font-family: var(--font-sans); font-size: 15px; line-height: 1.5; -webkit
   .gl-two { grid-template-columns: minmax(0, 1fr); gap: 22px; }
   .gl-file .sp-facts { grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; font-size: 14px; }
   .gl-file .sp-facts dd { margin-bottom: 0; }
-  .gl-band { height: 170px; }
+  .gl-band { top: -28px; bottom: -14px; }
   .gl-twig { right: -4px; top: 0; transform: scale(.45); transform-origin: 100% 0; }
   .gl-xmas .gl-file { padding-top: 28px; }
   .gl-xmas .gl-head { min-height: 120px; }
@@ -83,7 +84,6 @@ body { font-family: var(--font-sans); font-size: 15px; line-height: 1.5; -webkit
   .gl-file { padding: 16px 24px 28px; gap: 24px; }
   .gl-file .sp-h1 { font-size: 28px; }
   .gl-msg-t { font-size: 17px; }
-  .gl-band { height: 150px; }
   .gl-twig { top: 0; right: 0; transform: scale(.5); transform-origin: 100% 0; }
   .gl-xmas .gl-head { min-height: 110px; }
 }
@@ -429,7 +429,8 @@ export function buildGiftCover(data: StromData, info: GiftCoverInfo): string {
     }
     if (facts.oldest?.year != null) subParts.push(C.ancestorsTo(facts.oldest.year));
     const title = joinAnd(lang, info.names);
-    const head = `<header class="sp-head gl-head">`
+    // The Christmas band behind the header grows with it (a long name, the numbers on two lines).
+    const head = `<header class="sp-head gl-head">${xmas ? '<div class="gl-band" aria-hidden="true"></div>' : ''}`
         + `<span class="sp-kicker">${esc(xmas ? C.kickerXmas(year) : C.kicker)}</span>`
         + `<div class="gl-who">${portraits}<div class="gl-who-t"><h1 class="sp-h1">${esc(title)}</h1>`
         + (subParts.length ? `<p class="sp-sub">${esc(subParts.join(' · '))}</p>` : '')
@@ -526,7 +527,7 @@ export function buildGiftCover(data: StromData, info: GiftCoverInfo): string {
         + `<meta name="color-scheme" content="light dark">`
         + `<title>${esc(info.folder || title)}</title><style>${css}</style></head>`
         + `<body><div class="gl-page${xmas ? ' gl-xmas' : ''}">`
-        + (xmas ? `<div class="gl-band" aria-hidden="true"></div>${TWIG_SVG}` : '')
+        + (xmas ? TWIG_SVG : '')
         + `<main class="gl-file">${header}${msg}${orn}${what}${numbers}${printed}${footer}</main>`
         + `</div></body></html>\n`;
 }

@@ -32391,7 +32391,7 @@
         .gift-review, .gift-cover-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
         .gift-cover-col { gap: 10px; }
         .gift-review-dl { grid-template-columns: 130px minmax(0, 1fr); }
-        .gift-modal .gift-review-dl .link-button { padding: 0; margin: 0 0 0 6px; font-size: 12.5px; }
+        .gift-modal .gift-review-dl .link-button { padding: 0; margin: 0 0 0 2px; font-size: 12.5px; }
         .gift-cover-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
         .gift-modal .gift-cover-head .link-button { padding: 0; margin: 0; font-size: 12.5px; white-space: nowrap; }
         .gift-thumb {
@@ -32468,7 +32468,7 @@
         .gift-pt-x { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
         .gift-pt-t { font-size: 14px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
         .gift-pt-d { font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
-        .gift-modal .gift-pt-d .link-button { padding: 0; margin: 0 0 0 6px; font-size: inherit; }
+        .gift-modal .gift-pt-d .link-button { padding: 0; margin: 0 0 0 2px; font-size: inherit; }
         .gift-pt-s { font-size: 12.5px; color: var(--text-light); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .gift-pt-r.is-off :is(.gift-pt-t, .gift-pt-s) { color: var(--text-faint); }
         .gift-photos-h { margin-top: 8px; font-size: 13px; }
@@ -32492,8 +32492,12 @@
             .gift-cols.is-s4 { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
             .gift-modal label.gift-pt-r { grid-template-columns: 20px minmax(0, 1fr) auto; min-height: 48px; }
             .gift-modal .gift-pt-r input[type="checkbox"] { width: 20px; height: 20px; }
-            .gift-modal .gift-pt-d .link-button { display: inline-flex; align-items: center; min-height: 44px; }
             .gift-seg-photos { max-width: none; }
+        }
+        @media (pointer: coarse) {
+            /* A link inside a sentence keeps the line's height; an invisible target around it is the 44px. */
+            .gift-modal :is(.gift-review-dl, .gift-pt-d) .link-button { position: relative; min-height: 0; }
+            .gift-modal :is(.gift-review-dl, .gift-pt-d) .link-button::after { content: ''; position: absolute; inset: -13px -8px; }
         }
 
         /* Step 5 (§6): the language and the motif in one row, the message with "Insert the template again",
