@@ -27,6 +27,7 @@ import { cloneTreeDataAsJson } from '../clone.js';
 import { noteOverviewSectionRows } from './overview-columns-ui.js';
 import { waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
 import { keepTableViews } from '../table-views-data.js';
+import { keepHouses } from '../houses.js';
 import { stampResearchTree } from '../person-lists-data.js';
 import { pressOnToast } from '../sheet-toasts.js';
 import { setResearchActionLabel, researchActionMark } from './research-open-mark.js';
@@ -2926,7 +2927,7 @@ export const researchUiMethods = uiModule({
                 // knows them never got (B18-1): never asked about, never lost. The surname after marriage
                 // likewise, from a research that does not keep a name's kind, and the surname-variant groups
                 // from a version that carries none.
-                data = keepContacts(keepEventShares(keepTableViews(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, previous, features, researchHasTitles(existing.research, features)), previous, features), previous), previous), previous, features), previous), previous, features), previous, features);
+                data = keepHouses(keepContacts(keepEventShares(keepTableViews(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, previous, features, researchHasTitles(existing.research, features)), previous, features), previous), previous), previous, features), previous), previous, features), previous, features), previous);
             }
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
             // The app's images stay (carryOverMedia); those of people or sources
@@ -4923,7 +4924,7 @@ export const researchUiMethods = uiModule({
         const features = this.researchStatusOf(s.researchId)?.features;
         const knowsTitles = !!features?.includes(TITLES_FEATURE);
         const link = TreeManager.getTreeMetadata(s.treeId)?.research;
-        const known = previous ? keepContacts(keepEventShares(keepTableViews(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, previous, features, researchHasTitles(link, features)), previous, features), previous), previous), previous, features), previous), previous, features), previous, features) : data;
+        const known = previous ? keepHouses(keepContacts(keepEventShares(keepTableViews(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, previous, features, researchHasTitles(link, features)), previous, features), previous), previous), previous, features), previous), previous, features), previous, features), previous) : data;
         const mediaBase = researchMediaBaseOf(s.treeId, { treeId: s.researchId, name: null, date: null, ...(appMedia ? { appMedia: true as const } : {}) });
         const carry = previous ? carryOverMedia(stabilizeIds(known, previous), previous, mediaBase) : null;
         const kept = carry ? carry.data : data;

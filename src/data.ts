@@ -35,6 +35,8 @@ import {
     
     LastFocusedMarker,
     TableView,
+    HouseId,
+    HouseUserData,
     PersonList,
     PersonListRule,
     PersonListSort,
@@ -54,6 +56,7 @@ import { generatePersonId, generateLifeEventId, generateSourceId, generatePartic
 import { partnershipParticipants, LAST_FOCUSED, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, oppositeGender, isPrimaryName, mergedPrimaryName, isEmbeddedEnvelope } from './model-values.js';
 import { STROM_DATA_VERSION } from './version.js';
 import { sanitizeMergeRecords } from './merge/record.js';
+import { isHouseId, sanitizeHouseUserData, sanitizeHouses } from './houses.js';
 import { moveContactsIntoPeople, cleanEmails } from './person-contact.js';
 import { convertLegacyCensusEvents, isCoupleEventType } from './events.js';
 import { sanitizeGedcomDates } from './gedcom-date-form.js';
@@ -503,6 +506,10 @@ export function migrateData(data: unknown): StromData {
     // v26 (spec 134 §0.3): the merges into the tree, only well-formed records.
     const merges = sanitizeMergeRecords(d.merges);
     if (merges) result.merges = merges;
+    // v27 (spec 030 K1.1): what was said about houses, only valid houses with
+    // something said (absent = nothing said; the houses come from the facts).
+    const houses = sanitizeHouses(d.houses);
+    if (houses) result.houses = houses;
 
     // Preserve default person settings if present
     if (d.defaultPersonId !== undefined) {
@@ -2522,6 +2529,30 @@ class DataManagerClass {
         else delete this.data.tableViews;
         this.commitMutation(strings.undo.deleteTableView(view.name));
         if (this.currentTreeId) AuditLogManager.log(this.currentTreeId, 'tableView.delete', strings.auditLog.tableViewDeleted(view.name));
+        return true;
+    }
+
+    // ==================== HOUSES (spec 030) ====================
+
+    /**
+     * Store what was said about one house (its name, houses joined or told
+     * apart, its point, events revealed): `undefined` or an empty record
+     * forgets it. `label` is the house as shown ("Bělokamen čp. 16"). One undo
+     * step and a change-log entry. False while read-only or when nothing changes.
+     */
+    setHouseUserData(id: HouseId, value: HouseUserData | undefined, label: string): boolean {
+        if (this.isReadOnly() || !isHouseId(id)) return false;
+        const clean = value ? sanitizeHouseUserData(id, value) : null;
+        const before = this.data.houses?.[id];
+        if (JSON.stringify(before ?? null) === JSON.stringify(clean)) return false;
+        this.beginMutation();
+        const next = { ...(this.data.houses ?? {}) };
+        if (clean) next[id] = clean;
+        else delete next[id];
+        if (Object.keys(next).length) this.data.houses = next;
+        else delete this.data.houses;
+        this.commitMutation(strings.undo.houseChange(label));
+        if (this.currentTreeId) AuditLogManager.log(this.currentTreeId, 'house.edit', strings.auditLog.houseChanged(label));
         return true;
     }
 

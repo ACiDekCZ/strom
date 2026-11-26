@@ -12,6 +12,7 @@
 import { activatedElement } from './busy.js';
 import { startTreeLoad, currentTreeLoad, countGedcomPersons, type TreeLoadRun } from './tree-load-progress.js';
 import { keepTableViews } from '../table-views-data.js';
+import { keepHouses } from '../houses.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -732,7 +733,7 @@ export const conflictDecideMethods = uiModule({
         const link = this.researchSyncLink()?.link;
         const here = DataManager.getData();
         const features = link ? this.researchStatusOf(link.id)?.features : null;
-        return stabilizeIds(keepContacts(keepEventShares(keepTableViews(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here), here), here, features), here), here, features), here, features), here);
+        return stabilizeIds(keepHouses(keepContacts(keepEventShares(keepTableViews(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here), here), here, features), here), here, features), here, features), here), here);
     },
 
     /** A card's notice action: try the same side again, send the tree, load the research's version, decide in the research. */

@@ -163,6 +163,8 @@ function fullTree(): Required<StromData> {
             prints: { [BOB]: 'abc123' }, backupId: 'snap-1', sentToResearch: 'I0412',
             undone: [{ at: '2026-11-21T10:00:00.000Z', items: ['s:s1'] }],
         }],
+        // What was said about houses (spec 030, data v27): a name and a house joined under its old number.
+        houses: { 'kolin|12': { name: 'U Lípy', merged: ['kolin|7'] } },
         defaultPersonId: LAST_FOCUSED,
         defaultView: 'last',
         lastFocusPersonId: ALICE,

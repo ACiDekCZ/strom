@@ -20,6 +20,7 @@ import { placeRecordsFor } from './place-records.js';
 import { placeAliasesFor } from './place-groups.js';
 import { pruneImportOrigin } from './import-origin.js';
 import { subsetForSubtree } from './person-lists-data.js';
+import { housesFor } from './houses.js';
 
 /**
  * The people a subtree of `seedIds` keeps: the seeds plus the glue — for any
@@ -188,6 +189,9 @@ export function extractSubtree(data: StromData, seedIds: ReadonlySet<PersonId>):
     // links to people left behind go (pruneImportOrigin).
     if (data.imports?.length) result.imports = structuredClone(data.imports);
     pruneImportOrigin(result);
+    // What was said about houses (spec 030): only the houses the part still has.
+    const houses = housesFor(result, data.houses);
+    if (houses) result.houses = houses;
     return result;
 }
 

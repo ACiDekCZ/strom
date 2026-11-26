@@ -159,8 +159,8 @@ describe('STROM_DATA_VERSION', () => {
         expect(Number.isInteger(STROM_DATA_VERSION)).toBe(true);
     });
 
-    it('current version is 26', () => {
+    it('current version is 27', () => {
         // This test documents the current version - update when version changes
-        expect(STROM_DATA_VERSION).toBe(26);
+        expect(STROM_DATA_VERSION).toBe(27);
     });
 });

@@ -194,8 +194,16 @@
  *   of its own. Only the betas 3.32.0-beta.1 to beta.3 read
  *   v26 without knowing them and drop them on a re-save. Were they released
  *   later than v26, they would need a bump of their own.
+ * - v27: what a person said about the houses of the tree (spec 030 K1.1,
+ *   StromData.houses, by HouseId `<placeKey of the town>|<houseKey of the
+ *   house>`: a house's name, houses joined as one under another number or
+ *   told apart, a point placed by hand, events revealed for outputs). The
+ *   houses themselves are worked out from the facts and never stored.
+ *   Additive and optional: absent = nothing said, an older app keeps the
+ *   tree and drops the field on a re-save (no backup needed, the generic
+ *   pre-migration backup applies).
  */
-export const STROM_DATA_VERSION = 26;
+export const STROM_DATA_VERSION = 27;
 
 /**
  * Current app version, shown in the About dialog and stamped into exports.
