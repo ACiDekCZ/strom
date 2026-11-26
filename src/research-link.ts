@@ -472,6 +472,14 @@ export function showcaseActionOfLink(action: ResearchLinkAction, p: ResearchLink
     return action;
 }
 
+/** The showcase's action of a strom-research:// link (null: not one of ours). */
+export function showcaseActionOfUrl(url: string): ResearchShowcaseAction | null {
+    const of = researchLinkActionOf(url);
+    if (!of) return null;
+    const conflictDo = typeof of.params.conflictDo === 'string' ? of.params.conflictDo : undefined;
+    return showcaseActionOfLink(of.link, conflictDo ? { conflictDo } : {});
+}
+
 /** Whether the open tree is a showcase (TreeMetadata.sample): set by the app (no import of its trees here). */
 let showcaseLookup: (() => boolean) | null = null;
 

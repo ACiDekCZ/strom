@@ -375,8 +375,9 @@ export const researchActionsMethods = uiModule({
         const agentAway = capable && this.activeResearchAgentAway();
         // A research that tells what it has (1.12+): its state on top, sending straight; an archive says so beside its title.
         const syncBlock = block ? this.researchSyncBlockHtml(block, { tag: archive || agentAway ? strings.sync.archiveTag : undefined }) : '';
-        // Nothing that leads to an agent in an archive, while waiting for one, nor while the research's mode is not known here.
-        const noAgent = archive || agentAway || !this.activeResearchModeKnown();
+        // Nothing that leads to an agent in an archive, while waiting for one, while the research's mode is not known
+        // here, nor in the showcase `strom demo` made (spec 143 K2).
+        const noAgent = archive || agentAway || !this.activeResearchModeKnown() || this.activeResearchDemo();
         // Only loading from the research: nothing to send, no row for it.
         const sendOff = capable && !!ctx && researchSendMode(ctx.link) === 'off';
         // "Send changes…" opens "What will be sent" first; without the preview it sends at once (no dots).

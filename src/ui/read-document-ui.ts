@@ -617,7 +617,7 @@ export const readDocumentMethods = uiModule({
         this.ensureReadListener();
         const link = this.researchOriginalsLink();
         if (!link || !researchHere() || bridgeFailure(null) === 'safari') return null;
-        if (this.activeResearchArchive() || this.activeResearchAgentAway()) return null;
+        if (this.activeResearchArchive() || this.activeResearchAgentAway() || this.activeResearchDemo()) return null;
         return this.researchStatusOf(link.researchId)?.accepts?.read ?? null;
     },
 

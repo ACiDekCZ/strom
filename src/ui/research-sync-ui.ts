@@ -20,6 +20,7 @@
  * keeps every old path unchanged.
  */
 
+import { showcaseResearchKnown, showcaseWhy } from '../research-link.js';
 import { canvasBusy } from './canvas-busy.js';
 import { researchActionLabel, researchMarkFlags, researchLinkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
@@ -57,7 +58,7 @@ import { isMediaRefUnknown, mediaRefGate, mediaRefUnknownShas, noteMediaRefRefus
 import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus, writeHeldSettled } from '../research-write-held.js';
 import { forgetOriginalsHeld } from './originals-ui.js';
 import {
-    noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, researchTreeOfStatus, storedResearchBridge, researchLinksEnabled,
+    noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, researchTreeOfStatus, storedResearchBridge, storedResearchDemo, researchLinksEnabled,
     researchAutoState, patchResearchAutoState, researchWriteKey, researchWriteIsNews, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
     researchSendPreviewSkipped, announcedResearchScheme, RESEARCH_BRIDGE_MOVED_EVENT,
     ResearchAutoState, ResearchHeldConflicts, StoredResearchTree, rememberConflictSent, forgetConflictSent, researchConflictSides,
@@ -981,9 +982,23 @@ export const researchSyncMethods = uiModule({
         return !!runtime.get(id)?.status || !!storedResearchBridge(id)?.base || ctx.link.mode === 'archive' || !anyResearchBridgeKnown();
     },
 
-    /** Nothing that leads to an agent: an archive, a research waiting for its agent, or one whose mode is not known here. */
+    /**
+     * Nothing that leads to an agent: an archive, a research waiting for its agent, one whose mode is not known
+     * here, or the showcase `strom demo` made (spec 143 K2).
+     */
     activeResearchNoAgent(): boolean {
-        return this.activeResearchAgentless() || !this.activeResearchModeKnown();
+        return this.activeResearchAgentless() || !this.activeResearchModeKnown() || this.activeResearchDemo();
+    },
+
+    /**
+     * The active research tree's research is the showcase `strom demo` made (`tree.demo` of its status, now or
+     * as last kept): read like any research, written through its bridge, nothing of the agent's offered.
+     */
+    activeResearchDemo(): boolean {
+        const ctx = this.researchSyncLink();
+        if (!ctx) return false;
+        const now = runtime.get(ctx.link.id)?.status;
+        return now ? now.treeDemo === true : storedResearchDemo(ctx.link.id);
     },
 
     /**
@@ -1232,7 +1247,10 @@ export const researchSyncMethods = uiModule({
             const downSince = status ? 0 : (prev?.up || !prev?.downSince ? Date.now() : prev.downSince);
             runtime.set(researchId, { up: !!status, checkedAt: Date.now(), status, blocked: !status && blocked, downSince,
                 busyUntil: busyFor ? Date.now() + busyFor : 0, why: status ? '' : why });
-            if (status) {
+            // A showcase (spec 143 K4): its snapshot, read as any status; nothing of it kept as this computer's
+            // research's links or what waits there.
+            if (status && showcaseResearchKnown(researchId)) tellBridgeStatus(researchId, status);
+            else if (status) {
                 // A device (spec 094): the actions the gateway announced for it; it hands over no links.
                 if (researchDevice()) noteResearchDeviceActions(deviceActions, deviceOthers);
                 else noteResearchLinks(status.links, status.linkScheme);
@@ -2045,6 +2063,11 @@ export const researchSyncMethods = uiModule({
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || sendingTree) return;
+        // The showcase (spec 143 K4.1): its research is only read; asked by hand, only why is said.
+        if (meta?.sample) {
+            if (!opts.auto) showcaseWhy(null, 'send');
+            return;
+        }
         // Only the research's owner writes to it: never a copy, a second tree of the same research, nor the
         // sample tree (a tie it got before 3.29 included; spec 139 K5.1).
         if (!TreeManager.canSendToResearch(treeId)) {
@@ -2087,7 +2110,7 @@ export const researchSyncMethods = uiModule({
     async postResearchSendNow(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean; undoAgain?: boolean; noIdsRetried?: boolean; mediaRefRetried?: boolean }): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
-        if (!link || sendingTree || !TreeManager.canSendToResearch(treeId)) return;
+        if (!link || sendingTree || !TreeManager.canSendToResearch(treeId) || TreeManager.getTreeMetadata(treeId)?.sample) return;
         const s = strings.sync;
         // Never while a switch reads this tree to open it: what goes is the tree's own data, with its own
         // id and link. Sent by itself, it waits for the next answer of the bridge once it is open.
@@ -2786,6 +2809,11 @@ export const researchSyncMethods = uiModule({
     /** Tree menus' "Send changes": the same send for any tree (switched to first when a running research takes it straight). */
     async researchSendTree(treeId: TreeId, opts: { thenLoad?: boolean; undoAgain?: boolean } = {}): Promise<void> {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
+        // The showcase (spec 143 K4.1): nothing of it goes anywhere, only why is said.
+        if (link && TreeManager.getTreeMetadata(treeId)?.sample) {
+            showcaseWhy(null, 'send');
+            return;
+        }
         // A copy is a tree without research: nothing of it goes there (spec 139 K5.1).
         if (!link || !TreeManager.canSendToResearch(treeId)) return;
         if (!this.researchSyncCapable(link.id)) {

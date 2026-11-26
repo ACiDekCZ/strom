@@ -12,6 +12,7 @@
  */
 import { strings } from '../strings.js';
 import { treeSampleKind } from '../tree-row.js';
+import { storedResearchDemo } from '../research-device.js';
 import type { TreeMetadata } from '../types.js';
 
 const BUBBLE_ID = 'sample-why';
@@ -21,14 +22,20 @@ function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** The tree the showcase `strom demo` made: its research's status says `tree.demo` (spec 143 K2, R1 N1). */
+export function researchDemoTree(tree: Pick<TreeMetadata, 'research'>): boolean {
+    return !!tree.research?.id && storedResearchDemo(tree.research.id);
+}
+
 /**
- * The tag's markup for a sample tree ('' for any other tree). Inside a
+ * The tag's markup for a sample tree ('' for any other tree): a showcase,
+ * the bundled sample, or the tree of the showcase `strom demo` made. Inside a
  * control (the switcher's button, a list row) it is a plain part of that
  * control; `focusable` makes it a control of its own (tab stop, Enter shows
  * the bubble) where it stands alone.
  */
-export function sampleTagHtml(tree: Pick<TreeMetadata, 'sample' | 'demo'> | null | undefined, opts: { focusable?: boolean } = {}): string {
-    if (!tree || !treeSampleKind(tree)) return '';
+export function sampleTagHtml(tree: Pick<TreeMetadata, 'sample' | 'demo' | 'research'> | null | undefined, opts: { focusable?: boolean } = {}): string {
+    if (!tree || !(treeSampleKind(tree) || researchDemoTree(tree))) return '';
     installSampleTagBubble();
     const s = strings.sample;
     const own = opts.focusable ? ` tabindex="0" role="button" aria-label="${esc(`${s.tag}, ${s.tagTitle}`)}"` : '';
@@ -36,7 +43,7 @@ export function sampleTagHtml(tree: Pick<TreeMetadata, 'sample' | 'demo'> | null
 }
 
 /** The tag as an element (the phone's Trees sheet builds its rows of elements), null for a tree that is no sample. */
-export function sampleTagElement(tree: Pick<TreeMetadata, 'sample' | 'demo'> | null | undefined): HTMLElement | null {
+export function sampleTagElement(tree: Pick<TreeMetadata, 'sample' | 'demo' | 'research'> | null | undefined): HTMLElement | null {
     const html = sampleTagHtml(tree);
     if (!html || typeof document === 'undefined') return null;
     const box = document.createElement('span');

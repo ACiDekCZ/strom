@@ -66,6 +66,8 @@ import { uiModule } from './module.js';
 import { fileLooksLikeShowcase, showcaseLangParam } from '../showcase-download.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink, researchLinkActionOf, type ResearchLinkMarkParams } from '../research-link.js';
+import { inShowcase, researchShowcaseShown, showcaseActionOfLink, showcaseActionOfUrl, showcaseWhy, parseShowcaseBridge } from '../research-link.js';
+import { showcaseEventSource } from '../showcase-bridge.js';
 import { deviceEventSource, isDeviceTunnelled } from '../device/device-bridge.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn, waitingGainOn } from '../research-link.js';
 import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
@@ -1711,6 +1713,13 @@ export async function fetchStatus(url: string, ms = BRIDGE_ANSWER_MS): Promise<L
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json: unknown = await res.json();
     const status = sanitizeLiveStatus(await completeStatus(url, json, readStatusPart));
+    // A showcase (spec 143 K4): its snapshot, answered in the page — read as any status, nothing of it kept as what
+    // this computer's research announces or keeps waiting (the links of the person's own research stay as they were).
+    if (parseShowcaseBridge(url)) {
+        if (status?.treeId) rememberBridgeStatus(status.treeId, status);
+        syncResearchCardInfo();
+        return status;
+    }
     // The bridge runs on this computer: what it announces holds here. A device (spec 094 P3): the actions
     // the gateway announced for it (status.device.actions); the gateway hands over no links.
     if (status && researchDevice()) {
@@ -1735,7 +1744,8 @@ export async function fetchStatus(url: string, ms = BRIDGE_ANSWER_MS): Promise<L
  * (spec 094 P3). Strom Research runs in a terminal, never on a phone or tablet.
  */
 export function researchHere(): boolean {
-    if (researchDevicePage()) return false;
+    // The showcase (spec 143 K4): its research is a snapshot in the page, no research on this computer for it.
+    if (researchDevicePage() || inShowcase()) return false;
     try { return !(window.matchMedia?.('(pointer: coarse)').matches ?? false); } catch { return true; }
 }
 
@@ -1750,7 +1760,8 @@ export function researchDevice(): boolean {
 
 /** The research reachable from here at all: its bridge on this computer, or through the gateway on a device. */
 export function researchReachable(): boolean {
-    return researchHere() || researchDevice();
+    // The showcase's research: read from its snapshot in the page (its shim of a bridge).
+    return researchHere() || researchDevice() || inShowcase();
 }
 
 /** The older name of researchHere (the research on this computer). */
@@ -3363,11 +3374,18 @@ export const researchUiMethods = uiModule({
 
     /** The research on this computer handles `action` (announced, not switched off, on a computer). */
     researchLinkAvailable(action: ResearchLinkAction): boolean {
+        // The showcase (spec 143 K4.1): its main actions drawn (greyed, they only say why), the rest not.
+        if (inShowcase()) return researchShowcaseShown(showcaseActionOfLink(action)) !== 'hide';
         return researchHere() && researchLinksEnabled() && announcedResearchLinks().includes(action);
     },
 
     /** Hand a strom-research:// link to the system (the browser asks first). */
     handOverResearchLink(url: string, handoff?: string | null): void {
+        // The showcase (spec 143 K4.1): no link leaves it, only why is said.
+        if (inShowcase()) {
+            showcaseWhy(null, showcaseActionOfUrl(url));
+            return;
+        }
         // A device of the home network: the agent's link starts through the gateway, never as a link (spec 094 K3.15).
         if (researchDeviceAgentLink(url)) {
             void this.startAgentFromDevice(url);
@@ -3391,6 +3409,11 @@ export const researchUiMethods = uiModule({
         launch: Omit<OpenBusyOpts, 'agent' | 'relayed'> & Pick<ResearchLinkMarkParams, 'fixPaid'> = {}): Promise<OpenBusyResult> {
         // `fixPaid`: a fix its agent reads again (the link does not say so) — on a device it starts as the agent's work.
         const { fixPaid, ...opts } = launch;
+        // The showcase (spec 143 K4.1): nothing opens, the control says why.
+        if (inShowcase()) {
+            showcaseWhy(el ?? null, showcaseActionOfUrl(url));
+            return Promise.resolve('opened');
+        }
         if (kind === 'version') {
             this.handOverResearchLink(url);
             this.awaitResearchVersion();
@@ -4488,6 +4511,12 @@ export const researchUiMethods = uiModule({
                 return;
             }
             this.listenLiveEvents(s, des as unknown as EventSource);
+            return;
+        }
+        // A showcase (spec 143 K4): its snapshot says one hello and nothing more.
+        const showcase = showcaseEventSource(s.bridge.events);
+        if (showcase) {
+            this.listenLiveEvents(s, showcase as unknown as EventSource);
             return;
         }
         if (typeof EventSource !== 'function') {
