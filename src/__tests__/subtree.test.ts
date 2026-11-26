@@ -101,3 +101,14 @@ describe('the partners a selection brings along to the guide', () => {
         expect(say('pl', 2)).toBe('Razem z nimi przejdą też ich partnerzy (2) – drudzy rodzice wybranych dzieci, łącznie 9 osób.');
     });
 });
+
+describe('the scoped data of Export (spec 093 §10)', () => {
+    it('keeps only the scope’s people and opens on its person', async () => {
+        const { scopedExportData } = await import('../subtree.js');
+        const d = sample();
+        const out = scopedExportData(d, { ids: new Set(['dad', 'mom', 'me'] as PersonId[]), defaultPersonId: 'me' as PersonId });
+        expect(Object.keys(out.persons).sort()).toEqual(['dad', 'me', 'mom']);
+        expect(out.defaultPersonId).toBe('me');
+        expect(Object.keys(out.partnerships)).toEqual(['u2']);
+    });
+});

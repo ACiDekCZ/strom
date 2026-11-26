@@ -189,6 +189,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         titleRod: (label: string) => `Ród ${label}`,
         titleRods: (labels: string[]) => `Rody ${labels.join(', ')}`,
         titleAncestors: (name: string) => `Przodkowie: ${name}`,
+        titleGift: (name: string) => `Rodowód: ${name}`,
         titleDescendants: (name: string) => `Potomkowie: ${name}`,
         outlineRod: (label: string, range: string) => `Ród ${label} · rozdz. ${range}`,
         outlineFamilies: (range: string) => `Rodziny · rozdz. ${range}`,
@@ -246,8 +247,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
                 auto: (p: string) => `Zmiana przełączyła z „${p}” na Własne. Kliknięcie „${p}” przywraca jego ustawienia.`,
             },
             what: 'Co w księdze',
-            kind: { tree: 'Całe drzewo', rods: 'Rody', ancestors: 'Przodkowie osoby', descendants: 'Potomkowie osoby', persons: 'Wybrane osoby' },
-            kindHint: { rods: 'jeden lub więcej', ancestors: 'od wybranej osoby w górę', descendants: 'także gałąź rodu', persons: 'tylko połączone strony' },
+            kind: { tree: 'Całe drzewo', rods: 'Rody', ancestors: 'Przodkowie osoby', descendants: 'Potomkowie osoby', persons: 'Wybrane osoby', gift: 'Rodowód osoby' },
+            kindHint: { rods: 'jeden lub więcej', ancestors: 'od wybranej osoby w górę', descendants: 'także gałąź rodu', persons: 'tylko połączone strony', gift: 'przodkowie i ich rodziny' },
             treeHint: (persons: number, rods: number, other: number) =>
                 `${nPl(persons, 'osoba', 'osoby', 'osób')} · ${nPl(rods, 'ród', 'rody', 'rodów')} i ${nPl(other, 'inna rodzina', 'inne rodziny', 'innych rodzin')}`,
             house: 'Dom (miejscowość + nr) · później',

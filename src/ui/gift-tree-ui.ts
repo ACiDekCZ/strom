@@ -80,6 +80,8 @@ export interface GiftTreeOpenOptions {
     /** The window's selection (098) as the list of recipients. */
     selection?: SelectionRef;
     step?: number;
+    /** The depth of the ancestors' families to start with (Export › Person's family tree › Whole gift package…, §10). */
+    depth?: GiftDepth;
 }
 
 interface GiftUi {
@@ -660,6 +662,7 @@ export const giftTreeMethods = uiModule({
             data, treeId: TreeManager.getActiveTreeId(), mode, recipients,
             lang: lang(), signature: SettingsManager.getSenderName(), now: new Date(),
         });
+        if (opts.depth !== undefined && mode !== 'list') g.settings.cut.depth = opts.depth;
         ui = {
             g, data, focusId, listId: opts.listId, query: '', listWhy: false, closePicker: null,
             summaryKey: '', summary: null, livingKey: '', living: null, mq: null, onMq: null,

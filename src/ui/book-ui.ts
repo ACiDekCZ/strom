@@ -60,8 +60,9 @@ import { expandedData } from '../image-expand.js';
 import { showProgressToast, type ProgressToastHandle } from './toast.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 import { imageLoads } from '../image-loads.js';
+import { GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftCutIds, type GiftDepth } from '../gift-tree.js';
 
-type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'persons';
+type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'gift' | 'persons';
 type PersonKind = 'ancestors' | 'descendants';
 /** The phone's sub-sheets (§4.1, 4b; the pages' rows, 026 6b). */
 type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title' | 'families' | 'images' | 'groups' | 'include';
@@ -74,8 +75,8 @@ type Phase = 'options' | 'building' | 'progress' | 'result' | 'zipFail';
 /** The book's memory check: it holds the open tree's images whole (image-expand.ts expandedData). */
 const BOOK_MEMORY: OutputCheck = { whole: true, what: 'book' };
 
-/** Chosen people are a selection of the pages only (1102 §4.1). */
-const KINDS: readonly Kind[] = ['tree', 'rods', 'ancestors', 'descendants', 'persons'];
+/** Chosen people are a selection of the pages only (1102 §4.1), but for the people of Export's view; a person's family tree: spec 093 §10 [69]. */
+const KINDS: readonly Kind[] = ['tree', 'rods', 'ancestors', 'descendants', 'gift', 'persons'];
 const DETAILS: readonly BookDetail[] = ['brief', 'normal', 'all'];
 const PRIVACY: readonly PrivacyMode[] = ['full', 'initials', 'minimal', 'anonymous'];
 const LANGS: readonly BookLang[] = ['cs', 'en', 'de', 'pl'];
@@ -140,6 +141,10 @@ interface DialogState {
     /** The pages' chosen people (not remembered) and depth of ancestors (1102 §4.1). */
     selIds: PersonId[];
     ancGens: number | 'all';
+    /** The depth of the ancestors' families of a person's family tree (spec 093 §10). */
+    giftDepth: GiftDepth;
+    /** The book may take chosen people: the dialog came with the people of Export's current view (spec 093 §10, K2.1). */
+    personsBook: boolean;
     /** The book took the whole tree for chosen people: said once under the selection, until the next change. */
     moved: boolean;
     /** The options apart from the selection (that one comes from kind / rods / person). */
@@ -211,12 +216,18 @@ function selectionOf(s: DialogState): BookSelectionSpec | null {
         case 'tree': return { kind: 'tree' };
         case 'rods': return { kind: 'rods', rods: [...s.rods] };
         case 'persons': return { kind: 'persons', ids: [...s.selIds] };
+        case 'gift': return s.person ? { kind: 'gift', personId: s.person, depth: s.giftDepth } : null;
         default:
             if (!s.person) return null;
             // The pages' ancestors: the segment's depth (1102 §4.1); the book keeps its stepper.
             if (s.kind === 'ancestors' && s.output === 'pages') return { kind: 'ancestors', person: s.person, generations: s.ancGens };
             return { kind: s.kind, person: s.person, generations: s.gens[s.kind] };
     }
+}
+
+/** The people of a person's family tree (spec 093 §10): the gift's cut of the chosen person. */
+function giftCount(s: DialogState): number {
+    return s.person ? giftCutIds(s.index, { recipients: [s.person], depth: s.giftDepth, branches: {} }).size : 0;
 }
 
 /** The book can be opened: something is chosen (a set of chosen people from two of them; one is a person page). */
@@ -274,11 +285,11 @@ function optionsHtml(s: DialogState): string {
     const persons = Object.values(s.data.persons).filter(p => !p.isPlaceholder).length;
     const hint: Record<Kind, string> = {
         tree: D.treeHint(persons, counts.rods, counts.other),
-        rods: D.kindHint.rods, ancestors: D.kindHint.ancestors, descendants: D.kindHint.descendants, persons: D.kindHint.persons,
+        rods: D.kindHint.rods, ancestors: D.kindHint.ancestors, descendants: D.kindHint.descendants, gift: D.kindHint.gift, persons: D.kindHint.persons,
     };
     // The pages of the whole tree: its lineages and the other families (spec 026 P3 §3.1).
     if (pages) hint.tree = F.treeHintPages(persons, counts.rods);
-    const kinds = KINDS.filter(k => pages || k !== 'persons').map(k => {
+    const kinds = KINDS.filter(k => pages || k !== 'persons' || s.personsBook).map(k => {
         return `<label class="book-kind sel-opt" data-sel-form="tile" data-kind="${k}">`
             + `<input type="radio" name="book-kind" value="${k}">`
             + `<span class="book-kind-text"><span class="book-kind-t">${esc(D.kind[k])}</span><span class="book-kind-h">${esc(hint[k])}</span></span>`
@@ -331,6 +342,11 @@ function optionsHtml(s: DialogState): string {
             + `<div class="book-seg book-anc-seg sel-seg" role="radiogroup" aria-labelledby="book-anc-l">`
             + ANC_GENS.map(g => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-anc-gen="${g}">${esc(g === 'all' ? F.gensAll : String(g))}</button>`).join('')
             + `</div><span class="book-anc-n" aria-live="polite"></span></div>` : '')
+        // A person's family tree (spec 093 §10 [69]): the depth of the ancestors' families.
+        + `<div class="book-gift-line"><label class="book-anc-l" for="book-gift-depth">${esc(strings.giftTree.cut.depthH)}</label>`
+        + `<select id="book-gift-depth" name="book-gift-depth">`
+        + GIFT_DEPTHS.map((d, i) => `<option value="${d}">${esc(strings.giftTree.cut.depth[i])}</option>`).join('')
+        + `</select><span class="book-anc-n book-gift-n" aria-live="polite"></span></div>`
         + `</div>`
         + (pages ? `<div class="book-sel book-sel-persons"><div class="book-sel-picker"></div>`
             + `<p class="book-hint book-sel-state" aria-live="polite"></p>`
@@ -416,7 +432,7 @@ function sync(s: DialogState): void {
     modal.dataset.kind = s.kind;
     modal.querySelector<HTMLElement>('.book-sel-tree')!.hidden = s.kind !== 'tree';
     modal.querySelector<HTMLElement>('.book-sel-rods')!.hidden = s.kind !== 'rods';
-    modal.querySelector<HTMLElement>('.book-sel-person')!.hidden = s.kind !== 'ancestors' && s.kind !== 'descendants';
+    modal.querySelector<HTMLElement>('.book-sel-person')!.hidden = s.kind !== 'ancestors' && s.kind !== 'descendants' && s.kind !== 'gift';
     const selPersons = modal.querySelector<HTMLElement>('.book-sel-persons');
     if (selPersons) selPersons.hidden = s.kind !== 'persons';
     const moved = modal.querySelector<HTMLElement>('.book-sel-moved');
@@ -430,10 +446,19 @@ function sync(s: DialogState): void {
     setText(modal, '.book-person-name', label || D.choosePerson);
     // The pages' ancestors: the segment of depths and the count instead of the stepper (1102 §4.1).
     const ancSeg = pages && s.kind === 'ancestors';
+    const gift = s.kind === 'gift';
     const stepper = modal.querySelector<HTMLElement>('.book-gens');
-    if (stepper) stepper.hidden = ancSeg;
+    if (stepper) stepper.hidden = ancSeg || gift;
     const gensT = modal.querySelector<HTMLElement>('.book-gens-t');
-    if (gensT) gensT.hidden = ancSeg;
+    if (gensT) gensT.hidden = ancSeg || gift;
+    const giftLine = modal.querySelector<HTMLElement>('.book-gift-line');
+    if (giftLine) giftLine.hidden = !gift;
+    const giftN = gift && s.person ? giftCount(s) : 0;
+    if (gift) {
+        const sel = modal.querySelector<HTMLSelectElement>('#book-gift-depth');
+        if (sel) sel.value = String(s.giftDepth);
+        setText(modal, '.book-gift-n', s.person ? strings.giftTree.cut.count(giftN) : '');
+    }
     const ancLine = modal.querySelector<HTMLElement>('.book-anc-line');
     if (ancLine) ancLine.hidden = !ancSeg;
     if (ancSeg) {
@@ -466,7 +491,9 @@ function sync(s: DialogState): void {
     const labels = rodLabels(s.index);
     const selSum = s.kind === 'rods' ? (s.rods.map(id => labels.get(id) ?? '').filter(Boolean).join(', ') || D.choose)
         : s.kind === 'persons' ? (s.selIds.length ? F.nPersons(s.selIds.length) : D.choose)
-        : s.kind === 'tree' ? '' : (s.person ? shownName(s.data.persons[s.person]) : D.choose);
+        : s.kind === 'tree' ? ''
+        : s.kind === 'gift' ? (s.person ? `${shownName(s.data.persons[s.person])} · ${giftN.toLocaleString(s.appLang)}` : D.choose)
+        : (s.person ? shownName(s.data.persons[s.person]) : D.choose);
     modal.querySelectorAll<HTMLElement>('.book-kind[data-kind]').forEach(k => {
         const v = k.querySelector<HTMLElement>('.book-sum-v');
         if (v) v.textContent = k.dataset.kind === s.kind ? selSum : '';
@@ -584,7 +611,7 @@ function syncPages(s: DialogState, modal: HTMLElement): void {
     modal.querySelectorAll<HTMLInputElement>('input[name="fp-inc"]').forEach(i => { i.checked = p.include[i.value as typeof INCLUDES[number]]; });
     modal.querySelectorAll<HTMLInputElement>('input[name="fp-grp"]').forEach(i => { i.checked = p.groups[i.value as keyof PagesGroups]; });
     // The lines' timelines: hidden for a selection without lines (1102 §4.4).
-    const noLines = s.kind === 'persons' || s.kind === 'ancestors' || s.kind === 'descendants';
+    const noLines = s.kind === 'persons' || s.kind === 'gift' || s.kind === 'ancestors' || s.kind === 'descendants';
     const tl = modal.querySelector<HTMLElement>('[data-inc="timelines"]');
     if (tl) tl.hidden = noLines;
     setText(modal, '.fp-img-n[data-n="clips"]', s.est ? F.nClips(s.est.clips) : '');
@@ -1007,7 +1034,7 @@ export const bookUiMethods = uiModule({
      * the pages, its set). The output: given, else the book for an entry of
      * the book (a lineage, a person, Change options), else the remembered one.
      */
-    openBookDialog(entry: BookEntry, reuse?: { options: BookOptions; win: Window }, over?: { output?: BookOutput; selection?: BookSelectionSpec }): void {
+    openBookDialog(entry: BookEntry, reuse?: { options: BookOptions; win: Window }, over?: { output?: BookOutput; selection?: BookSelectionSpec; personsBook?: boolean }): void {
         this.closeMobileMenu?.();
         // Take over the dialog stack from the export menu (same pattern as poster).
         document.getElementById('export-modal')?.classList.remove('active');
@@ -1039,7 +1066,8 @@ export const bookUiMethods = uiModule({
         const firstId = Object.keys(data.persons)[0];
         const output: BookOutput = over?.output ?? (!reuse && entry.kind === 'menu' ? memory?.output ?? 'book' : 'book');
         // Chosen people are for the pages only: the book takes the whole tree and says so (1102 §3.1).
-        const movedToTree = sel.kind === 'persons' && output !== 'pages';
+        const personsBook = !!over?.personsBook && sel.kind === 'persons';
+        const movedToTree = sel.kind === 'persons' && output !== 'pages' && !personsBook;
         if (st?.job) st.job.cancelled = true;
         if (st?.estTimer != null) clearTimeout(st.estTimer);
         st = {
@@ -1049,10 +1077,12 @@ export const bookUiMethods = uiModule({
             history: (firstId && this.personPageHistory(firstId as PersonId)) || null,
             kind: movedToTree ? 'tree' : sel.kind,
             rods: (sel.kind === 'rods' ? sel.rods : memory?.lastRods ?? []).filter(id => choosable.has(id)),
-            person: (sel.kind === 'ancestors' || sel.kind === 'descendants' ? real(sel.person) : null) ?? focus,
+            person: (sel.kind === 'ancestors' || sel.kind === 'descendants' ? real(sel.person) : sel.kind === 'gift' ? real(sel.personId) : null) ?? focus,
             gens,
             selIds: sel.kind === 'persons' ? sel.ids.filter((id, i, all) => !!real(id) && all.indexOf(id) === i) : [],
             ancGens: sel.kind === 'ancestors' && sel.generations != null ? sel.generations : ANC_GENS_DEFAULT,
+            giftDepth: sel.kind === 'gift' ? sel.depth : GIFT_DEFAULT_DEPTH,
+            personsBook,
             moved: movedToTree,
             opts,
             presets: initialPresetState(opts, memory),
@@ -1141,7 +1171,7 @@ export const bookUiMethods = uiModule({
                 closePicker?.();
                 st.output = out;
                 st.sub = null;
-                st.moved = out === 'book' && st.kind === 'persons';
+                st.moved = out === 'book' && st.kind === 'persons' && !st.personsBook;
                 if (st.moved) st.kind = 'tree';
                 st.phase = 'options';
                 st.file = null;
@@ -1245,6 +1275,11 @@ export const bookUiMethods = uiModule({
         modal.addEventListener('change', (e) => {
             const t = e.target as HTMLInputElement;
             if (t.name === 'book-kind') { update(s => { s.kind = t.value as Kind; }); return; }
+            if (t.name === 'book-gift-depth') {
+                const depth = GIFT_DEPTHS.find(d => String(d) === t.value);
+                if (depth !== undefined) update(s => { s.giftDepth = depth; });
+                return;
+            }
             if (t.name === 'fp-min') { update(s => { s.minimal = t.checked; }); return; }
             if (t.name === 'book-privacy') { update(s => { s.opts = { ...s.opts, privacy: t.value as PrivacyMode }; }); return; }
             if (t.name === 'fp-families') { update(s => { s.pages = { ...s.pages, families: t.value as PagesChoices['families'] }; }); return; }

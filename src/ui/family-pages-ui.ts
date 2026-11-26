@@ -224,6 +224,7 @@ function selectionTreeTarget(spec: BookSelectionSpec): string {
     if (spec.kind === 'rods') return spec.rods.length ? `rod:${spec.rods[0]}` : '';
     if (spec.kind === 'tree') return '';
     if (spec.kind === 'persons') return spec.ids.length ? personTreeTarget(spec.ids[0]) : '';
+    if (spec.kind === 'gift') return personTreeTarget(spec.personId);
     return personTreeTarget(spec.person);
 }
 

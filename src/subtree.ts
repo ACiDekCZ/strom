@@ -228,3 +228,10 @@ function collectSubtreePlaceKeys(data: StromData): Set<string> {
     }
     return keys;
 }
+
+/** The tree narrowed to an export scope's people (the view, a person's family tree; spec 093 §10), opening on its person. */
+export function scopedExportData(data: StromData, scoped: { ids: ReadonlySet<PersonId>; defaultPersonId?: PersonId }): StromData {
+    const out: StromData = { ...extractSubtree(data, scoped.ids), version: data.version };
+    if (scoped.defaultPersonId && out.persons[scoped.defaultPersonId]) out.defaultPersonId = scoped.defaultPersonId;
+    return out;
+}

@@ -5975,11 +5975,13 @@ class DataManagerClass {
         return a.download;
     }
 
-    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false, fileName = 'family-tree-focus.json'): Promise<void> {
+    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false, fileName = 'family-tree-focus.json', defaultPersonId?: PersonId): Promise<void> {
         // Self-consistent slice (glue + cleaned relations + pruned sources),
         // shared with "make a tree from this view".
         // The pooled images stay references until the file is written (image-stream.ts).
         const sliced = extractSubtree(this.data, visiblePersonIds);
+        // A person's family tree (spec 093 §10) opens on the person.
+        if (defaultPersonId && sliced.persons[defaultPersonId]) sliced.defaultPersonId = defaultPersonId;
         let focusedData: StromData = applyLivingPrivacy({
             version: STROM_DATA_VERSION,
             ...sliced,

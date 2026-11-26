@@ -10554,21 +10554,43 @@
            the view scope the formats that cannot do a view are disabled, each
            saying so in place of its description. */
         .export-scope { margin: 0 0 14px; }
-        .export-scope .segment { display: flex; width: 100%; }
-        .export-scope .segment-btn { flex: 1; padding: 8px 10px; font-size: 13px; }
-        .option-desc-view, .option-desc-list, .option-scope-note { display: none; }
+        /* Four scopes in two rows (spec 093 §10 [67]): the labels whole, a long one wraps; the edges set by
+           renderExportScope (.is-right / .is-row2 / .is-wide on the visible ones). */
+        .export-scope .segment.sel-seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+        .export-scope .segment.sel-seg > .segment-btn { min-width: 0; min-height: 36px; padding: 6px 10px; font-size: 13px; line-height: 1.3; text-align: center; white-space: normal; text-wrap: balance; border: 0; border-radius: 0; }
+        .export-scope .segment.sel-seg > .segment-btn.is-right { border-left: 1px solid var(--border); }
+        .export-scope .segment.sel-seg > .segment-btn.is-row2 { border-top: 1px solid var(--border); }
+        .export-scope .segment.sel-seg > .segment-btn.is-wide { grid-column: 1 / -1; }
+        .option-desc-view, .option-desc-list, .option-desc-person, .option-scope-note { display: none; }
         #export-modal.scope-view .option-desc-view { display: block; }
-        #export-modal.scope-view .option-desc-tree { display: none; }
+        #export-modal.scope-view .menu-option:has(.option-desc-view) .option-desc-tree { display: none; }
         #export-modal.scope-view .menu-option:not([data-view-ok]) .option-desc { display: none; }
         #export-modal.scope-view .menu-option:not([data-view-ok]) .option-scope-note { display: block; }
         #export-modal.scope-view .menu-option:disabled { opacity: 0.55; cursor: default; }
         /* A list of people (spec 084 §12): GEDCOM and the JSON backup narrowed to the list, the rest as in the view scope. */
         #export-modal.scope-list .option-desc-list { display: block; }
-        #export-modal.scope-list .option-desc-tree { display: none; }
+        #export-modal.scope-list .menu-option:has(.option-desc-list) .option-desc-tree { display: none; }
         #export-modal.scope-list .menu-option:not([data-list-ok]) .option-desc { display: none; }
         #export-modal.scope-list .menu-option:not([data-list-ok]) .option-scope-note { display: block; }
         #export-modal.scope-list .menu-option:disabled { opacity: 0.55; cursor: default; }
         .export-scope .segment-btn[hidden] { display: none; }
+        /* A person's family tree (spec 093 §10): every format but linking a file, each with its line for the scope. */
+        #export-modal.scope-person .menu-option .option-desc:not(.option-desc-person, .option-scope-note) { display: none; }
+        #export-modal.scope-person .menu-option[data-person-ok] .option-desc-person { display: block; }
+        #export-modal.scope-person .menu-option:not([data-person-ok]) .option-scope-note { display: block; }
+        #export-modal.scope-person .menu-option:disabled { opacity: 0.55; cursor: default; }
+        .export-person-pick { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; }
+        .export-person-pick[hidden] { display: none; }
+        .export-person-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+        .export-person-l { font-size: 12.5px; color: var(--text-light); }
+        .export-person-btn { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-family: var(--font-serif); font-size: 15px; cursor: pointer; }
+        .export-person-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .export-person-btn svg { flex: none; color: var(--text-light); }
+        .export-person-n { font-size: 12.5px; color: var(--text-light); }
+        #export-person-depth { min-width: 0; max-width: 100%; }
+        .export-person-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); text-wrap: pretty; }
+        .export-person-note .link-button { font-size: 12.5px; }
+        @media (hover: hover) { .export-person-btn:hover { border-color: var(--sel-mute); } }
         .export-list-pick { margin: 10px 0 0; }
         .export-list-pick[hidden] { display: none; }
         .export-list-pick label { display: block; margin: 0 0 4px; font-size: 12.5px; color: var(--text-light); }
@@ -10577,11 +10599,16 @@
         /* A long list name ends in … (the closed select clips its text otherwise). */
         .export-list-field select { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
         @media (max-width: 640px) {
-            .export-scope .segment-btn { min-height: 44px; }
+            .export-scope .segment.sel-seg > .segment-btn { min-height: 44px; }
             .export-list-field select { min-height: 44px; }
+            .export-person-btn, #export-person-depth { min-height: 44px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .export-person-btn { min-height: 36px; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .export-list-field select { min-height: 44px; }
+            .export-scope .segment.sel-seg > .segment-btn { min-height: 44px; }
+            .export-list-field select, .export-person-btn, #export-person-depth { min-height: 44px; }
         }
         .file-link-indicator {
             display: inline-flex;
@@ -28991,8 +29018,12 @@
         #book-modal .fp-inc .book-radio[hidden] { display: none; }
         /* 1102 §4.1: the pages' depth of ancestors with its count; chosen people (chips, search, a list of 7 rows); the book's line after chosen people */
         #book-modal .book-sel-moved { margin: 8px 2px 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
-        #book-modal .book-sel-moved[hidden], #book-modal .book-anc-line[hidden], #book-modal .book-gens[hidden], #book-modal .book-gens-t[hidden] { display: none; }
+        #book-modal .book-sel-moved[hidden], #book-modal .book-anc-line[hidden], #book-modal .book-gift-line[hidden], #book-modal .book-gens[hidden], #book-modal .book-gens-t[hidden] { display: none; }
         #book-modal .book-anc-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
+        /* A person's family tree (spec 093 §10): the depth of the ancestors' families. */
+        #book-modal .book-gift-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
+        #book-modal .book-gift-line select { min-height: 36px; max-width: 100%; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { #book-modal .book-gift-line select { min-height: 44px; flex: 1 1 100%; } }
         #book-modal .book-anc-l { font-size: 13.5px; color: var(--text-light); }
         #book-modal .book-anc-seg [data-anc-gen="all"] { display: none; }
         #book-modal .book-anc-n { font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
@@ -39122,6 +39153,7 @@
                     <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-scope="tree" onclick="window.Strom.UI.setExportScope('tree')" data-i18n="exportMenu.scopeWhole"></button>
                     <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-scope="view" id="export-scope-view" onclick="window.Strom.UI.setExportScope('view')"></button>
                     <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-scope="list" id="export-scope-list" hidden onclick="window.Strom.UI.setExportScope('list')" data-i18n="exportMenu.scopeList"></button>
+                    <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-scope="person" id="export-scope-person" onclick="window.Strom.UI.setExportScope('person')" data-i18n="exportMenu.scopePerson"></button>
                 </div>
                 <!-- spec 084 §12: the list of the list scope (its kind's icon, name · count). -->
                 <div class="export-list-pick" id="export-list-pick" hidden>
@@ -39131,16 +39163,30 @@
                         <select id="export-list-select" onchange="window.Strom.UI.setExportList(this.value)"></select>
                     </div>
                 </div>
+                <!-- spec 093 §10: a person's family tree (the gift's cut): the person, the depth of the ancestors' families. -->
+                <div class="export-person-pick" id="export-person-pick" hidden>
+                    <div class="export-person-row">
+                        <span class="export-person-l" data-i18n="exportMenu.personPick"></span>
+                        <button type="button" class="export-person-btn" id="export-person-btn" onclick="window.Strom.UI.pickExportPerson()"><span class="export-person-name"></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+                        <span class="export-person-n" id="export-person-count"></span>
+                    </div>
+                    <div class="export-person-row">
+                        <label class="export-person-l" for="export-person-depth" data-i18n="giftTree.cut.depthH"></label>
+                        <select id="export-person-depth" onchange="window.Strom.UI.setExportPersonDepth(this.value)"></select>
+                    </div>
+                    <p class="export-person-note"><span id="export-person-from"></span> <button type="button" class="link-button" id="export-person-full" onclick="window.Strom.UI.openGiftFromExport()" data-i18n="exportMenu.personFull"></button></p>
+                </div>
             </div>
             <!-- Grouped by purpose. `.active-tree-only` groups disappear whole
                  for a non-active tree. -->
             <div class="menu-options menu-options-grouped">
                 <div class="menu-group active-tree-only" role="group" aria-labelledby="export-group-share">
                     <div class="menu-group-title" id="export-group-share" data-i18n="exportMenu.groupShare"></div>
-                    <button class="menu-option active-tree-only" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.showShareDialog()">
+                    <button class="menu-option active-tree-only" data-view-ok data-person-ok onclick="window.Strom.UI.shareFromExportDialog()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.share"></span>
-                            <span class="option-desc" data-i18n="share.menuDesc"></span>
+                            <span class="option-desc option-desc-tree" data-i18n="share.menuDesc"></span>
+                            <span class="option-desc option-desc-person" data-i18n="exportMenu.sharePersonDesc"></span>
                         </span>
                     </button>
                 </div>
@@ -39157,55 +39203,62 @@
                             <span class="option-title" data-i18n="fileAccess.unlink"></span>
                         </span>
                     </button>
-                    <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeApp()">
+                    <button class="menu-option" data-view-ok data-person-ok onclick="window.Strom.UI.exportTargetTreeApp()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.app"></span>
-                            <span class="option-desc" data-i18n="exportMenu.appDesc"></span>
+                            <span class="option-desc option-desc-tree" data-i18n="exportMenu.appDesc"></span>
+                            <span class="option-desc option-desc-person" data-i18n="exportMenu.appPersonDesc"></span>
                         </span>
                     </button>
-                    <button class="menu-option" id="export-backup-btn" data-view-ok data-list-ok onclick="window.Strom.UI.exportBackupFromDialog()">
+                    <button class="menu-option" id="export-backup-btn" data-view-ok data-list-ok data-person-ok onclick="window.Strom.UI.exportBackupFromDialog()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.backup"></span>
                             <span class="option-desc option-desc-tree" data-i18n="exportMenu.backupDesc"></span>
                             <span class="option-desc option-desc-view" data-i18n="exportMenu.backupViewDesc"></span>
                             <span class="option-desc option-desc-list" data-i18n="exportMenu.backupListDesc"></span>
+                            <span class="option-desc option-desc-person" data-i18n="exportMenu.backupPersonDesc"></span>
                         </span>
                     </button>
                 </div>
                 <div class="menu-group active-tree-only" role="group" aria-labelledby="export-group-print">
                     <div class="menu-group-title" id="export-group-print" data-i18n="exportMenu.groupPrint"></div>
-                    <button class="menu-option active-tree-only" data-view-ok onclick="window.Strom.UI.showPosterDialog()">
+                    <button class="menu-option active-tree-only" data-view-ok data-person-ok onclick="window.Strom.UI.posterFromExportDialog()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.poster"></span>
-                            <span class="option-desc" data-i18n="exportMenu.posterDesc"></span>
+                            <span class="option-desc option-desc-tree" data-i18n="exportMenu.posterDesc"></span>
+                            <span class="option-desc option-desc-person" data-i18n="exportMenu.posterPersonDesc"></span>
                         </span>
                     </button>
-                    <button class="menu-option active-tree-only" onclick="window.Strom.UI.showBookDialog('book')">
+                    <button class="menu-option active-tree-only" data-view-ok data-person-ok onclick="window.Strom.UI.bookFromExportDialog('book')">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.book"></span>
-                            <span class="option-desc" data-i18n="book.menuDesc"></span>
+                            <span class="option-desc option-desc-tree" data-i18n="book.menuDesc"></span>
+                            <span class="option-desc option-desc-person" data-i18n="exportMenu.bookPersonDesc"></span>
                         </span>
                     </button>
-                    <button class="menu-option active-tree-only" id="export-pages-btn" onclick="window.Strom.UI.showFamilyPagesDialog()">
+                    <button class="menu-option active-tree-only" id="export-pages-btn" data-view-ok data-person-ok onclick="window.Strom.UI.bookFromExportDialog('pages')">
                         <span class="option-text">
                             <span class="option-title" data-i18n="familyPages.exportPages"></span>
-                            <span class="option-desc" data-i18n="familyPages.menuDesc"></span>
+                            <span class="option-desc option-desc-tree" data-i18n="familyPages.menuDesc"></span>
+                            <span class="option-desc option-desc-person" data-i18n="exportMenu.pagesPersonDesc"></span>
                         </span>
                     </button>
                 </div>
                 <div class="menu-group" role="group" aria-labelledby="export-group-other">
                     <div class="menu-group-title" id="export-group-other" data-i18n="exportMenu.groupOther"></div>
-                    <button class="menu-option" id="export-gedcom-btn" data-list-ok onclick="window.Strom.UI.exportTargetTreeGedcom()">
+                    <button class="menu-option" id="export-gedcom-btn" data-view-ok data-list-ok data-person-ok onclick="window.Strom.UI.exportTargetTreeGedcom()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.gedcom"></span>
                             <span class="option-desc option-desc-tree" data-i18n="exportMenu.gedcomDesc"></span>
                             <span class="option-desc option-desc-list" data-i18n="exportMenu.gedcomListDesc"></span>
+                            <span class="option-desc option-desc-person" data-i18n="exportMenu.gedcomPersonDesc"></span>
                         </span>
                     </button>
-                    <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeCsv()">
+                    <button class="menu-option" data-view-ok data-person-ok onclick="window.Strom.UI.exportTargetTreeCsv()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.csv"></span>
-                            <span class="option-desc" data-i18n="exportMenu.csvDesc"></span>
+                            <span class="option-desc option-desc-tree" data-i18n="exportMenu.csvDesc"></span>
+                            <span class="option-desc option-desc-person" data-i18n="exportMenu.csvPersonDesc"></span>
                         </span>
                     </button>
                     <!-- 073 §11.4 (11d): the Table view's own CSV (the current tree only). -->
@@ -40406,6 +40459,7 @@
                 <select id="share-scope" onchange="window.Strom.UI.onShareScopeChange()">
                     <option value="whole" data-i18n="share.scopeWhole"></option>
                     <option value="branch" data-i18n="share.scopeBranch"></option>
+                    <option id="share-scope-person" value="person" hidden disabled></option>
                     <option id="share-scope-changes" value="changes" style="display:none;" data-i18n="shareDiff.scopeChanges"></option>
                 </select>
                 <p id="share-changes-hint" class="share-changes-hint" style="display:none;" data-i18n="shareDiff.changesHint"></p>

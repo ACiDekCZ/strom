@@ -17,7 +17,7 @@ import { MergerUI, mergeAnalysisLong, MERGE_ANALYSIS_LONG_AT } from '../merge/in
 import { classifyShareFile } from '../share.js';
 import { strings } from '../strings.js';
 import { PrivacyMode } from '../privacy.js';
-import { EmbeddedDataEnvelope, StromData, TreeId } from '../types.js';
+import { EmbeddedDataEnvelope, PersonId, StromData, TreeId } from '../types.js';
 import { uiModule } from './module.js';
 import { activatedElement, busyLocal, busyToast, runHeavy } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
@@ -27,6 +27,7 @@ import { expandedData } from '../image-expand.js';
 import { holdLeave } from './busy-leave.js';
 import { autoGrowAll } from './autogrow.js';
 import { safeFileName } from '../filenames.js';
+import { scopedExportData } from '../subtree.js';
 
 function esc(text: string): string {
     return text
@@ -45,13 +46,17 @@ export const shareUiMethods = uiModule({
     pendingChangePacket: null as import('../share-diff.js').ChangePacket | null,
     /** The baseline the pending packet was built against (for the merge path). */
     pendingChangePacketBase: null as StromData | null,
+    /** The person's family tree the share dialog sends (opened from Export's person scope, spec 093 §10). */
+    sharePersonScope: null as { ids: Set<PersonId>; defaultPersonId?: PersonId; name: string } | null,
 
     // ==================== SHARE DIALOG ====================
 
-    showShareDialog(replyToExportId?: string): void {
+    showShareDialog(replyToExportId?: string, scoped?: { kind: 'view' | 'list' | 'person'; ids: ReadonlySet<PersonId>; defaultPersonId?: PersonId; name: string }): void {
         const modal = document.getElementById('share-modal');
         if (!modal) return;
         this.shareReplyToExportId = replyToExportId ?? null;
+        // A person's family tree from the export dialog (spec 093 §10): its own choice of what to send.
+        this.sharePersonScope = scoped?.kind === 'person' ? { ids: new Set(scoped.ids), defaultPersonId: scoped.defaultPersonId, name: scoped.name } : null;
 
         const nameInput = document.getElementById('share-sender-name') as HTMLInputElement | null;
         if (nameInput) nameInput.value = SettingsManager.getSenderName();
@@ -62,7 +67,13 @@ export const shareUiMethods = uiModule({
         const privacy = document.getElementById('share-privacy-mode') as HTMLSelectElement | null;
         if (privacy) privacy.value = 'initials';
         const scope = document.getElementById('share-scope') as HTMLSelectElement | null;
-        if (scope) scope.value = 'whole';
+        const personOpt = document.getElementById('share-scope-person') as HTMLOptionElement | null;
+        if (personOpt) {
+            personOpt.hidden = !this.sharePersonScope;
+            personOpt.disabled = !this.sharePersonScope;
+            personOpt.textContent = this.sharePersonScope ? strings.exportMenu.personShare(this.sharePersonScope.name) : '';
+        }
+        if (scope) scope.value = this.sharePersonScope ? 'person' : scoped?.kind === 'view' ? 'branch' : 'whole';
         // Reveal "send only changes" only when a baseline exists for this tree.
         void this.refreshShareScopeOption();
         this.onShareScopeChange();
@@ -102,6 +113,7 @@ export const shareUiMethods = uiModule({
     closeShareDialog(): void {
         document.getElementById('share-modal')?.classList.remove('active');
         this.shareReplyToExportId = null;
+        this.sharePersonScope = null;
     },
 
     async submitShareDialog(): Promise<void> {
@@ -134,7 +146,9 @@ export const shareUiMethods = uiModule({
         if (waits) await TreeManager.flush(treeId);
         // The file with its images may need more memory than the page has (spec 135): asked first. The change
         // packet holds the tree and its shared version whole, a file under a password is sealed whole.
-        const focused = scope === 'branch' ? TreeRenderer.getFocusedData() : null;
+        const person = scope === 'person' ? this.sharePersonScope : null;
+        const focused = scope === 'branch' ? TreeRenderer.getFocusedData()
+            : person ? scopedExportData(DataManager.getData(), person) : null;
         if (await confirmMemoryForOutput({
             treeId, whole: scope === 'changes' || !!password, ...(focused ? { data: focused } : {}),
         }) === 'cancel') return;
@@ -143,12 +157,13 @@ export const shareUiMethods = uiModule({
             try {
                 if (scope === 'changes') {
                     await this.exportChangePacket(treeId, senderName, senderMessage);
-                } else if (scope === 'branch') {
+                } else if (scope === 'branch' || person) {
                     const focusedData = focused;
                     const treeName = TreeManager.getActiveTreeMetadata()?.name || 'Family Tree';
                     if (focusedData) {
                         const safe = treeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-                        await AppExporter.exportFocusAsApp(focusedData, `${safe || 'strom'}-share.html`, password, privacyMode, false,
+                        const stem = person ? `${safe || 'strom'}-${safeFileName(person.name, 'person')}` : safe || 'strom';
+                        await AppExporter.exportFocusAsApp(focusedData, `${stem}-share.html`, password, privacyMode, false,
                             { ...share, treeName, trackTreeId: treeId });
                     }
                 } else {

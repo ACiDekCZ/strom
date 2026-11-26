@@ -89,7 +89,8 @@ function indexOf(data: StromData, env: BookEnv): LineageIndex {
 /** Every part's availability and the reason when it is not (§4.3). */
 export function bookPartAvailability(data: StromData, options: BookOptions, env: BookEnv = {}): Record<BookPartKey, BookPartState> {
     const B = getStringsForLang(options.lang).book;
-    const sel = selection(indexOf(data, env), lineageSpec(options.selection));
+    const selIndex = indexOf(data, env);
+    const sel = selection(selIndex, lineageSpec(options.selection, selIndex));
     const persons = sel.personIds.map(id => data.persons[id]).filter(p => !!p);
     const unions = sel.familyIds.map(id => data.partnerships[id]).filter(u => !!u);
     const hasStory = persons.some(p => !!p.story?.text?.trim()) || unions.some(u => !!u.story?.text?.trim());
@@ -145,12 +146,14 @@ export function autoBookTitle(data: StromData, spec: BookSelectionSpec, lang: Bo
         case 'ancestors': return B.titleAncestors(personName(data, spec.person));
         case 'descendants': return B.titleDescendants(personName(data, spec.person));
         case 'persons': return getStringsForLang(lang).familyPages.selPersons;
+        case 'gift': return B.titleGift(personName(data, spec.personId));
     }
 }
 
 /** The subtitle's span "{from}–{to}" over the chosen people's dated records ('' without dates). */
 export function bookPeriod(data: StromData, spec: BookSelectionSpec, env: BookEnv = {}): string {
-    const sel = selection(indexOf(data, env), lineageSpec(spec));
+    const selIndex = indexOf(data, env);
+    const sel = selection(selIndex, lineageSpec(spec, selIndex));
     let from = Infinity, to = -Infinity;
     const see = (date: string | undefined): void => {
         const y = yearOf(date);

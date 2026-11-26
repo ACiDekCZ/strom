@@ -905,13 +905,13 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** The export dialog's scope: the whole tree, only the current view or a list of people (spec 084 §12). */
-    getExportScope(): 'tree' | 'view' | 'list' {
+    /** The export dialog's scope: the whole tree, only the current view, a list of people (spec 084 §12) or a person's family tree (spec 093 §10). */
+    getExportScope(): 'tree' | 'view' | 'list' | 'person' {
         const s = this.settings.exportScope;
-        return s === 'view' || s === 'list' ? s : 'tree';
+        return s === 'view' || s === 'list' || s === 'person' ? s : 'tree';
     }
 
-    setExportScope(scope: 'tree' | 'view' | 'list'): void {
+    setExportScope(scope: 'tree' | 'view' | 'list' | 'person'): void {
         this.settings.exportScope = scope;
         this.save();
     }

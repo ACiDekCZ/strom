@@ -635,3 +635,20 @@ describe('Family together (spec 085 §2h)', () => {
         expect(ch).not.toContain('shared-line-mark');
     });
 });
+
+describe('a person’s family tree as the book’s choice (spec 093 §10)', () => {
+    it('tells the gift’s cut of the person, named after them', async () => {
+        const { giftCutIds } = await import('../gift-tree.js');
+        const { autoBookTitle } = await import('../book-options.js');
+        const d = getDemoTree();
+        const index = buildLineages(d);
+        const personId = (d.defaultPersonId ?? Object.keys(d.persons)[0]) as PersonId;
+        const cut = giftCutIds(index, { recipients: [personId], depth: 1, branches: {} });
+        const model = buildBookModel(d, { kind: 'gift', personId, depth: 1 }, index);
+        expect([...model.personIds].sort()).toEqual([...cut].sort());
+        expect(model.personIds.size).toBeLessThan(Object.keys(d.persons).length);
+        // A deeper cut never has fewer people.
+        expect(buildBookModel(d, { kind: 'gift', personId, depth: 'all' }, index).personIds.size).toBeGreaterThanOrEqual(model.personIds.size);
+        expect(autoBookTitle(d, { kind: 'gift', personId, depth: 1 }, 'en')).toMatch(/^Family tree of /);
+    });
+});

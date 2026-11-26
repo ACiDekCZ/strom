@@ -6,6 +6,7 @@
  */
 
 import { PartnershipId, PersonId, StromData } from './types.js';
+import { giftCutIds, type GiftDepth } from './gift-tree.js';
 import { buildLineages, LineageIndex, otherFamilyRods, Rod, RodId, rodLabels, rods, selection, Selection, SelectionSpec } from './lineage.js';
 
 /** What goes into the book (§4.2). */
@@ -14,7 +15,9 @@ export type BookSelectionSpec =
     | { kind: 'rods'; rods: RodId[] }
     | { kind: 'ancestors' | 'descendants'; person: PersonId; generations?: number | 'all' }
     /** Chosen people (linked pages only, 1102 §4.1): families only where both partners are chosen. */
-    | { kind: 'persons'; ids: PersonId[] };
+    | { kind: 'persons'; ids: PersonId[] }
+    /** A person's family tree (spec 093 §10): the gift's cut of the person — told as chosen people. */
+    | { kind: 'gift'; personId: PersonId; depth: GiftDepth; branches?: Record<PersonId, boolean> };
 
 /** One chapter: a family (a union) of the line. */
 export interface BookChapter {
@@ -60,12 +63,13 @@ export interface BookModel {
     rodGeneration: (personId: PersonId) => number;
 }
 
-/** The lineage module's selection for the book's choice. */
-export function lineageSpec(spec: BookSelectionSpec): SelectionSpec {
+/** The lineage module's selection for the book's choice (a person's family tree: the gift's cut, its one evaluation). */
+export function lineageSpec(spec: BookSelectionSpec, index: LineageIndex): SelectionSpec {
     switch (spec.kind) {
         case 'tree': return { kind: 'tree' };
         case 'rods': return { kind: 'rods', rodIds: spec.rods };
         case 'persons': return { kind: 'persons', personIds: spec.ids };
+        case 'gift': return { kind: 'persons', personIds: [...giftCutIds(index, { recipients: [spec.personId], depth: spec.depth, branches: spec.branches ?? {} })] };
         default: return { kind: spec.kind, personId: spec.person, ...(typeof spec.generations === 'number' ? { generations: spec.generations } : {}) };
     }
 }
@@ -81,7 +85,7 @@ export function chapterRods(index: LineageIndex): Rod[] {
 export function buildBookModel(data: StromData, spec: BookSelectionSpec, prebuilt?: LineageIndex): BookModel {
     const index = prebuilt && prebuilt.data === data ? prebuilt : buildLineages(data);
     const labels = rodLabels(index);
-    const sel = selection(index, lineageSpec(spec));
+    const sel = selection(index, lineageSpec(spec, index));
     const chapters: BookChapter[] = [];
     const chapterOf = new Map<PartnershipId, BookChapter>();
     const groups: BookRodGroup[] = [];
@@ -145,8 +149,8 @@ export function buildBookModel(data: StromData, spec: BookSelectionSpec, prebuil
             const toldIds = new Set(told.map(r => r.id));
             smallRods = otherFamilyRods(index).filter(r => !toldIds.has(r.id) && r.realMemberCount > 0);
         }
-    } else if (spec.kind === 'persons') {
-        // Chosen people: the families of two chosen partners, oldest first.
+    } else if (spec.kind === 'persons' || spec.kind === 'gift') {
+        // Chosen people (a person's family tree too): the families of two chosen partners, oldest first.
         const members = new Set(sel.memberIds);
         for (const uid of sel.familyIds) add(uid, null, 1, memberOf(uid, id => members.has(id)));
     } else {
@@ -190,7 +194,7 @@ export function buildBookModel(data: StromData, spec: BookSelectionSpec, prebuil
         }
     }
     for (const g of groups) for (const id of g.rod.memberIds) if (data.persons[id]) personIds.add(id);
-    if (spec.kind === 'ancestors' || spec.kind === 'descendants' || spec.kind === 'persons') for (const id of sel.memberIds) personIds.add(id);
+    if (spec.kind === 'ancestors' || spec.kind === 'descendants' || spec.kind === 'persons' || spec.kind === 'gift') for (const id of sel.memberIds) personIds.add(id);
     const ownChapter = new Map<PersonId, number>([...ownChapters].map(([id, list]) => [id, list[0]]));
 
     return {

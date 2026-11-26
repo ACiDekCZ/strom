@@ -496,7 +496,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     }
     const tree = prot.tree;
     const index = prot.lineages;
-    const sel = selection(index, lineageSpec(spec));
+    const sel = selection(index, lineageSpec(spec, index));
     const rods = setRods(prot, spec, lang);
     const rodIds = rods.map(r => r.id);
     const whole = spec.kind === 'tree';
@@ -524,9 +524,10 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     } else if (spec.kind === 'descendants') {
         const name = nameOf(tree, spec.person);
         intro = { slug: uniqueSlug(`potomci-${asciiSlug(name)}`, used), kind: 'branch', id: spec.person, title: S.book.titleDescendants(name), crumbs: [] };
-    } else if (spec.kind === 'persons') {
-        // Chosen people (1102 §4.2): their introduction groups them by line.
-        intro = { slug: uniqueSlug(PAGE_SET_HUB_SLUG, used), kind: 'persons', title: F.selPersons, crumbs: [] };
+    } else if (spec.kind === 'persons' || spec.kind === 'gift') {
+        // Chosen people (1102 §4.2): their introduction groups them by line; a person's family tree (spec 093 §10) the same, named after the person.
+        const title = spec.kind === 'gift' ? S.book.titleGift(nameOf(tree, spec.personId)) : F.selPersons;
+        intro = { slug: uniqueSlug(PAGE_SET_HUB_SLUG, used), kind: 'persons', title, crumbs: [] };
     } else if (whole) {
         intro = { slug: uniqueSlug(PAGE_SET_HUB_SLUG, used), kind: 'tree', title: ctx.treeName?.trim() || S.book.title, crumbs: [] };
     } else {
@@ -849,6 +850,10 @@ export function pageSetFileName(set: PageSet): string {
             break;
         case 'persons':
             stem = F.fileStem.persons;
+            break;
+        case 'gift':
+            // A person's family tree (spec 093 §10): named after the person, unless they are protected.
+            stem = set.protectedTree.living.has(set.spec.personId) ? F.fileStem.persons : fileWords(intro?.title ?? '');
             break;
         case 'tree':
             stem = fileWords(intro?.title ?? '') || F.fileStem.tree;
