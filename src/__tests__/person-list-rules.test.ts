@@ -364,6 +364,24 @@ describe('§8 the rule in words', () => {
     });
 });
 
+describe('§8 the words of an except and of a family one way', () => {
+    // An except in its own case (cs "kromě žijících", not "kromě žijící"); no "0 generations up" for a family only down.
+    const root: RuleGroup = all(
+        fam('j', { personName: 'Jorun Talvanen', up: 0, down: 2, spouses: 'spouses' }),
+        not(cond({ t: 'cond', c: 'alive', p: { value: 'living' } })),
+        not(cond({ t: 'cond', c: 'gender', p: { value: 'male' } })),
+    );
+    it.each([
+        ['cs', 'Rodina: Jorun Talvanen, 2 generace dolů a manžely · kromě žijících nebo mužů'],
+        ['en', 'Family: Jorun Talvanen, 2 generations down and spouses · except the living or men'],
+        ['de', 'Familie: Jorun Talvanen, 2 Generationen nach unten und Ehepartnern · außer Lebenden oder Männern'],
+        ['pl', 'Rodzina: Jorun Talvanen, 2 pokolenia w dół i małżonkami · oprócz żyjących lub mężczyzn'],
+    ] as const)('%s', (lang, text) => {
+        setLanguage(lang);
+        expect(customLabel({ v: 1, root })).toBe(text);
+    });
+});
+
 describe('§7 templates', () => {
     it('twelve with stable ids; each gives a valid rule once its person or place is filled in', () => {
         expect(LIST_TEMPLATE_IDS).toHaveLength(12);

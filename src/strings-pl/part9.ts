@@ -297,8 +297,8 @@ export const plPart9: Pick<StringsType, 'lists'> = {
             },
             say: {
                 preset: (preset: string, name: string) => `${preset}: ${name}`,
-                family: (name: string, up: string, via: 'both' | 'father' | 'mother', down: string, width: 'line' | 'siblings' | 'cousins', cousins: number | 'all', spouses: 'none' | 'spouses' | 'families') =>
-                    `Rodzina: ${name}, ${up} w górę${via === 'father' ? ' przez ojca' : via === 'mother' ? ' przez matkę' : ''}, ${down} w dół`
+                family: (name: string, up: string | null, via: 'both' | 'father' | 'mother', down: string | null, width: 'line' | 'siblings' | 'cousins', cousins: number | 'all', spouses: 'none' | 'spouses' | 'families') =>
+                    `Rodzina: ${name}${up !== null ? `, ${up} w górę${via === 'father' ? ' przez ojca' : via === 'mother' ? ' przez matkę' : ''}` : ''}${down !== null ? `, ${down} w dół` : ''}`
                     + (width === 'siblings' ? ', z rodzeństwem' : width === 'cousins' ? (cousins === 'all' ? ', ze wszystkimi kuzynami' : `, z kuzynami do ${cousins}. stopnia`) : '')
                     + (spouses === 'spouses' ? ' i małżonkami' : spouses === 'families' ? ' i rodzinami małżonków' : ''),
                 list: (n: string) => `lista ${n}`,
@@ -310,10 +310,12 @@ export const plPart9: Pick<StringsType, 'lists'> = {
                 century: (c: number) => `żył w ${c}. wieku`,
                 deathAge: (from?: number, to?: number) => `wiek w chwili śmierci ${from !== undefined && to !== undefined ? `${from}–${to}` : from !== undefined ? `od ${from}` : `do ${to}`} ${(to ?? from) === 1 ? 'roku' : 'lat'}`,
                 alive: { living: 'żyjący', deceased: 'zmarli' },
+                aliveNot: { living: 'żyjących', deceased: 'zmarłych' },
                 events: { birth: 'urodzenie', death: 'śmierć', marriage: 'ślub', residence: 'zamieszkanie' },
                 near: (events: string[] | null, place: string, km: number, below: boolean) =>
                     `${events ? events.join(' lub ') : 'miejsce'} ${place}${km > 0 ? ` do ${km} km` : ''}${below ? ' łącznie z miejscami podrzędnymi' : ''}`,
                 gender: { male: 'mężczyźni', female: 'kobiety', unknown: 'płeć nieznana' },
+                genderNot: { male: 'mężczyzn', female: 'kobiet', unknown: 'nieznanej płci' },
                 occupation: (v: string) => `zawód ${v}`,
                 hasYes: {
                     birthDate: 'z datą urodzenia', birthPlace: 'z miejscem urodzenia', deathDate: 'z datą śmierci', deathPlace: 'z miejscem śmierci',

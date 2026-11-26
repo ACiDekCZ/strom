@@ -1011,7 +1011,8 @@ export function condLabel(cond: RuleCond, index?: LineageIndex, filterWords?: Fi
             }
             const preset = familyPresetOf(p);
             if (preset) return t.say.preset(t.preset[preset], name);
-            const gens = (d: number | 'all'): string => d === 'all' ? t.allGen : t.gen(d);
+            // No generations one way: that way left out ("Family: Anna, 2 down and spouses", not "0 generations up").
+            const gens = (d: number | 'all'): string | null => d === 'all' ? t.allGen : d === 0 ? null : t.gen(d);
             return t.say.family(name, gens(p.up), p.via, gens(p.down), p.width, p.cousins ?? 'all', p.spouses);
         }
         case 'ancestors':
@@ -1040,7 +1041,8 @@ export function condLabel(cond: RuleCond, index?: LineageIndex, filterWords?: Fi
             return t.say.livedIn(yearsText(cond.p));
         }
         case 'deathAge': return t.say.deathAge(cond.p.from, cond.p.to);
-        case 'alive': return t.say.alive[cond.p.value];
+        // After "except" in its own case ("except the living", cs "kromě žijících").
+        case 'alive': return (cond.not ? t.say.aliveNot : t.say.alive)[cond.p.value];
         case 'near': {
             const all = (['birth', 'death', 'marriage', 'residence'] as const).every(e => cond.p.events.includes(e));
             const events = all ? null : (['birth', 'death', 'marriage', 'residence'] as const).filter(e => cond.p.events.includes(e)).map(e => t.say.events[e]);
@@ -1052,7 +1054,7 @@ export function condLabel(cond: RuleCond, index?: LineageIndex, filterWords?: Fi
             return t.say.livedInHouse(gone(house ? houseTitle(house) : cond.p.houseName || cond.p.house || '?', missing),
                 y && (y.from !== undefined || y.to !== undefined) ? yearsText(y) : null);
         }
-        case 'gender': return t.say.gender[cond.p.value];
+        case 'gender': return (cond.not ? t.say.genderNot : t.say.gender)[cond.p.value];
         case 'occupation': return t.say.occupation((cond.p.labels.length ? cond.p.labels : cond.p.values).join(', '));
         case 'has': return (cond.p.have ? t.say.hasYes : t.say.hasNo)[cond.p.what];
         case 'count': return t.say.count(cond.p.what, cond.p.cmp, cond.p.n);

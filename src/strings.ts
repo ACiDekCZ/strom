@@ -11827,8 +11827,8 @@ const stringsEN = {
             },
             say: {
                 preset: (preset: string, name: string) => `${preset}: ${name}`,
-                family: (name: string, up: string, via: 'both' | 'father' | 'mother', down: string, width: 'line' | 'siblings' | 'cousins', cousins: number | 'all', spouses: 'none' | 'spouses' | 'families') =>
-                    `Family: ${name}, ${up} up${via === 'father' ? ' through the father' : via === 'mother' ? ' through the mother' : ''}, ${down} down`
+                family: (name: string, up: string | null, via: 'both' | 'father' | 'mother', down: string | null, width: 'line' | 'siblings' | 'cousins', cousins: number | 'all', spouses: 'none' | 'spouses' | 'families') =>
+                    `Family: ${name}${up !== null ? `, ${up} up${via === 'father' ? ' through the father' : via === 'mother' ? ' through the mother' : ''}` : ''}${down !== null ? `, ${down} down` : ''}`
                     + (width === 'siblings' ? ', with siblings' : width === 'cousins' ? (cousins === 'all' ? ', with all cousins' : `, with cousins to the ${ordEn(cousins)} degree`) : '')
                     + (spouses === 'spouses' ? ' and spouses' : spouses === 'families' ? " and spouses' families" : ''),
                 list: (n: string) => `list ${n}`,
@@ -11840,10 +11840,13 @@ const stringsEN = {
                 century: (c: number) => `lived in the ${ordEn(c)} century`,
                 deathAge: (from?: number, to?: number) => `age at death ${from !== undefined && to !== undefined ? `${from}–${to}` : from !== undefined ? `from ${from}` : `up to ${to}`} ${(to ?? from) === 1 ? 'year' : 'years'}`,
                 alive: { living: 'living', deceased: 'deceased' },
+                /** The same after "except" (a case of its own in cs/de/pl). */
+                aliveNot: { living: 'the living', deceased: 'the deceased' },
                 events: { birth: 'birth', death: 'death', marriage: 'marriage', residence: 'residence' },
                 near: (events: string[] | null, place: string, km: number, below: boolean) =>
                     `${events ? events.join(' or ') : 'place'} ${place}${km > 0 ? ` within ${km} km` : ''}${below ? ', including places under it' : ''}`,
                 gender: { male: 'men', female: 'women', unknown: 'sex unknown' },
+                genderNot: { male: 'men', female: 'women', unknown: 'sex unknown' },
                 occupation: (v: string) => `occupation ${v}`,
                 hasYes: {
                     birthDate: 'with a birth date', birthPlace: 'with a birth place', deathDate: 'with a death date', deathPlace: 'with a death place',
@@ -24853,8 +24856,8 @@ const stringsCZ: StringsType = {
             },
             say: {
                 preset: (preset: string, name: string) => `${preset}: ${name}`,
-                family: (name: string, up: string, via: 'both' | 'father' | 'mother', down: string, width: 'line' | 'siblings' | 'cousins', cousins: number | 'all', spouses: 'none' | 'spouses' | 'families') =>
-                    `Rodina: ${name}, ${up} nahoru${via === 'father' ? ' přes otce' : via === 'mother' ? ' přes matku' : ''}, ${down} dolů`
+                family: (name: string, up: string | null, via: 'both' | 'father' | 'mother', down: string | null, width: 'line' | 'siblings' | 'cousins', cousins: number | 'all', spouses: 'none' | 'spouses' | 'families') =>
+                    `Rodina: ${name}${up !== null ? `, ${up} nahoru${via === 'father' ? ' přes otce' : via === 'mother' ? ' přes matku' : ''}` : ''}${down !== null ? `, ${down} dolů` : ''}`
                     + (width === 'siblings' ? ', se sourozenci' : width === 'cousins' ? (cousins === 'all' ? ', se všemi bratranci' : `, s bratranci do ${cousins}. stupně`) : '')
                     + (spouses === 'spouses' ? ' a manžely' : spouses === 'families' ? ' a rodinami manželů' : ''),
                 list: (n: string) => `seznam ${n}`,
@@ -24866,10 +24869,12 @@ const stringsCZ: StringsType = {
                 century: (c: number) => `žil v ${c}. století`,
                 deathAge: (from?: number, to?: number) => `věk při úmrtí ${from !== undefined && to !== undefined ? `${from}–${to}` : from !== undefined ? `od ${from}` : `do ${to}`} ${(to ?? from) === 1 ? 'roku' : 'let'}`,
                 alive: { living: 'žijící', deceased: 'zemřelí' },
+                aliveNot: { living: 'žijících', deceased: 'zemřelých' },
                 events: { birth: 'narození', death: 'úmrtí', marriage: 'sňatek', residence: 'bydliště' },
                 near: (events: string[] | null, place: string, km: number, below: boolean) =>
                     `${events ? events.join(' nebo ') : 'místo'} ${place}${km > 0 ? ` do ${km} km` : ''}${below ? ' včetně míst pod ním' : ''}`,
                 gender: { male: 'muži', female: 'ženy', unknown: 'pohlaví neznámé' },
+                genderNot: { male: 'mužů', female: 'žen', unknown: 'neznámého pohlaví' },
                 occupation: (v: string) => `povolání ${v}`,
                 hasYes: {
                     birthDate: 'má datum narození', birthPlace: 'má místo narození', deathDate: 'má datum úmrtí', deathPlace: 'má místo úmrtí',
@@ -37712,8 +37717,8 @@ const stringsDE: StringsType = {
             },
             say: {
                 preset: (preset: string, name: string) => `${preset}: ${name}`,
-                family: (name: string, up: string, via: 'both' | 'father' | 'mother', down: string, width: 'line' | 'siblings' | 'cousins', cousins: number | 'all', spouses: 'none' | 'spouses' | 'families') =>
-                    `Familie: ${name}, ${up} nach oben${via === 'father' ? ' über den Vater' : via === 'mother' ? ' über die Mutter' : ''}, ${down} nach unten`
+                family: (name: string, up: string | null, via: 'both' | 'father' | 'mother', down: string | null, width: 'line' | 'siblings' | 'cousins', cousins: number | 'all', spouses: 'none' | 'spouses' | 'families') =>
+                    `Familie: ${name}${up !== null ? `, ${up} nach oben${via === 'father' ? ' über den Vater' : via === 'mother' ? ' über die Mutter' : ''}` : ''}${down !== null ? `, ${down} nach unten` : ''}`
                     + (width === 'siblings' ? ', mit Geschwistern' : width === 'cousins' ? (cousins === 'all' ? ', mit allen Cousins' : `, mit Cousins bis ${cousins}. Grades`) : '')
                     + (spouses === 'spouses' ? ' und Ehepartnern' : spouses === 'families' ? ' und Familien der Ehepartner' : ''),
                 list: (n: string) => `Liste ${n}`,
@@ -37725,10 +37730,12 @@ const stringsDE: StringsType = {
                 century: (c: number) => `lebte im ${c}. Jahrhundert`,
                 deathAge: (from?: number, to?: number) => `Sterbealter ${from !== undefined && to !== undefined ? `${from}–${to}` : from !== undefined ? `ab ${from}` : `bis ${to}`} ${(to ?? from) === 1 ? 'Jahr' : 'Jahre'}`,
                 alive: { living: 'lebend', deceased: 'verstorben' },
+                aliveNot: { living: 'Lebenden', deceased: 'Verstorbenen' },
                 events: { birth: 'Geburt', death: 'Tod', marriage: 'Heirat', residence: 'Wohnort' },
                 near: (events: string[] | null, place: string, km: number, below: boolean) =>
                     `${events ? events.join(' oder ') : 'Ort'} ${place}${km > 0 ? ` bis ${km} km` : ''}${below ? ' einschließlich untergeordneter Orte' : ''}`,
                 gender: { male: 'Männer', female: 'Frauen', unknown: 'Geschlecht unbekannt' },
+                genderNot: { male: 'Männern', female: 'Frauen', unknown: 'unbekanntem Geschlecht' },
                 occupation: (v: string) => `Beruf ${v}`,
                 hasYes: {
                     birthDate: 'mit Geburtsdatum', birthPlace: 'mit Geburtsort', deathDate: 'mit Sterbedatum', deathPlace: 'mit Sterbeort',
