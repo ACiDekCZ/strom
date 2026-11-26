@@ -164,6 +164,63 @@ test.describe('family book: a house', () => {
         await expect(book.locator('#book-toc a[href="#book-house-index"]')).toHaveText('Index of houses');
     });
 
+    test('the Houses chapter: with how many houses and pages, the index of houses only with it; in the book after the small lineages', async ({ page, context }) => {
+        await page.clock.setFixedTime(new Date('2026-11-20T14:00:00'));
+        await seedVillage(page);
+        const dialog = await openDialog(page);
+        const part = dialog.locator('.book-part[data-part="houses"]');
+        await expect(part.locator('.book-part-t')).toHaveText('Houses');
+        await expect(part.locator('.book-part-r')).toHaveText(/^\d+ houses? · about \d+ pages?$/);
+        // Off by default without a house the research has done.
+        await expect(part.locator('input')).not.toBeChecked();
+        const index = dialog.locator('.book-part[data-part="houseIndex"]');
+        await expect(index.locator('.book-part-r')).toHaveText('Only with the Houses chapter.');
+        await expect(index.locator('input')).toBeDisabled();
+        await part.locator('input').check();
+        await expect(index.locator('input')).toBeEnabled();
+        await expect(dialog.locator('.book-outline')).toContainText('Houses');
+
+        const book = await openBook(page, context);
+        const chapter = book.locator('#book-houses');
+        await expect(chapter.locator('h2')).toHaveText('Houses');
+        await expect(chapter.locator('.book-house-ch h3', { hasText: 'čp. 16' })).toHaveText('Bělokamen čp. 16');
+        await expect(chapter.locator('.book-house-ch', { hasText: 'čp. 16' }).locator('.book-house-alias')).toHaveText('U Prouzalů');
+        await expect(chapter.locator('.book-house-ch', { hasText: 'čp. 16' })).toContainText('Timeline');
+        await expect(book.locator('#book-toc a[href="#book-houses"]')).toHaveText('Houses');
+    });
+
+    test('a book of a house: the last ~100 years by name only, on by default; switched off, the book shows their years', async ({ page, context }) => {
+        await page.clock.setFixedTime(new Date('2026-11-20T14:00:00'));
+        await openApp(page);
+        await seedTree(page, {
+            ...PEOPLE,
+            dobromil: {
+                firstName: 'Dobromil', lastName: 'Prouzal', birthPlace: 'Bělokamen', birthAddress: 'čp. 16', birthDate: '1912',
+                deathPlace: 'Bělokamen', deathAddress: 'čp. 16', deathDate: '1975', parents: ['hostivit', 'kunhuta'],
+            },
+        }, 'Prouzal', 'svatobor');
+        const dialog = await openDialog(page);
+        const sw = dialog.locator('.book-house-recent [data-switch="houseRecent"]');
+        // Only with the House selection.
+        await expect(sw).toBeHidden();
+        await dialog.locator('.book-kind[data-kind="house"]').click();
+        await expect(sw).toBeVisible();
+        await expect(sw).toHaveAttribute('aria-checked', 'true');
+        await expect(dialog.locator('.book-house-recent')).toContainText('Last ~100 years by name only');
+
+        const book = await openBook(page, context);
+        await expect(book.locator('body')).toContainText('Dobromil');
+        expect(await book.locator('body').innerText()).not.toContain('1975');
+
+        // Off: Change options, the switch, the same window again.
+        await book.locator('.book-toolbar').getByRole('button', { name: 'Change options' }).click();
+        await expect(dialog).toHaveClass(/active/);
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        await dialog.locator('#book-open').click();
+        await expect(book.locator('body')).toContainText('1975');
+    });
+
     test('the pages have no House tile: the whole tree takes its place, the book gets it back', async ({ page }) => {
         await seedVillage(page);
         const dialog = await openDialog(page);
