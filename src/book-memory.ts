@@ -24,7 +24,7 @@ import { ImageChoice } from './image-registry.js';
 import type { BookPresetValues } from './book-preset.js';
 import {
     BOOK_PART_KEYS, BookDetail, BookLang, BookOptions, BookParts, BookPreset, BookSelectionSpec,
-    applyBookPreset, bookPresetOf, defaultBookOptions,
+    applyBookPreset, bookPresetOf, defaultBookOptions, defaultBookParts,
 } from './book-options.js';
 
 /** The generations of a book of ancestors or descendants (§4.2): 1–12, 4 by default. */
@@ -163,11 +163,12 @@ function parseParts(v: unknown): Partial<BookParts> | null {
     return any ? parts : null;
 }
 
+/** A part missing from a stored entry takes its default (the index of houses, newer than most entries, off). */
 function allParts(): BookParts {
-    return Object.fromEntries(BOOK_PART_KEYS.map(k => [k, true])) as BookParts;
+    return defaultBookParts();
 }
 
-/** Custom's stored values: the detail and both switches must be there; a missing part counts as ticked. */
+/** Custom's stored values: the detail and both switches must be there; a missing part takes its default. */
 function parseCustom(v: unknown): BookPresetValues | null {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
     const o = v as Record<string, unknown>;

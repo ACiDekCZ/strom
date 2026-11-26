@@ -72,7 +72,7 @@ test.describe('family book: the options dialog', () => {
         await expect(dialog.locator('.book-kind[data-kind="tree"] .book-kind-h')).toHaveText('41 people · 3 family lines and 2 other families');
 
         // The parts: Families always in; what the tree lacks greyed with its reason.
-        await expect(dialog.locator('.book-part')).toHaveCount(10);
+        await expect(dialog.locator('.book-part')).toHaveCount(11);
         await expect(part(dialog, 'families').locator('input')).toBeChecked();
         await expect(part(dialog, 'families').locator('input')).toBeDisabled();
         await expect(part(dialog, 'history')).toHaveClass(/is-off/);
@@ -83,6 +83,9 @@ test.describe('family book: the options dialog', () => {
         await expect(part(dialog, 'story').locator('input')).not.toBeChecked();
         await expect(part(dialog, 'smallRods').locator('input')).toBeChecked();
         await expect(part(dialog, 'chart').locator('.book-part-r')).toHaveText('');
+        // The index of houses (spec 030 §8): a tree without house numbers has none.
+        await expect(part(dialog, 'houseIndex')).toHaveClass(/is-off/);
+        await expect(part(dialog, 'houseIndex').locator('.book-part-r')).toHaveText('No house with a number among the book’s people.');
 
         // Brief: no chart (with its reason) and the preset is Custom.
         await dialog.locator('[data-detail="brief"]').click();

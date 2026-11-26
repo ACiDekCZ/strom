@@ -10,7 +10,7 @@
 import { strings, getCurrentLanguage } from '../strings.js';
 import type { TreeHouse } from '../houses.js';
 import { formatPlaceDate } from '../place-identity.js';
-import { fetchHouse, houseFeature, sendHouseMaterial, type HouseMaterial, type HouseMaterialBody, type HouseWriteResult } from '../house-bridge.js';
+import { fetchHouse, houseFeature, sendHouseMaterial, type HouseMaterial, type HouseMaterialBody, type HouseResearch, type HouseWriteResult } from '../house-bridge.js';
 import { houseImportLink, researchDeviceAllows, researchLinkMark } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import { researchActionLabel } from './research-open-mark.js';
@@ -69,8 +69,8 @@ export function houseMaterialRowHtml(m: HouseMaterial, lang: Parameters<typeof f
         + `<span class="k">${esc(kind)}</span></div>`;
 }
 
-/** The houses' results read for their materials: by key, with the list's rev they were read for. */
-const detailRead = new Map<string, { rev: string; materials: HouseMaterial[] }>();
+/** The houses' results read for their detail (materials, sensitive events): by key, with the list's rev they were read for. */
+const detailRead = new Map<string, { rev: string; house: HouseResearch }>();
 const detailLoading = new Set<string>();
 
 const formatSize = (n: number, lang: string): string => n >= 1024 * 1024
@@ -85,24 +85,41 @@ export const houseMaterialMethods = uiModule({
         return [{ key: 'attach', label: strings.houses.attach, run: () => this.showHouseMaterialDialog(house) }];
     },
 
-    /** The materials of a house the research lists with some (read once per list rev). */
-    houseMaterialsOf(house: TreeHouse): HouseMaterial[] | null {
+    /**
+     * The research's whole result of a house that has materials or events in the list (read once per list
+     * rev, the row drawn again when it comes); null until read or without them.
+     */
+    houseResearchOf(house: TreeHouse): HouseResearch | null {
         const b = this.houseResearchBridge();
         const row = this.houseResearchRow(house);
-        if (!b || !row || !row.summary.materials) return null;
+        if (!b || !row || !(row.summary.materials || row.summary.events)) return null;
         const rev = this.houseStatesRev();
         const read = detailRead.get(row.key);
-        if (read && read.rev === rev) return read.materials;
+        if (read && read.rev === rev) return read.house;
         if (!detailLoading.has(row.key)) {
             detailLoading.add(row.key);
             void fetchHouse(b.base, row.key).then(r => {
                 detailLoading.delete(row.key);
                 if (!r.ok) return;
-                detailRead.set(row.key, { rev, materials: r.house.materials });
+                detailRead.set(row.key, { rev, house: r.house });
                 this.redrawHouseRow(house.id);
             });
         }
-        return read?.materials ?? null;
+        return read?.house ?? null;
+    },
+
+    /** The research's result of a house read so far (no reading): what an output built now can use. */
+    houseResearchRead(house: TreeHouse): HouseResearch | null {
+        if (!this.houseResearchBridge()) return null;
+        const row = this.houseResearchRow(house);
+        return row ? detailRead.get(row.key)?.house ?? null : null;
+    },
+
+    /** The materials of a house the research lists with some. */
+    houseMaterialsOf(house: TreeHouse): HouseMaterial[] | null {
+        const row = this.houseResearchRow(house);
+        if (!row?.summary.materials) return null;
+        return this.houseResearchOf(house)?.materials ?? null;
     },
 
     /** The detail's materials and its two links ('' without the features). */

@@ -221,6 +221,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             toc: 'Spis treści', tree: 'Drzewo rodu', families: 'Rodziny', story: 'Opowieści',
             chart: 'Wykres i oś czasu życia', history: 'Epoka (historia)', sources: 'Źródła',
             media: 'Wycinki zapisów i zdjęcia', smallRods: 'Inne rodziny (małe rody)', index: 'Indeks osób',
+            houseIndex: 'Indeks domów',
         },
         unavailable: {
             story: 'W wyborze nie ma żadnej opowieści.',
@@ -229,7 +230,13 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             sources: 'W wyborze nie ma źródeł.',
             media: 'W drzewie nie ma zdjęć ani wycinków zapisów.',
             smallRods: 'Tylko w księdze całego drzewa.',
+            houseIndex: 'Osoby księgi nie mają domu z numerem.',
         },
+        houseIndexNote: (houses: number) => `${nPl(houses, 'dom', 'domy', 'domów')} → osoby, lata`,
+        houseIndexProtected: (year: number) => `Wydarzenia po ${year} r. i położenie domu nie są podawane w książce.`,
+        houseIndexHistory: 'Z historii domu',
+        houseLivedM: 'mieszkał w domu',
+        houseLivedF: 'mieszkała w domu',
         detail: { brief: 'Zwięźle', normal: 'Standardowo', all: 'Wszystko' },
         detailHint: {
             brief: 'Urodzenie, zgon, zawód, miejsce zamieszkania, śluby. Bez wykresu i osi czasu.',

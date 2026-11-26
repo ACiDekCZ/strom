@@ -13,7 +13,7 @@ import { yearOf } from './dates.js';
 import { shownNameOrEmpty } from './person-name.js';
 import { LineageIndex, buildLineages, otherFamilyRods, rodLabels, selection } from './lineage.js';
 import { BookSelectionSpec, buildBookModel, chapterRods, lineageSpec } from './book-model.js';
-import { findHouse, houseNamedTitle } from './houses.js';
+import { collectHouses, findHouse, houseNamedTitle, type TreeHouse } from './houses.js';
 
 export type { BookSelectionSpec } from './book-model.js';
 
@@ -21,13 +21,24 @@ export type BookLang = 'cs' | 'en' | 'de' | 'pl';
 export type BookDetail = 'brief' | 'normal' | 'all';
 export type BookPreset = 'family' | 'research' | 'custom';
 
-/** The parts in the order of the dialog and the book; `houses` (P3) will follow `smallRods`. */
-export const BOOK_PART_KEYS = ['toc', 'tree', 'families', 'story', 'chart', 'history', 'sources', 'media', 'smallRods', 'index'] as const;
+/**
+ * The parts in the order of the dialog and the book; `houses` (spec 030 part 2) will follow `smallRods`.
+ * `houseIndex` (spec 030 §8) is the index of houses after the index of people.
+ */
+export const BOOK_PART_KEYS = ['toc', 'tree', 'families', 'story', 'chart', 'history', 'sources', 'media', 'smallRods', 'index', 'houseIndex'] as const;
 export type BookPartKey = typeof BOOK_PART_KEYS[number];
 export type BookParts = Record<BookPartKey, boolean>;
 
+/** Parts off by default and outside the presets (a preset keeps what they say): the index of houses. */
+const OPTIONAL_PARTS: ReadonlySet<BookPartKey> = new Set(['houseIndex']);
+
+/** Every part ticked but the optional ones (`houseIndex` off by default, spec 030 §8). */
+export function defaultBookParts(): BookParts {
+    return Object.fromEntries(BOOK_PART_KEYS.map(k => [k, !OPTIONAL_PARTS.has(k)])) as BookParts;
+}
+
 /** Parts that can be unavailable, with the reason the dialog shows (§4.3). */
-export type BookPartReasonKey = 'story' | 'chart' | 'history' | 'sources' | 'media' | 'smallRods';
+export type BookPartReasonKey = 'story' | 'chart' | 'history' | 'sources' | 'media' | 'smallRods' | 'houseIndex';
 
 export interface BookOptions {
     selection: BookSelectionSpec;
@@ -49,18 +60,20 @@ export interface BookPartState {
     available: boolean;
     /** Why not, in the book's language ('' when available). */
     reason: string;
+    /** What an available part holds, when the dialog says it ("13 houses → people, years"). */
+    note?: string;
 }
 
 /** The defaults: the whole tree, "For the family", privacy initials + birth year (§4.6, §4.7). */
 export function defaultBookOptions(lang: BookLang): BookOptions {
-    const parts = Object.fromEntries(BOOK_PART_KEYS.map(k => [k, true])) as BookParts;
-    return { selection: { kind: 'tree' }, parts, detail: 'normal', notes: false, research: false, privacy: 'initials', lang };
+    return { selection: { kind: 'tree' }, parts: defaultBookParts(), detail: 'normal', notes: false, research: false, privacy: 'initials', lang };
 }
 
 /** A preset applied (§4.7); 'custom' changes nothing. */
 export function applyBookPreset(options: BookOptions, preset: BookPreset): BookOptions {
     if (preset === 'custom') return options;
-    const parts = Object.fromEntries(BOOK_PART_KEYS.map(k => [k, true])) as BookParts;
+    const parts = defaultBookParts();
+    for (const k of OPTIONAL_PARTS) parts[k] = !!options.parts[k];
     return preset === 'family'
         ? { ...options, parts, detail: 'normal', notes: false, research: false }
         : { ...options, parts, detail: 'all', notes: true, research: true };
@@ -68,7 +81,7 @@ export function applyBookPreset(options: BookOptions, preset: BookPreset): BookO
 
 /** The preset the options match; any other combination is 'custom'. */
 export function bookPresetOf(options: Pick<BookOptions, 'parts' | 'detail' | 'notes' | 'research'>): BookPreset {
-    const allParts = BOOK_PART_KEYS.every(k => options.parts[k] || k === 'families');
+    const allParts = BOOK_PART_KEYS.every(k => options.parts[k] || k === 'families' || OPTIONAL_PARTS.has(k));
     if (!allParts) return 'custom';
     if (options.detail === 'normal' && !options.notes && !options.research) return 'family';
     if (options.detail === 'all' && options.notes && options.research) return 'research';
@@ -81,10 +94,23 @@ export interface BookEnv {
     index?: LineageIndex;
     /** The tree has a history layer (research history). */
     hasHistory?: boolean;
+    /** The tree's houses (collectHouses of the same data), worked out once by the caller. */
+    houses?: readonly TreeHouse[];
 }
 
 function indexOf(data: StromData, env: BookEnv): LineageIndex {
     return env.index && env.index.data === data ? env.index : buildLineages(data);
+}
+
+/**
+ * The houses of a book (spec 030 §8): the tree's houses where one of the
+ * book's people has a record, in the order of the tree's houses (town, then
+ * compareHouses).
+ */
+export function bookHouses(data: StromData, personIds: Iterable<PersonId>, houses: readonly TreeHouse[] = collectHouses(data)): TreeHouse[] {
+    const ids = new Set<PersonId>();
+    for (const id of personIds) if (data.persons[id] && !data.persons[id].isPlaceholder) ids.add(id);
+    return ids.size ? houses.filter(h => h.personIds.some(id => ids.has(id))) : [];
 }
 
 /** Every part's availability and the reason when it is not (§4.3). */
@@ -103,6 +129,12 @@ export function bookPartAvailability(data: StromData, options: BookOptions, env:
         || Object.values(catalog).some(s => (s.excerpts ?? []).length > 0);
     const state = (available: boolean, key: BookPartReasonKey): BookPartState =>
         ({ available, reason: available ? '' : B.unavailable[key] });
+    // The index of houses: with a house with a number among the book's people (part 1 of spec 030; with the
+    // Houses chapter of part 2 it will follow that chapter).
+    const houseCount = bookHouses(data, sel.personIds, env.houses).length;
+    const houseIndex: BookPartState = houseCount
+        ? { available: true, reason: '', note: B.houseIndexNote(houseCount) }
+        : state(false, 'houseIndex');
     return {
         toc: { available: true, reason: '' },
         tree: { available: true, reason: '' },
@@ -114,6 +146,7 @@ export function bookPartAvailability(data: StromData, options: BookOptions, env:
         media: state(hasMedia, 'media'),
         smallRods: state(options.selection.kind === 'tree', 'smallRods'),
         index: { available: true, reason: '' },
+        houseIndex,
     };
 }
 
@@ -240,6 +273,9 @@ export function estimateBook(data: StromData, options: BookOptions, env: BookEnv
     if (parts.smallRods && model.smallRods.length) pages += 0.5 + model.smallRods.length / 14;
     if (parts.sources) pages += cited.size / 28;
     if (parts.index) pages += 0.5 + persons / 90;
+    // The index of houses: a house's head and its people, 40 rows a page.
+    const houses = parts.houseIndex ? bookHouses(data, model.personIds, env.houses) : [];
+    if (houses.length) pages += 0.5 + houses.reduce((n, h) => n + 1 + h.personIds.length, 0) / 40;
 
     const range = (list: { no: number }[]): string => list.length === 0 ? ''
         : list.length === 1 ? String(list[0].no) : `${list[0].no}–${list[list.length - 1].no}`;
@@ -252,6 +288,7 @@ export function estimateBook(data: StromData, options: BookOptions, env: BookEnv
     if (parts.smallRods && model.smallRods.length) outline.push(B.parts.smallRods);
     if (parts.sources && cited.size) outline.push(B.parts.sources);
     if (parts.index) outline.push(B.parts.index);
+    if (houses.length) outline.push(B.parts.houseIndex);
     const generations = model.chapters.reduce((m, ch) => Math.max(m, ch.gen), 0);
     return { pages: Math.max(1, Math.round(pages)), persons, chapters, generations, outline };
 }

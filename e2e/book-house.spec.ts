@@ -141,6 +141,29 @@ test.describe('family book: a house', () => {
         await expect(dialog.locator('.book-house-name')).toHaveText('Bělokamen čp. 16');
     });
 
+    test('the index of houses: off by default, with how many houses; ticked, the book ends with it', async ({ page, context }) => {
+        await page.clock.setFixedTime(new Date('2026-11-20T14:00:00'));
+        await seedVillage(page);
+        const dialog = await openDialog(page);
+        await dialog.locator('.book-kind[data-kind="house"]').click();
+        const part = dialog.locator('.book-part[data-part="houseIndex"]');
+        await expect(part.locator('.book-part-t')).toHaveText('Index of houses');
+        await expect(part.locator('.book-part-r')).toHaveText('1 house → people, years');
+        await expect(part.locator('input')).not.toBeChecked();
+        await expect(part.locator('input')).toBeEnabled();
+        await part.locator('input').check();
+        await expect(dialog.locator('.book-outline')).toContainText('Index of houses');
+
+        const book = await openBook(page, context);
+        const index = book.locator('#book-house-index');
+        await expect(index.locator('h2')).toHaveText('Index of houses');
+        await expect(index.locator('.book-index-letter')).toHaveText(['Bělokamen']);
+        await expect(index.locator('.book-house-head')).toHaveText('čp. 16 U Prouzalů');
+        await expect(index.locator('.book-house-person').first()).toContainText('Prouzal Svatobor, born 1820, died 1890');
+        await expect(index.locator('.book-house-person', { hasText: 'Kunhuta' })).toContainText('married in');
+        await expect(book.locator('#book-toc a[href="#book-house-index"]')).toHaveText('Index of houses');
+    });
+
     test('the pages have no House tile: the whole tree takes its place, the book gets it back', async ({ page }) => {
         await seedVillage(page);
         const dialog = await openDialog(page);

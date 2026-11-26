@@ -24,9 +24,12 @@ import { shownName } from './person-name.js';
 import { buildLineages } from './lineage.js';
 import { PersonPageContext } from './person-page.js';
 import { BookChapter, buildBookModel } from './book-model.js';
-import { BookLang, BookOptions, BookParts, autoBookTitle, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
+import { BookLang, BookOptions, BookParts, autoBookTitle, bookHouses, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
+import { collectHouses, withResearchNumbers, type TreeHouse } from './houses.js';
+import type { HouseResearch } from './house-bridge.js';
+import { houseOutputFilter, housePrivacyContext } from './house-privacy.js';
 import {
-    BookCtx, BookLinkTarget, BookSourceNumbers, BookStoryExtras, familyChapterHtml, indexHtml, pairFirstNames, pairName,
+    BookCtx, BookHouseEntry, BookLinkTarget, BookSourceNumbers, BookStoryExtras, familyChapterHtml, houseIndexHtml, indexHtml, pairFirstNames, pairName,
     rodHasMaleLine, rodLabelOf, rodLineageHtml, rodOverviewHtml, smallRodsHtml, sourcesHtml,
 } from './book-blocks.js';
 import { BOOK_CSS, rodPagesCss } from './book-css.js';
@@ -68,6 +71,11 @@ export interface BookBuildEnv {
      * comparison in a dialog of the book's window; never printed or saved.
      */
     storyDraftUrls?: (owner: { person: Person } | { couple: Partnership }) => { final?: string; keep?: string };
+    /**
+     * The research's result of a house of the tree, when read (spec 030 §8, §10): its numbers over time and
+     * its events for the index of houses, filtered as outputs show a house (src/house-privacy.ts).
+     */
+    houseResearch?: (house: TreeHouse) => HouseResearch | null;
 }
 
 function esc(text: string): string {
@@ -127,6 +135,7 @@ export function tocHtml(ctx: BookCtx, parts: BookParts): string {
     if (parts.smallRods && ctx.model.smallRods.length) rows.push(back('book-small-rods', B.parts.smallRods));
     if (parts.sources && ctx.sources.no.size) rows.push(back('book-sources', B.sources));
     if (parts.index) rows.push(back('book-index', B.index));
+    if (parts.houseIndex) rows.push(back('book-house-index', B.parts.houseIndex));
     return `<h2>${esc(B.contents)}</h2><ol>${rows.join('')}</ol>`;
 }
 
@@ -175,6 +184,7 @@ function bookSideEntries(ctx: BookCtx, parts: BookParts): BookSideEntry[] {
     if (parts.smallRods && ctx.model.smallRods.length) out.push({ kind: 'link', href: '#book-small-rods', label: esc(B.parts.smallRods) });
     if (parts.sources && ctx.sources.no.size) out.push({ kind: 'link', href: '#book-sources', label: esc(B.sources) });
     if (parts.index) out.push({ kind: 'link', href: '#book-index', label: esc(B.index) });
+    if (parts.houseIndex) out.push({ kind: 'link', href: '#book-house-index', label: esc(B.parts.houseIndex) });
     return out;
 }
 
@@ -220,7 +230,10 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     const now = env.now ?? new Date();
     const year = now.getFullYear();
     const index = env.index && env.index.data === data ? env.index : buildLineages(data);
-    const parts = effectiveBookParts(data, opts, { index, ...(env.hasHistory !== undefined ? { hasHistory: env.hasHistory } : {}) });
+    // The tree's houses, only for a book that asks for the index of houses (spec 030 §8).
+    const treeHouses = opts.parts.houseIndex ? collectHouses(data) : [];
+    const partsEnv = { index, houses: treeHouses, ...(env.hasHistory !== undefined ? { hasHistory: env.hasHistory } : {}) };
+    const parts = effectiveBookParts(data, opts, partsEnv);
     const model = buildBookModel(data, opts.selection, index);
 
     // Who is living is judged on the data before protection (the protection strips the very dates it reads).
@@ -334,6 +347,20 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
         if (list) back.push(`<section class="book-sheet book-back book-sources-page" id="book-sources">${list}</section>`);
     }
     if (parts.index) back.push(`<section class="book-sheet book-back book-index-page" id="book-index">${indexHtml(ctx)}</section>`);
+    if (parts.houseIndex) {
+        // Each house as outputs show it (spec 030 §10): judged on the data before protection, named from the protected tree.
+        const hctx = housePrivacyContext(data, now);
+        const entries: BookHouseEntry[] = bookHouses(data, model.personIds, treeHouses).map(house => {
+            const research = env.houseResearch?.(house) ?? null;
+            return {
+                house,
+                name: tree.houses?.[house.id]?.name?.trim() ?? '',
+                numbers: research ? withResearchNumbers(house, research.numbers, data.houses?.[house.id]) : house.numbers,
+                out: houseOutputFilter(house, research, data, now, hctx),
+            };
+        });
+        back.push(`<section class="book-sheet book-back book-index-page" id="book-house-index">${houseIndexHtml(ctx, entries, hctx.from)}</section>`);
+    }
 
     // ── The front: the title page and the contents ──
     // A house's name after the farm stays out under privacy where people of the last ~100 years lived (spec 030 §10).
@@ -350,7 +377,7 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     const toc = parts.toc ? `<nav class="book-sheet book-front book-toc" id="book-toc">${tocHtml(ctx, parts)}</nav>` : '';
 
     // ── The window: the toolbar, the side contents (§6.1, §6.2) ──
-    const pages = estimateBook(data, opts, { index, ...(env.hasHistory !== undefined ? { hasHistory: env.hasHistory } : {}) }).pages;
+    const pages = estimateBook(data, opts, partsEnv).pages;
     const toolbar = bookToolbarHtml(lang, title, pages, !!env.forSave);
     const side = bookSideHtml(lang, bookSideEntries(ctx, parts));
     const fonts = (env.fontCss ?? '').replace(/<\//g, '<\\/');

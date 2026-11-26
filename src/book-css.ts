@@ -182,6 +182,14 @@ ${PERSON_PAGE_CHART_CSS}
 .book-index-see { font-style: italic; color: #4a4438; }
 .book-sources-page { page: sources; }
 .book-index-page { page: index; }
+/* The index of houses (spec 030 §8): by town, a house's numbers and name after the farm, its people */
+.book-house-index-note { font-size: 10pt; color: #5c5546; margin: 0 0 10px; }
+.book-house { break-inside: avoid; margin: 0 0 8px; }
+.book-house-head { margin: 4px 0 1px; }
+.book-house-head strong { font-weight: 600; }
+.book-house-numbers { display: block; color: #5c5546; font-size: 9.5pt; }
+.book-house-person { padding-left: 10px; }
+.book-house-history { margin: 2px 0 0 10px; color: #4a4438; font-size: 9.5pt; }
 
 /* The window's own controls (the toolbar, the side contents: src/book-window.ts): on screen only */
 .book-nv { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #f6ecd3; color: #7f5500; font: 13px/1.45 ${SANS}; text-align: left; }
@@ -221,6 +229,7 @@ ${STORY_COMPARE_CSS}
     .book-pair { grid-template-columns: minmax(0, 1fr); }
     .book-clips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .book-index, .book-sources.is-long { column-count: 1; }
+    .book-house-person, .book-house-history { padding-left: 6px; margin-left: 0; }
     .pp-row { grid-template-columns: 52px 18px minmax(0, 1fr); }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .book-title-page { min-height: auto; padding: 24px 0; } }

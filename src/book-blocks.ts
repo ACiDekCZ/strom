@@ -33,6 +33,8 @@ import {
 import { BookChapter, BookModel } from './book-model.js';
 import { familyTogetherEvents, familyTogetherLineHtml, sharedIndexOf } from './shared-with-line.js';
 import { BookDetail, BookLang, BookParts } from './book-options.js';
+import type { HouseFact, HouseNumber, TreeHouse } from './houses.js';
+import type { HouseOutput } from './house-privacy.js';
 
 export type BookMode = 'book' | 'app' | 'file';
 /**
@@ -853,6 +855,13 @@ export function sourcesHtml(ctx: BookCtx): string {
     return `<h2>${esc(B.sources)}</h2><div class="book-sources${ids.length >= 40 ? ' is-long' : ''}">${rows}</div>`;
 }
 
+/** A person's chapters as the index gives them: "3, <b>5</b>" (their own family bold), linked. */
+function chapterRefsOf(ctx: BookCtx, id: PersonId): string {
+    const own = ctx.model.ownChapters.get(id) ?? [];
+    const all = [...new Set([...own, ...(ctx.model.birthChapter.has(id) ? [ctx.model.birthChapter.get(id)!] : [])])].sort((a, b) => a - b);
+    return all.map(n => own.includes(n) ? `<b>${link(ctx, { chapter: n }, String(n))}</b>` : link(ctx, { chapter: n }, String(n))).join(', ');
+}
+
 /** The index of people (§5.10): birth surnames, married-name cross-references, chapters (own family bold). */
 export function indexHtml(ctx: BookCtx): string {
     const B = T(ctx).book;
@@ -872,11 +881,9 @@ export function indexHtml(ctx: BookCtx): string {
         const married = p.marriedSurname?.trim();
         const marriedNote = married && married !== last ? `, ${(p.primaryName === 'birth' ? B.indexFormer : B.indexMarried)(married)}` : '';
         const years = bookYears(p);
-        const own = ctx.model.ownChapters.get(id) ?? [];
-        const all = [...new Set([...own, ...(ctx.model.birthChapter.has(id) ? [ctx.model.birthChapter.get(id)!] : [])])].sort((a, b) => a - b);
         // Pages of a set (spec 026 §1.7): the name leads to the person's page, no chapters.
         const pages = ctx.mode !== 'book';
-        const refs = pages ? '' : all.map(n => own.includes(n) ? `<b>${link(ctx, { chapter: n }, String(n))}</b>` : link(ctx, { chapter: n }, String(n))).join(', ');
+        const refs = pages ? '' : chapterRefsOf(ctx, id);
         const text = pages
             ? `${link(ctx, { person: id }, esc(name))}${esc(marriedNote)}${years ? ` (${esc(years)})` : ''}`
             : `${esc(name)}${esc(marriedNote)}${years ? ` (${esc(years)})` : ''}`;
@@ -906,6 +913,109 @@ export function indexHtml(ctx: BookCtx): string {
     // A page of a set has its own heading.
     if (ctx.mode !== 'book') return `<div class="book-index">${out.join('')}</div>`;
     return `<h2>${esc(B.index)}</h2><div class="book-index">${out.join('')}</div>`;
+}
+
+/** One house of the index of houses, as the output may show it (src/house-privacy.ts). */
+export interface BookHouseEntry {
+    house: TreeHouse;
+    /** The name after the farm the output may show ('' none: none given, or kept out under privacy). */
+    name: string;
+    /** Its numbers over time (the tree's, the research's), oldest first. */
+    numbers: readonly HouseNumber[];
+    out: HouseOutput;
+}
+
+/**
+ * The index of houses (spec 030 §8, §10): the houses of the book's people by
+ * town and number (compareHouses), each with its numbers over time and its
+ * name after the farm in italics, then its people with their records there
+ * and their chapters as the index of people gives them; who married in is
+ * marked. As outputs show a house: the living as the privacy names them,
+ * people of the last ~100 years by name and role only (no years, no
+ * records), the research's events of the house only as the filter lets them
+ * through, and a sentence when something is left out. `from` is the first
+ * year of the last ~100 years.
+ */
+export function houseIndexHtml(ctx: BookCtx, entries: readonly BookHouseEntry[], from: number): string {
+    const S = T(ctx);
+    const B = S.book;
+    const H = S.houses;
+    const inBook = new Set(ctx.model.personIds);
+    const pages = ctx.mode !== 'book';
+    // A number's years; those of the last ~100 years stay out (a span reaching them is left open: "1853–").
+    const span = (a: number | undefined, b: number | undefined): string => {
+        if (a === undefined || b === undefined || a >= from) return '';
+        if (b >= from) return `${a}–`;
+        return a === b ? String(a) : `${a}–${b}`;
+    };
+    const factLabel = (f: HouseFact, fem: boolean, marriedIn: boolean): string => {
+        switch (f.kind) {
+            case 'birth': return fem ? H.ev.bornF : H.ev.bornM;
+            case 'death': return fem ? H.ev.diedF : H.ev.diedM;
+            case 'marriage': return marriedIn ? (fem ? H.marriedInF : H.marriedInM) : H.ev.marriage;
+            case 'census': return H.ev.census;
+            case 'residence': return H.ev.residence;
+            default: return H.ev.event;
+        }
+    };
+    let shielded = false;
+    const groups: { town: string; html: string[] }[] = [];
+    for (const e of entries) {
+        const h = e.house;
+        const married = new Map(h.marriedIn.map(m => [m.personId, m]));
+        const rows: string[] = [];
+        for (const op of e.out.persons) {
+            if (!inBook.has(op.personId)) continue;
+            const p = person(ctx, op.personId);
+            if (!p || p.isPlaceholder) continue;
+            const fem = p.gender === 'female';
+            const name = [p.lastName?.trim() ?? '', p.firstName?.trim() ?? ''].filter(Boolean).join(' ') || '?';
+            let what: string;
+            if (op.living || op.recent) {
+                // Name and role only: who married in, or lived in the house (never "owned").
+                shielded = true;
+                const m = married.get(op.personId);
+                what = m ? (m.sex === 'f' ? H.marriedInF : H.marriedInM) : (fem ? B.houseLivedF : B.houseLivedM);
+            } else {
+                const m = married.get(op.personId);
+                const seen = new Set<string>();
+                const bits: string[] = [];
+                for (const f of e.out.facts) {
+                    if (f.personId !== op.personId || seen.has(f.factRef)) continue;
+                    seen.add(f.factRef);
+                    bits.push([factLabel(f, fem, !!m), f.year !== undefined ? String(f.year) : ''].filter(Boolean).join(' '));
+                }
+                // Married in without a wedding at the house: said first, with the wedding's year.
+                if (m && !e.out.facts.some(f => f.personId === op.personId && f.kind === 'marriage')) {
+                    const y = m.year !== undefined && m.year < from ? ` ${m.year}` : '';
+                    bits.unshift(`${m.sex === 'f' ? H.marriedInF : H.marriedInM}${y}`);
+                }
+                what = bits.join(', ');
+            }
+            const text = `${pages ? link(ctx, { person: op.personId }, esc(name)) : esc(name)}${what ? `, ${esc(what)}` : ''}`;
+            const refs = pages ? '' : chapterRefsOf(ctx, op.personId);
+            rows.push(refs
+                ? `<div class="book-index-row book-house-person"><span class="book-index-name">${text}</span><span class="book-index-dots"></span><span class="book-index-refs">${refs}</span></div>`
+                : `<div class="book-index-row book-house-person"><span class="book-index-name">${text}</span></div>`);
+        }
+        if (!rows.length) continue;
+        if (e.out.hidden.events || e.out.hidden.facts || e.out.hidden.location) shielded = true;
+        const numbers = e.numbers.length > 1
+            ? `<span class="book-house-numbers">${e.numbers.map(n => esc([n.house, span(n.from, n.to)].filter(Boolean).join(' '))).join(' → ')}</span>` : '';
+        const head = `<div class="book-house-head"><strong>${esc(h.text)}</strong>${e.name ? ` <em>${esc(e.name)}</em>` : ''}${numbers}</div>`;
+        const events = e.out.timeline.map(ev => {
+            const y = yearOf(ev.date);
+            return esc([y !== null ? String(y) : '', ev.text].filter(Boolean).join(' '));
+        });
+        const history = events.length ? `<p class="book-house-history"><em>${esc(B.houseIndexHistory)}:</em> ${events.join('; ')}</p>` : '';
+        const html = `<div class="book-house" id="${esc(bookId(ctx, `dum-${h.id.replace(/[^a-z0-9]+/gi, '-')}`))}">${head}${rows.join('')}${history}</div>`;
+        const last = groups[groups.length - 1];
+        if (last && last.town === h.townKey) last.html.push(html);
+        else groups.push({ town: h.townKey, html: [`<div class="book-index-letter">${esc(h.ref.town)}</div>`, html] });
+    }
+    const note = shielded ? `<p class="book-house-index-note">${esc(B.houseIndexProtected(from - 1))}</p>` : '';
+    const body = `${note}<div class="book-index book-house-index">${groups.map(g => g.html.join('')).join('')}</div>`;
+    return pages ? body : `<h2>${esc(B.parts.houseIndex)}</h2>${body}`;
 }
 
 // ─── Pages of a set (spec 026 §1) ───────────────────────────────────────────

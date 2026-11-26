@@ -590,7 +590,8 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
     const sel = selectionOf(s);
     const ready = selectionReady(sel);
     const opts = currentOptions(s);
-    const env = { index: s.index, hasHistory: s.hasHistory };
+    // The tree's houses only for a tree that has some (the index of houses, spec 030 §8).
+    const env = { index: s.index, hasHistory: s.hasHistory, houses: s.hasHouse ? housesOf(s) : [] };
 
     // Presets, and the hint line while Custom is chosen (§4.9)
     const P = s.presets;
@@ -614,7 +615,7 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
         input.checked = on;
         input.disabled = k === 'families' || !avail[k].available;
         row.classList.toggle('is-off', !avail[k].available);
-        setText(row, '.book-part-r', avail[k].reason);
+        setText(row, '.book-part-r', avail[k].reason || avail[k].note || '');
     }
 
     // Detail, notes, language
@@ -1705,6 +1706,8 @@ export const bookUiMethods = uiModule({
             fontCss: appFontFaceCss(POSTER_SERIF_FACES) + bookItalicFontCss(),
             hasHistory: !!(firstId && this.personPageHistory(firstId as PersonId)),
             personHistory: (id) => this.personPageHistory(id),
+            // The research's results of houses read so far (the Houses window reads them): the index of houses.
+            houseResearch: (house) => this.houseResearchRead(house),
             ...(forSave ? { forSave: true } : {
                 approveStoryUrl: (p) => this.storyApproveUrl(p.id),
                 storyDraftUrls: (owner) => this.storyCompareUrls('person' in owner
