@@ -79,7 +79,8 @@ export interface HouseSummary {
 
 /** One row of `GET /houses` (a house with a record, a task or material). */
 export interface HouseListRow {
-    id: string;
+    /** The research's record (A…); none yet for a house known by a task or a material only. */
+    id?: string;
     key: HouseId;
     place: HousePlace;
     house: string;
@@ -240,7 +241,8 @@ export interface HouseTown {
 
 /** One house's whole result (`GET /houses/<key|id>`, §2.4 with §4.2/§4.4). No `recent`: the app works it out. */
 export interface HouseResearch {
-    id: string;
+    /** The research's record (A…); none yet for a house known by a task or a material only. */
+    id?: string;
     key: HouseId;
     place: HousePlace;
     house: string;
@@ -472,11 +474,11 @@ export function sanitizeHouseRow(value: unknown): HouseListRow | null {
     const p = place(r?.place);
     const house = text(r?.house, 200);
     const state = oneOf(r?.state, STATES);
-    if (!r || !id || !key || !p || !house || !state) return null;
+    if (!r || !key || !p || !house || !state) return null;
     const s = asRecord(r.summary) ?? {};
     const numbers = Array.isArray(r.numbers) ? r.numbers.map(n => text(n, 100)).filter((n): n is string => !!n) : undefined;
     return {
-        id, key, place: p, house, ...opt('name', text(r.name, 200)), ...opt('numbers', numbers?.length ? numbers : undefined), state,
+        ...opt('id', id), key, place: p, house, ...opt('name', text(r.name, 200)), ...opt('numbers', numbers?.length ? numbers : undefined), state,
         ...opt('at', isoDay(r.at)), ...opt('task', idOf(r.task)), ...opt('work', oneOf(r.work, WORKS)), ...opt('question', question(r.question)),
         persons: count(r.persons), ...opt('years', years(r.years)),
         summary: {
@@ -495,7 +497,7 @@ export function sanitizeHouseResearch(value: unknown): HouseResearch | null {
     const p = place(r?.place);
     const house = text(r?.house, 200);
     const state = oneOf(r?.state, STATES);
-    if (!r || !id || !key || !p || !house || !state) return null;
+    if (!r || !key || !p || !house || !state) return null;
     const timeline = list(r.timeline, e => {
         const eid = idOf(e.id);
         const t = text(e.text, 4000);
@@ -530,7 +532,7 @@ export function sanitizeHouseResearch(value: unknown): HouseResearch | null {
     const sensitive = Array.isArray(r.sensitive)
         ? [...new Set(r.sensitive.map(idOf).filter((x): x is string => !!x && timelineIds.has(x)))] : [];
     return {
-        id, key, place: p, house, ...opt('name', text(r.name, 200)), ...opt('nameBy', text(r.nameBy, 40)), state,
+        ...opt('id', id), key, place: p, house, ...opt('name', text(r.name, 200)), ...opt('nameBy', text(r.nameBy, 40)), state,
         ...opt('at', isoDay(r.at)), ...opt('task', idOf(r.task)), ...opt('work', oneOf(r.work, WORKS)), ...opt('question', question(r.question)),
         persons, ...opt('years', years(r.years)),
         numbers: list(r.numbers, numberItem), ...opt('location', location(r.location)),
@@ -564,19 +566,19 @@ export class HouseResearchCache {
     }
 
     put(house: HouseResearch): void {
-        const was = this.keyOfId.get(house.id);
+        const was = house.id ? this.keyOfId.get(house.id) : undefined;
         if (was !== undefined && was !== house.key) this.byKey.delete(was);
         const other = this.byKey.get(house.key);
-        if (other && other.id !== house.id) this.keyOfId.delete(other.id);
+        if (other?.id && other.id !== house.id) this.keyOfId.delete(other.id);
         this.byKey.set(house.key, house);
-        this.keyOfId.set(house.id, house.key);
+        if (house.id) this.keyOfId.set(house.id, house.key);
     }
 
     /** A new list: the rows' keys carry the results read under an old key of the same id. */
     putList(rev: string, houses: HouseListRow[]): void {
         this.list = { rev, houses };
         for (const row of houses) {
-            const was = this.keyOfId.get(row.id);
+            const was = row.id ? this.keyOfId.get(row.id) : undefined;
             if (was === undefined || was === row.key) continue;
             const h = this.byKey.get(was);
             if (h) this.put({ ...h, key: row.key });

@@ -8,6 +8,7 @@ import { houseStateHtml, houseTownStatesText } from '../ui/house-state-ui.js';
 import { queuePageQuery } from '../research-queue-pages.js';
 import { QUEUE_TASK_KINDS } from '../research-link.js';
 import { getStringsForLang, setLanguage } from '../strings.js';
+import { HouseResearchCache, sanitizeHouseResearch, sanitizeHouseRow } from '../house-bridge.js';
 
 afterEach(() => setLanguage('cs'));
 
@@ -110,5 +111,31 @@ describe('the task kind house', () => {
     it('kind=other leaves house tasks out with known=house (and census too)', () => {
         expect(queuePageQuery({ kind: 'other' }, 0, 50, house).toString()).toBe('count=50&kind=other&known=house');
         expect(queuePageQuery({ kind: 'other' }, 0, 50, both).toString()).toBe('count=50&kind=other&known=census%2Chouse');
+    });
+});
+
+describe('a house the research knows by a material or a task only (no record yet)', () => {
+    // GET /houses lists it without `id` (strom-research listRow): it still has a state ("not researched").
+    const noRecord = {
+        key: 'belokamen|16', place: { key: 'belokamen', id: 'L0001', name: 'Bělokamen' }, house: '16', persons: 2, state: 'none',
+        summary: { events: 0, holders: 0, residents: 0, unknown: 0, materials: 1, passed: 0 },
+    };
+
+    it('its row is kept, without an id', () => {
+        const row = sanitizeHouseRow(noRecord);
+        expect(row).not.toBeNull();
+        expect(row!.id).toBeUndefined();
+        expect(row!.state).toBe('none');
+        expect(row!.summary.materials).toBe(1);
+    });
+
+    it('its whole result is kept (its materials listed) and cached by key', () => {
+        const h = sanitizeHouseResearch({ ...noRecord, persons: [], materials: [{ id: 'I0004', kind: 'memory', title: 'U Prouzalů', at: '2026-11-26' }] });
+        expect(h).not.toBeNull();
+        expect(h!.materials.map(m => m.id)).toEqual(['I0004']);
+        const cache = new HouseResearchCache();
+        cache.put(h!);
+        cache.putList('r1', [sanitizeHouseRow(noRecord)!]);
+        expect(cache.get('belokamen|16')?.materials).toHaveLength(1);
     });
 });
