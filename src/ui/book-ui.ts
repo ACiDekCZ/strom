@@ -45,13 +45,15 @@ import {
 } from './family-pages-ui.js';
 import { confirmMemoryForOutput, outputNearLimit, type OutputCheck } from './memory-limit-ui.js';
 import { pageSetZipName } from '../family-pages-html.js';
-import { LineageIndex, Rod, RodId, ancestorCount, buildLineages, personRodRow, rodLabels, rods as allRods } from '../lineage.js';
+import { LineageIndex, Rod, RodId, ancestorCount, buildLineages, personRodRow, rodLabels, rods as allRods, selection } from '../lineage.js';
 import { MultiPersonPicker } from '../person-picker.js';
 import { bookItalicFontCss } from '../book-font.js';
 import { appFontFaceCss, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { shownName } from '../person-name.js';
 import { displayYear } from '../dates.js';
-import { openPersonPopover } from './person-popover.js';
+import { openPersonPopover, openSearchPopover, type SearchPopoverRow } from './person-popover.js';
+import { collectHouses, findHouse, hasNumberedHouse, houseTitle, type TreeHouse } from '../houses.js';
+import { houseMatches, houseSearchText } from '../houses-view.js';
 import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
 import { activatedElement, BUSY_MIN_MS, BUSY_SHOW_MS, busySpinHtml, nextPaint } from './busy.js';
@@ -62,7 +64,7 @@ import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 import { imageLoads } from '../image-loads.js';
 import { GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftCutIds, type GiftDepth } from '../gift-tree.js';
 
-type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'gift' | 'persons';
+type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'gift' | 'persons' | 'house';
 type PersonKind = 'ancestors' | 'descendants';
 /** The phone's sub-sheets (§4.1, 4b; the pages' rows, 026 6b). */
 type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title' | 'families' | 'images' | 'groups' | 'include';
@@ -75,8 +77,13 @@ type Phase = 'options' | 'building' | 'progress' | 'result' | 'zipFail';
 /** The book's memory check: it holds the open tree's images whole (image-expand.ts expandedData). */
 const BOOK_MEMORY: OutputCheck = { whole: true, what: 'book' };
 
-/** Chosen people are a selection of the pages only (1102 §4.1), but for the people of Export's view; a person's family tree: spec 093 §10 [69]. */
-const KINDS: readonly Kind[] = ['tree', 'rods', 'ancestors', 'descendants', 'gift', 'persons'];
+/**
+ * Chosen people are a selection of the pages only (1102 §4.1), but for the people of Export's view; a person's family tree:
+ * spec 093 §10 [69]; a house of the book only, for a tree with a numbered house (spec 030 §8).
+ */
+const KINDS: readonly Kind[] = ['tree', 'rods', 'ancestors', 'descendants', 'gift', 'house', 'persons'];
+/** The rows of the house popover per group. */
+const HOUSE_PICK_LIMIT = 50;
 const DETAILS: readonly BookDetail[] = ['brief', 'normal', 'all'];
 const PRIVACY: readonly PrivacyMode[] = ['full', 'initials', 'minimal', 'anonymous'];
 const LANGS: readonly BookLang[] = ['cs', 'en', 'de', 'pl'];
@@ -145,6 +152,14 @@ interface DialogState {
     giftDepth: GiftDepth;
     /** The book may take chosen people: the dialog came with the people of Export's current view (spec 093 §10, K2.1). */
     personsBook: boolean;
+    /** The house of a book of a house (spec 030 §8): its town and house as the tree writes them; kept while another kind is chosen. */
+    house: { place: string; house: string } | null;
+    /** The tree has a numbered house: the House tile is offered (book only). */
+    hasHouse: boolean;
+    /** The tree's houses, worked out once per opening when the House tile is used. */
+    houses?: TreeHouse[];
+    /** The scope sentence under the house, kept for its house. */
+    houseScope?: { key: string; text: string };
     /** The book took the whole tree for chosen people: said once under the selection, until the next change. */
     moved: boolean;
     /** The options apart from the selection (that one comes from kind / rods / person). */
@@ -217,12 +232,48 @@ function selectionOf(s: DialogState): BookSelectionSpec | null {
         case 'rods': return { kind: 'rods', rods: [...s.rods] };
         case 'persons': return { kind: 'persons', ids: [...s.selIds] };
         case 'gift': return s.person ? { kind: 'gift', personId: s.person, depth: s.giftDepth } : null;
+        case 'house': return s.house ? { kind: 'house', place: s.house.place, house: s.house.house } : null;
         default:
             if (!s.person) return null;
             // The pages' ancestors: the segment's depth (1102 §4.1); the book keeps its stepper.
             if (s.kind === 'ancestors' && s.output === 'pages') return { kind: 'ancestors', person: s.person, generations: s.ancGens };
             return { kind: s.kind, person: s.person, generations: s.gens[s.kind] };
     }
+}
+
+/** The tree's houses (once per opening). */
+function housesOf(s: DialogState): TreeHouse[] {
+    if (!s.houses) s.houses = collectHouses(s.data);
+    return s.houses;
+}
+
+/** The chosen house, or null. */
+function chosenHouse(s: DialogState): TreeHouse | null {
+    return s.house ? findHouse(s.data, s.house.place, s.house.house, housesOf(s)) : null;
+}
+
+/**
+ * The house a book of a house starts with: one of the person in focus (a
+ * house with history first), else the house with history with the most people,
+ * else the first house.
+ */
+function defaultHouse(s: DialogState): { place: string; house: string } | null {
+    const houses = housesOf(s);
+    const focus = TreeRenderer.getFocusPersonId();
+    const byPeople = (list: TreeHouse[]): TreeHouse | undefined =>
+        [...list].sort((a, b) => Number(b.overThreshold) - Number(a.overThreshold) || b.persons - a.persons)[0];
+    const h = (focus ? byPeople(houses.filter(x => x.personIds.includes(focus))) : undefined) ?? byPeople(houses);
+    return h ? { place: h.ref.town, house: h.text } : null;
+}
+
+/** "The house's family across generations: 23 people from 1781–1934, …" for the chosen house. */
+function houseScopeText(s: DialogState, house: TreeHouse): string {
+    const key = house.id;
+    if (s.houseScope?.key === key) return s.houseScope.text;
+    const sel = selection(s.index, { kind: 'house', place: house.ref.town, house: house.text });
+    const text = strings.book.dlg.houseScope(sel.personIds.length, house.period?.from ?? null, house.period?.to ?? null);
+    s.houseScope = { key, text };
+    return text;
 }
 
 /** The people of a person's family tree (spec 093 §10): the gift's cut of the chosen person. */
@@ -286,10 +337,11 @@ function optionsHtml(s: DialogState): string {
     const hint: Record<Kind, string> = {
         tree: D.treeHint(persons, counts.rods, counts.other),
         rods: D.kindHint.rods, ancestors: D.kindHint.ancestors, descendants: D.kindHint.descendants, gift: D.kindHint.gift, persons: D.kindHint.persons,
+        house: D.kindHint.house,
     };
     // The pages of the whole tree: its lineages and the other families (spec 026 P3 §3.1).
     if (pages) hint.tree = F.treeHintPages(persons, counts.rods);
-    const kinds = KINDS.filter(k => pages || k !== 'persons' || s.personsBook).map(k => {
+    const kinds = KINDS.filter(k => (pages || k !== 'persons' || s.personsBook) && (k !== 'house' || (!pages && s.hasHouse))).map(k => {
         return `<label class="book-kind sel-opt" data-sel-form="tile" data-kind="${k}">`
             + `<input type="radio" name="book-kind" value="${k}">`
             + `<span class="book-kind-text"><span class="book-kind-t">${esc(D.kind[k])}</span><span class="book-kind-h">${esc(hint[k])}</span></span>`
@@ -324,8 +376,6 @@ function optionsHtml(s: DialogState): string {
         + `<span class="book-sub-title"></span></div>`
         + `<section class="book-sec book-sec-what" data-sec="what"><h3 class="book-sec-h" id="book-what-h">${esc(pages ? F.what : D.what)}</h3>`
         + `<div class="book-kinds" role="radiogroup" aria-labelledby="book-what-h">${kinds}`
-        + (pages ? '' : `<div class="book-kind book-kind--house" aria-disabled="true"><input type="radio" disabled tabindex="-1" aria-hidden="true">`
-            + `<span class="book-kind-text"><span class="book-kind-h">${esc(D.house)}</span></span></div>`)
         + `</div><p class="book-sel-moved" role="status" hidden></p></section>`
         + `<section class="book-sec book-sec-sel" data-sec="sel"><h3 class="book-sec-h book-sub-only" data-sub-title></h3>`
         + `<div class="book-sel book-sel-tree"><p class="book-hint">${esc(D.treeSentence)}</p></div>`
@@ -348,6 +398,11 @@ function optionsHtml(s: DialogState): string {
         + GIFT_DEPTHS.map((d, i) => `<option value="${d}">${esc(strings.giftTree.cut.depth[i])}</option>`).join('')
         + `</select><span class="book-gift-n" aria-live="polite"></span></div>`
         + `</div>`
+        // A house (spec 030 §8): the house's button with its search, the scope in a muted sentence.
+        + (!pages && s.hasHouse ? `<div class="book-sel book-sel-house"><div class="book-person-line book-house-line"><span class="book-person-l">${esc(D.houseLabel)}</span>`
+            + `<button type="button" class="book-house-btn" aria-haspopup="listbox" aria-expanded="false"><span class="book-house-name"></span>`
+            + `<span class="book-house-alias"></span><span class="book-caret" aria-hidden="true">▾</span></button></div>`
+            + `<p class="book-hint book-house-scope"></p></div>` : '')
         + (pages ? `<div class="book-sel book-sel-persons"><div class="book-sel-picker"></div>`
             + `<p class="book-hint book-sel-state" aria-live="polite"></p>`
             + `<button type="button" class="primary book-sub-done">${esc(F.selDone)}</button></div>` : '')
@@ -435,6 +490,17 @@ function sync(s: DialogState): void {
     modal.querySelector<HTMLElement>('.book-sel-person')!.hidden = s.kind !== 'ancestors' && s.kind !== 'descendants' && s.kind !== 'gift';
     const selPersons = modal.querySelector<HTMLElement>('.book-sel-persons');
     if (selPersons) selPersons.hidden = s.kind !== 'persons';
+    const selHouse = modal.querySelector<HTMLElement>('.book-sel-house');
+    const house = s.kind === 'house' ? chosenHouse(s) : null;
+    if (selHouse) {
+        selHouse.hidden = s.kind !== 'house';
+        if (s.kind === 'house') {
+            setText(modal, '.book-house-name', house ? houseTitle(house) : D.chooseHouse);
+            const alias = modal.querySelector<HTMLElement>('.book-house-alias');
+            if (alias) { alias.hidden = !house?.name; setText(modal, '.book-house-alias', house?.name ?? ''); }
+            setText(modal, '.book-house-scope', house ? houseScopeText(s, house) : '');
+        }
+    }
     const moved = modal.querySelector<HTMLElement>('.book-sel-moved');
     if (moved) {
         moved.hidden = !s.moved || pages;
@@ -493,6 +559,7 @@ function sync(s: DialogState): void {
         : s.kind === 'persons' ? (s.selIds.length ? F.nPersons(s.selIds.length) : D.choose)
         : s.kind === 'tree' ? ''
         : s.kind === 'gift' ? (s.person ? `${shownName(s.data.persons[s.person])} · ${giftN.toLocaleString(s.appLang)}` : D.choose)
+        : s.kind === 'house' ? (house ? houseTitle(house) : D.choose)
         : (s.person ? shownName(s.data.persons[s.person]) : D.choose);
     modal.querySelectorAll<HTMLElement>('.book-kind[data-kind]').forEach(k => {
         const v = k.querySelector<HTMLElement>('.book-sum-v');
@@ -948,6 +1015,7 @@ function memoryExtra(s: DialogState): Parameters<typeof saveBookMemory>[3] {
 
 /** A change: remember the options (not the selection's person or the title) and refresh. */
 function changed(s: DialogState): void {
+    if (s.kind === 'house' && !s.house) s.house = defaultHouse(s);
     saveBookMemory(storage(), s.treeId, currentOptions(s), memoryExtra(s));
     // A file made for other options is not the one to save.
     if (s.phase === 'result') { s.phase = 'options'; s.file = null; }
@@ -1068,6 +1136,9 @@ export const bookUiMethods = uiModule({
         // Chosen people are for the pages only: the book takes the whole tree and says so (1102 §3.1).
         const personsBook = !!over?.personsBook && sel.kind === 'persons';
         const movedToTree = sel.kind === 'persons' && output !== 'pages' && !personsBook;
+        // A book of a house only while the tree has a numbered house, and never as pages (spec 030 §8).
+        const hasHouse = hasNumberedHouse(data);
+        const houseGone = sel.kind === 'house' && (!hasHouse || output === 'pages');
         if (st?.job) st.job.cancelled = true;
         if (st?.estTimer != null) clearTimeout(st.estTimer);
         st = {
@@ -1075,7 +1146,7 @@ export const bookUiMethods = uiModule({
             treeName: TreeManager.getActiveTreeMetadata()?.name || '',
             hasHistory: !!(firstId && this.personPageHistory(firstId as PersonId)),
             history: (firstId && this.personPageHistory(firstId as PersonId)) || null,
-            kind: movedToTree ? 'tree' : sel.kind,
+            kind: movedToTree || houseGone ? 'tree' : sel.kind,
             rods: (sel.kind === 'rods' ? sel.rods : memory?.lastRods ?? []).filter(id => choosable.has(id)),
             person: (sel.kind === 'ancestors' || sel.kind === 'descendants' ? real(sel.person) : sel.kind === 'gift' ? real(sel.personId) : null) ?? focus,
             gens,
@@ -1083,6 +1154,8 @@ export const bookUiMethods = uiModule({
             ancGens: sel.kind === 'ancestors' && sel.generations != null ? sel.generations : ANC_GENS_DEFAULT,
             giftDepth: sel.kind === 'gift' ? sel.depth : GIFT_DEFAULT_DEPTH,
             personsBook,
+            house: sel.kind === 'house' ? { place: sel.place, house: sel.house } : null,
+            hasHouse,
             moved: movedToTree,
             opts,
             presets: initialPresetState(opts, memory),
@@ -1172,7 +1245,7 @@ export const bookUiMethods = uiModule({
                 st.output = out;
                 st.sub = null;
                 st.moved = out === 'book' && st.kind === 'persons' && !st.personsBook;
-                if (st.moved) st.kind = 'tree';
+                if (st.moved || (out === 'pages' && st.kind === 'house')) st.kind = 'tree';
                 st.phase = 'options';
                 st.file = null;
                 renderOptions(st);
@@ -1242,6 +1315,7 @@ export const bookUiMethods = uiModule({
                 return;
             }
             if (t.closest('.book-person-btn')) { this.openBookPersonPicker(); return; }
+            if (t.closest('.book-house-btn')) { this.openBookHousePicker(); return; }
             const anc = t.closest<HTMLElement>('[data-anc-gen]');
             if (anc) {
                 const v = anc.dataset.ancGen === 'all' ? 'all' as const : Number(anc.dataset.ancGen);
@@ -1350,6 +1424,46 @@ export const bookUiMethods = uiModule({
             onPick: (id) => {
                 if (!st) return;
                 st.person = id;
+                changed(st);
+                button.focus();
+            },
+        });
+    },
+
+    /** The house of a book of a house (spec 030 §8): its search, houses with history first, then the others. */
+    openBookHousePicker(): void {
+        const s = st;
+        const overlay = document.getElementById('book-modal');
+        const button = overlay?.querySelector<HTMLElement>('.book-house-btn');
+        if (!s || !overlay || !button) return;
+        if (closePicker) { closePicker(); return; }
+        const D = strings.book.dlg;
+        const H = strings.houses;
+        const houses = housesOf(s);
+        const texts = new Map(houses.map(h => [h.id, houseSearchText(h, s.data)]));
+        const row = (h: TreeHouse): SearchPopoverRow => ({
+            id: h.id,
+            name: houseTitle(h),
+            meta: [h.name ?? '', h.period ? (h.period.from === h.period.to ? String(h.period.from) : `${h.period.from}–${h.period.to}`) : '',
+                h.surnames.join(' → ')].filter(Boolean).join(' · '),
+            count: H.persons(h.persons),
+        });
+        const current = chosenHouse(s);
+        closePicker = openSearchPopover({
+            host: overlay, anchor: button, selectedId: current?.id ?? null,
+            labels: { search: H.searchPh, list: D.chooseHouse, noMatch: strings.treeOverview.noMatch },
+            groups: (q) => {
+                const found = houses.filter(h => houseMatches(h, q, texts.get(h.id)));
+                return [
+                    { head: D.housesHistory, rows: found.filter(h => h.overThreshold).slice(0, HOUSE_PICK_LIMIT).map(row) },
+                    { head: D.housesOther, rows: found.filter(h => !h.overThreshold).slice(0, HOUSE_PICK_LIMIT).map(row) },
+                ];
+            },
+            onClose: () => { closePicker = null; },
+            onPick: (id) => {
+                const h = houses.find(x => x.id === id);
+                if (!st || !h) return;
+                st.house = { place: h.ref.town, house: h.text };
                 changed(st);
                 button.focus();
             },

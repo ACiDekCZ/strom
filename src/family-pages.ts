@@ -20,6 +20,7 @@ import { yearOf } from './dates.js';
 import { letterAtStart } from './index-letter.js';
 import { placeAliasMap, variantGroupKey } from './place-groups.js';
 import { placeKey } from './places.js';
+import { findHouse, houseNamedTitle } from './houses.js';
 import { shownNameOrEmpty, shownNameParts } from './person-name.js';
 import { feminineForm, isGapOnlyName } from './surnames.js';
 export { isGapOnlyName };
@@ -372,6 +373,12 @@ function nameOf(tree: StromData, id: PersonId): string {
     return p ? shownNameOrEmpty(p) || '?' : '?';
 }
 
+/** A house's title in the (protected) tree: "Bělokamen čp. 16 · U Prouzalů" (spec 030 §8). */
+function autoHouseTitle(tree: StromData, spec: { place: string; house: string }): string {
+    const house = findHouse(tree, spec.place, spec.house);
+    return house ? houseNamedTitle(house) : `${spec.place} ${spec.house}`.trim();
+}
+
 /** "Fíšek Josef": a person's sort key in the search and the index of people (plain text). */
 export function surnameFirst(p: Person): string {
     const parts = shownNameParts(p);
@@ -524,9 +531,11 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     } else if (spec.kind === 'descendants') {
         const name = nameOf(tree, spec.person);
         intro = { slug: uniqueSlug(`potomci-${asciiSlug(name)}`, used), kind: 'branch', id: spec.person, title: S.book.titleDescendants(name), crumbs: [] };
-    } else if (spec.kind === 'persons' || spec.kind === 'gift') {
-        // Chosen people (1102 §4.2): their introduction groups them by line; a person's family tree (spec 093 §10) the same, named after the person.
-        const title = spec.kind === 'gift' ? S.book.titleGift(nameOf(tree, spec.personId)) : F.selPersons;
+    } else if (spec.kind === 'persons' || spec.kind === 'gift' || spec.kind === 'house') {
+        // Chosen people (1102 §4.2): their introduction groups them by line; a person's family tree (spec 093 §10) the same, named after the person;
+        // a house's family (spec 030 §8, the book's pages) after the house.
+        const title = spec.kind === 'gift' ? S.book.titleGift(nameOf(tree, spec.personId))
+            : spec.kind === 'house' ? autoHouseTitle(tree, spec) : F.selPersons;
         intro = { slug: uniqueSlug(PAGE_SET_HUB_SLUG, used), kind: 'persons', title, crumbs: [] };
     } else if (whole) {
         intro = { slug: uniqueSlug(PAGE_SET_HUB_SLUG, used), kind: 'tree', title: ctx.treeName?.trim() || S.book.title, crumbs: [] };
@@ -849,6 +858,7 @@ export function pageSetFileName(set: PageSet): string {
             stem = set.protectedTree.living.has(set.spec.person) ? F.fileStem[set.spec.kind] : fileWords(intro?.title ?? '');
             break;
         case 'persons':
+        case 'house':
             stem = F.fileStem.persons;
             break;
         case 'gift':

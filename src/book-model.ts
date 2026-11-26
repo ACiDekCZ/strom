@@ -17,7 +17,9 @@ export type BookSelectionSpec =
     /** Chosen people (linked pages only, 1102 §4.1): families only where both partners are chosen. */
     | { kind: 'persons'; ids: PersonId[] }
     /** A person's family tree (spec 093 §10): the gift's cut of the person — told as chosen people. */
-    | { kind: 'gift'; personId: PersonId; depth: GiftDepth; branches?: Record<PersonId, boolean> };
+    | { kind: 'gift'; personId: PersonId; depth: GiftDepth; branches?: Record<PersonId, boolean> }
+    /** A house (spec 030 §8): the town and the house as the tree writes them — the house's family across generations. */
+    | { kind: 'house'; place: string; house: string };
 
 /** One chapter: a family (a union) of the line. */
 export interface BookChapter {
@@ -87,6 +89,23 @@ function giftLevels(data: StromData, from: PersonId, members: ReadonlySet<Person
     return level;
 }
 
+/** The generation of each person of a house (spec 030 §8): 0 without a parent of the house, else one below the parent's. */
+function houseLevels(data: StromData, ordered: readonly PersonId[], members: ReadonlySet<PersonId>): Map<PersonId, number> {
+    const level = new Map<PersonId, number>();
+    const visit = (id: PersonId, guard: Set<PersonId>): number => {
+        const known = level.get(id);
+        if (known !== undefined) return known;
+        if (guard.has(id)) return 0;
+        guard.add(id);
+        const parents = (data.persons[id]?.parentIds ?? []).filter(p => members.has(p));
+        const l = parents.length ? Math.max(...parents.map(p => visit(p, guard))) + 1 : 0;
+        level.set(id, l);
+        return l;
+    };
+    for (const id of ordered) visit(id, new Set());
+    return level;
+}
+
 /** The lineage module's selection for the book's choice (a person's family tree: the gift's cut, its one evaluation). */
 export function lineageSpec(spec: BookSelectionSpec, index: LineageIndex): SelectionSpec {
     switch (spec.kind) {
@@ -94,6 +113,7 @@ export function lineageSpec(spec: BookSelectionSpec, index: LineageIndex): Selec
         case 'rods': return { kind: 'rods', rodIds: spec.rods };
         case 'persons': return { kind: 'persons', personIds: spec.ids };
         case 'gift': return { kind: 'persons', personIds: [...giftCutIds(index, { recipients: [spec.personId], depth: spec.depth, branches: spec.branches ?? {} })] };
+        case 'house': return { kind: 'house', place: spec.place, house: spec.house };
         default: return { kind: spec.kind, personId: spec.person, ...(typeof spec.generations === 'number' ? { generations: spec.generations } : {}) };
     }
 }
@@ -173,11 +193,12 @@ export function buildBookModel(data: StromData, spec: BookSelectionSpec, prebuil
             const toldIds = new Set(told.map(r => r.id));
             smallRods = otherFamilyRods(index).filter(r => !toldIds.has(r.id) && r.realMemberCount > 0);
         }
-    } else if (spec.kind === 'persons' || spec.kind === 'gift') {
-        // Chosen people (a person's family tree too): the families of two chosen partners, oldest first.
+    } else if (spec.kind === 'persons' || spec.kind === 'gift' || spec.kind === 'house') {
+        // Chosen people (a person's family tree and a house too): the families of two chosen partners, oldest first.
         const members = new Set(sel.memberIds);
-        // A person's family tree counts its generations from the oldest ancestors (spec 093 §10).
-        const level = spec.kind === 'gift' ? giftLevels(data, spec.personId, members) : null;
+        // A person's family tree counts its generations from the oldest ancestors (spec 093 §10), a house from its oldest people.
+        const level = spec.kind === 'gift' ? giftLevels(data, spec.personId, members)
+            : spec.kind === 'house' ? houseLevels(data, sel.memberIds, members) : null;
         const top = level ? Math.min(0, ...level.values()) : 0;
         for (const uid of sel.familyIds) {
             const m = memberOf(uid, id => members.has(id));
@@ -224,7 +245,7 @@ export function buildBookModel(data: StromData, spec: BookSelectionSpec, prebuil
         }
     }
     for (const g of groups) for (const id of g.rod.memberIds) if (data.persons[id]) personIds.add(id);
-    if (spec.kind === 'ancestors' || spec.kind === 'descendants' || spec.kind === 'persons' || spec.kind === 'gift') for (const id of sel.memberIds) personIds.add(id);
+    if (spec.kind !== 'tree' && spec.kind !== 'rods') for (const id of sel.memberIds) personIds.add(id);
     const ownChapter = new Map<PersonId, number>([...ownChapters].map(([id, list]) => [id, list[0]]));
 
     return {

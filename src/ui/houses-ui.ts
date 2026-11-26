@@ -15,7 +15,7 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
 import type { HouseId, Person, PersonId, StromData } from '../types.js';
 import {
-    collectHouses, houseFacts, houseInteresting, houseTownKey, withResearchNumbers,
+    collectHouses, houseFacts, houseInteresting, houseTitle, houseTownKey, withResearchNumbers,
     type HouseFact, type HouseNumber, type ResearchHouseNumber, type TreeHouse,
 } from '../houses.js';
 import {
@@ -83,7 +83,7 @@ function freshState(parent: string | null): HousesWindowState {
 
 /** "Bělokamen čp. 16" for the change log and the dialogs' subtitles. */
 export function houseLabel(h: TreeHouse): string {
-    return `${h.ref.town} ${h.text}`;
+    return houseTitle(h);
 }
 
 /** A number as "formerly" shows it beside the house's own: "9" of "čp. 9", a street whole. */

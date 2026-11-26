@@ -29271,6 +29271,11 @@
         .tov-pop-name { font-size: 14px; font-weight: 500; }
         .tov-pop-meta { font-size: 12px; color: var(--text-faint); }
         .tov-pop-none { padding: 8px 10px; font-size: 13px; color: var(--text-light); }
+        /* Groups and a count at the row's end (the family book's house, spec 030 §8). */
+        .tov-pop-head { padding: 10px 10px 3px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent-text); }
+        .tov-pop-row--count { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+        .tov-pop-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .tov-pop-count { flex: none; font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
 
         /* ── Family book dialog (1031 §4): 960 × min(860, 100vh − 48); options | 340 px preview panel ── */
         #book-modal { --book-side-bg: #ebe5d9; }
@@ -29307,7 +29312,7 @@
         #book-modal .book-sec-h label { font: inherit; color: inherit; }
         #book-modal .book-hint { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         /* The switch to the pages moved the whole tree to a lineage: said once, gone at the next change (026 §9.8). */
-        /* What goes in the book: four cards 2 × 2 and the "House · later" placeholder */
+        /* What goes in the book: the kinds as cards, two a row */
         #book-modal .book-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
         /* A kind is a .sel-opt tile (src/ui/sel-css.ts); in the phone's list a row (fill and a line under the chosen one). */
         #book-modal .book-kind {
@@ -29317,8 +29322,6 @@
         #book-modal .book-kind-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
         #book-modal .book-kind-t { font-size: 14.5px; font-weight: 500; color: var(--text); }
         #book-modal .book-kind-h { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
-        #book-modal .book-kind--house { grid-column: 1 / -1; border: 1px dashed var(--border); border-radius: var(--r-md); background: none; cursor: default; padding: 8px 14px; opacity: .8; }
-        #book-modal .book-kind--house .book-kind-h { color: var(--text-faint); }
         #book-modal .book-kind-sum { display: none; }
         #book-modal .book-sel { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
         #book-modal .book-sel[hidden] { display: none; }
@@ -29333,11 +29336,14 @@
         #book-modal .book-sel-rods > .book-hint { margin: 6px 14px 0; }
         #book-modal .book-person-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         #book-modal .book-person-l { font-size: 13.5px; color: var(--text-light); }
-        #book-modal .book-person-btn {
+        #book-modal .book-person-btn, #book-modal .book-house-btn {
             display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 36px; padding: 0 12px; border: 1px solid var(--border);
             border-radius: 8px; background: var(--card-bg-2); color: var(--text); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
         }
-        #book-modal .book-person-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #book-modal .book-person-name, #book-modal .book-house-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* A house (spec 030 §8): its name after the farm muted beside the number. */
+        #book-modal .book-house-alias { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 400; color: var(--text-light); }
+        #book-modal .book-house-alias[hidden] { display: none; }
         #book-modal .book-caret { font-size: 11px; color: var(--text-light); }
         #book-modal .book-gens { display: inline-flex; align-items: center; gap: 6px; }
         #book-modal .book-step {
@@ -29449,7 +29455,6 @@
             #book-modal .book-kind + .book-kind { border-top: 1px solid var(--divider); }
             #book-modal .book-kind input { margin: 0; }
             #book-modal .book-kind-h { display: none; }
-            #book-modal .book-kind--house { display: none; }
             #book-modal .book-kind.is-on .book-kind-sum { display: inline-flex; }
             #book-modal .book-kind-sum, #book-modal .book-sum-row {
                 align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--text-light); font: inherit; font-size: 14px; min-height: 44px; cursor: pointer; min-width: 0;
@@ -29487,7 +29492,7 @@
             #book-modal .book-detail-line { display: block; }
             #book-modal .book-detail-line .book-hint { margin-top: 10px; }
             #book-modal .book-step { width: 44px; height: 44px; }
-            #book-modal .book-person-btn { min-height: 44px; }
+            #book-modal .book-person-btn, #book-modal .book-house-btn { min-height: 44px; }
             #book-modal .book-title-input { height: 48px; font-size: 16px; }
         }
         /* A phone held sideways: rows in two columns, the footer on the right */
@@ -29518,7 +29523,7 @@
             #book-modal .book-sel-persons .ppm-chip-x { width: 44px; height: 44px; margin: -8px -2px -8px 0; }
             #book-modal .book-rod-row, #book-modal .book-part, #book-modal .book-radio { min-height: 44px; }
             #book-modal .book-step { width: 44px; height: 44px; }
-            #book-modal .book-person-btn { min-height: 44px; }
+            #book-modal .book-person-btn, #book-modal .book-house-btn { min-height: 44px; }
             #book-modal .book-switch { width: 44px; height: 44px; }
             #book-modal .close-btn { width: 44px; height: 44px; }
         }
@@ -29820,6 +29825,7 @@
             .tov-close { width: 44px; height: 44px; }
             .tov-root-btn, .tov-btn, .tov-inactive .tov-open-tree, .tov-btn-primary, .tov-foot .secondary { min-height: 44px; }
             .tov-pop-row { min-height: 44px; justify-content: center; }
+            .tov-pop-row--count { justify-content: space-between; }
             .tov-pop-search { height: 44px; }
             .modal.tov .tov-link { padding: 10px 0; }
         }

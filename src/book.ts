@@ -336,8 +336,9 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     if (parts.index) back.push(`<section class="book-sheet book-back book-index-page" id="book-index">${indexHtml(ctx)}</section>`);
 
     // ── The front: the title page and the contents ──
-    const titleData = (opts.selection.kind === 'ancestors' || opts.selection.kind === 'descendants')
-        && living.has(opts.selection.person) && opts.privacy !== 'full' ? tree : data;
+    // A house's name after the farm stays out under privacy where people of the last ~100 years lived (spec 030 §10).
+    const titleData = ((opts.selection.kind === 'ancestors' || opts.selection.kind === 'descendants')
+        && living.has(opts.selection.person) || opts.selection.kind === 'house') && opts.privacy !== 'full' ? tree : data;
     const title = opts.title?.trim()
         || autoBookTitle(titleData, opts.selection, lang, { ...(titleData === data ? { index } : {}), ...(env.treeName ? { treeName: env.treeName } : {}) });
     const period = protectedPeriod(ctx);

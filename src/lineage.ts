@@ -58,6 +58,7 @@ import {
 } from './surnames.js';
 import { parseFlexDate, yearOf } from './dates.js';
 import { placeKey } from './places.js';
+import { findHouse } from './houses.js';
 import { marriagesLatestFirst } from './marriage-order.js';
 
 /** A lineage's id: the id of the person at the top of its line. */
@@ -1448,16 +1449,18 @@ export function previewOverride(data: StromData, change: LineageChange, beforeIn
  * `generations` limits the depth from the chosen person (1 = parents or
  * children only); missing = no limit.
  *
- * Extension point (P3, spec 028 Q4): `{ kind: 'house'; place: string; house:
- * string }` — the people with a record at that house (obec + čp.), across
- * lineages; add it here and in `selection` once the house key exists.
+ * A house (spec 030 §8, P3 spec 028 Q4): `place` is the town, `house` the
+ * house as the tree writes it (findHouse) — the people with a record at the
+ * house across lineages (the children born there among them), with their
+ * spouses and their families.
  */
 export type SelectionSpec =
     | { kind: 'tree' }
     | { kind: 'rods'; rodIds: RodId[] }
     | { kind: 'ancestors'; personId: PersonId; generations?: number }
     | { kind: 'descendants'; personId: PersonId; generations?: number }
-    | { kind: 'persons'; personIds: PersonId[] };
+    | { kind: 'persons'; personIds: PersonId[] }
+    | { kind: 'house'; place: string; house: string };
 
 /** The people and families of one output. */
 export interface Selection {
@@ -1656,6 +1659,14 @@ export function selection(source: StromData | LineageIndex, spec: SelectionSpec)
                 return chosen.has(u.person1Id) && chosen.has(u.person2Id);
             });
             return makeSelection(data, memberIds, familyIds, []);
+        }
+        case 'house': {
+            // The house's family across generations (spec 030 §8): everyone with a record there (born,
+            // married, died, lived there), by birth; the spouses who married in beside them; their families.
+            const house = findHouse(data, spec.place, spec.house);
+            if (!house) return makeSelection(data, [], [], []);
+            const memberIds = sortByBirth(data, house.personIds.filter(id => data.persons[id] && !data.persons[id].isPlaceholder));
+            return makeSelection(data, memberIds, unionsOfMembers(data, memberIds));
         }
         default: {
             const never: never = spec;

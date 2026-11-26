@@ -225,6 +225,7 @@ function selectionTreeTarget(spec: BookSelectionSpec): string {
     if (spec.kind === 'tree') return '';
     if (spec.kind === 'persons') return spec.ids.length ? personTreeTarget(spec.ids[0]) : '';
     if (spec.kind === 'gift') return personTreeTarget(spec.personId);
+    if (spec.kind === 'house') return '';
     return personTreeTarget(spec.person);
 }
 

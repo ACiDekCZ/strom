@@ -13,6 +13,7 @@ import { yearOf } from './dates.js';
 import { shownNameOrEmpty } from './person-name.js';
 import { LineageIndex, buildLineages, otherFamilyRods, rodLabels, selection } from './lineage.js';
 import { BookSelectionSpec, buildBookModel, chapterRods, lineageSpec } from './book-model.js';
+import { findHouse, houseNamedTitle } from './houses.js';
 
 export type { BookSelectionSpec } from './book-model.js';
 
@@ -131,7 +132,8 @@ function personName(data: StromData, id: PersonId): string {
 
 /**
  * The automatic title (§4.6): the tree's name / "Rod {label}" / "Rody {A}, {B}"
- * / "Předci: {name}" / "Potomci: {name}" in the book's language.
+ * / "Předci: {name}" / "Potomci: {name}" in the book's language; a house by its
+ * town, number and name ("Bělokamen čp. 16 · U Prouzalů").
  */
 export function autoBookTitle(data: StromData, spec: BookSelectionSpec, lang: BookLang, env: BookEnv & { treeName?: string } = {}): string {
     const B = getStringsForLang(lang).book;
@@ -147,6 +149,11 @@ export function autoBookTitle(data: StromData, spec: BookSelectionSpec, lang: Bo
         case 'descendants': return B.titleDescendants(personName(data, spec.person));
         case 'persons': return getStringsForLang(lang).familyPages.selPersons;
         case 'gift': return B.titleGift(personName(data, spec.personId));
+        case 'house': {
+            // The town, the house and its name after the farm (spec 030 §8): "Bělokamen čp. 16 · U Prouzalů".
+            const house = findHouse(data, spec.place, spec.house);
+            return house ? houseNamedTitle(house) : `${spec.place} ${spec.house}`.trim() || B.title;
+        }
     }
 }
 

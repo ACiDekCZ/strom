@@ -459,6 +459,30 @@ export function collectHouses(data: StromData): TreeHouse[] {
     return out.sort((a, b) => (a.townKey < b.townKey ? -1 : a.townKey > b.townKey ? 1 : 0) || compareHouses(a.text, b.text));
 }
 
+/** "Bělokamen čp. 16": the town and the house as the tree writes it. */
+export function houseTitle(h: Pick<TreeHouse, 'ref' | 'text'>): string {
+    return `${h.ref.town} ${h.text}`;
+}
+
+/** "Bělokamen čp. 16 · U Prouzalů": the house and its name after the farm, when it has one (a book's title). */
+export function houseNamedTitle(h: Pick<TreeHouse, 'ref' | 'text' | 'name'>): string {
+    return h.name ? `${houseTitle(h)} · ${h.name}` : houseTitle(h);
+}
+
+/**
+ * The house a selection names by its town and house (a book of a house, spec
+ * 030 §8), or null: the house of that key, else the house a number of that
+ * town was joined into.
+ */
+export function findHouse(data: StromData, place: string, house: string, houses: readonly TreeHouse[] = collectHouses(data)): TreeHouse | null {
+    const id = houseIdOf(place, house);
+    const exact = houses.find(h => h.id === id);
+    if (exact) return exact;
+    const town = placeKey(place);
+    const key = houseKey(house);
+    return houses.find(h => h.townKey === town && h.numbers.some(n => houseKey(n.house) === key)) ?? null;
+}
+
 /**
  * The facts of a house as its rows (year, event, person): one row per person
  * and fact, by year (undated last). `limit` keeps the first ones.
