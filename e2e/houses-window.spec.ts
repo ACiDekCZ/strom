@@ -148,6 +148,18 @@ test.describe('the Houses window', () => {
         await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('radhost');
     });
 
+    test('a long name after the farm shows whole in two lines of the number\'s column', async ({ page }) => {
+        await openApp(page);
+        await seedVillages(page);
+        await page.evaluate(() => window.Strom.DataManager.setHouseUserData('belokamen|16' as never,
+            { name: 'U Starého Prouzala pod Lesem', merged: ['belokamen|9' as never] }, 'čp. 16'));
+        await page.evaluate(() => window.Strom.UI.showHousesWindow());
+        const hn = row(page, 'belokamen|16').locator('.house-no .hn');
+        await expect(hn).toHaveText('U Starého Prouzala pod Lesem');
+        const fit = await hn.evaluate(el => ({ cut: el.scrollHeight > el.clientHeight + 1, lines: Math.round(el.clientHeight / parseFloat(getComputedStyle(el).lineHeight)) }));
+        expect(fit).toEqual({ cut: false, lines: 2 });
+    });
+
     test('"Houses in this town ›" in the Places dialog opens the window on that town and Close goes back', async ({ page }) => {
         await openApp(page);
         await seedVillages(page);
@@ -227,5 +239,22 @@ test.describe('the Houses window on a phone', () => {
         const terms = (await win(page).locator('#houses-terms').boundingBox())!;
         expect(terms.x).toBeGreaterThanOrEqual(0);
         expect(terms.x + terms.width).toBeLessThanOrEqual(390);
+    });
+
+    test('a long name of a married-in keeps "married in" on the tag\'s one line; the search has one ring', async ({ page }) => {
+        await openApp(page);
+        await seedVillages(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            dm.updatePerson('radegunda' as never, { lastName: 'Kvitelková-Prouzalovská-Trnovcová' } as never);
+        });
+        await page.evaluate(() => window.Strom.UI.showHousesWindow());
+        const tags = row(page, 'belokamen|16').locator('.house-tag');
+        await expect(tags.first()).toContainText('Kvitelková-Prouzalovská');
+        // The name shortens, the words before it do not wrap.
+        for (const tag of await tags.all()) expect((await tag.boundingBox())!.height).toBeLessThan(26);
+        // The field's frame is the ring; the input inside draws no halo of its own.
+        await win(page).locator('#houses-filter').focus();
+        expect(await win(page).locator('#houses-filter').evaluate(el => getComputedStyle(el).boxShadow)).toBe('none');
     });
 });

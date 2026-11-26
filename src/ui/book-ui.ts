@@ -267,6 +267,14 @@ function defaultHouse(s: DialogState): { place: string; house: string } | null {
 }
 
 /** "The house's family across generations: 23 people from 1781–1934, …" for the chosen house. */
+/**
+ * A house's title as markup: the town and the number in their own spans, so a narrow place
+ * shortens the town and never the number ("Horní Bělok… čp. 16"); its text is houseTitle's.
+ */
+function houseTitleHtml(house: TreeHouse): string {
+    return `<span class="book-ht">${esc(house.ref.town)}</span> <span class="book-hn">${esc(house.text)}</span>`;
+}
+
 function houseScopeText(s: DialogState, house: TreeHouse): string {
     const key = house.id;
     if (s.houseScope?.key === key) return s.houseScope.text;
@@ -495,7 +503,8 @@ function sync(s: DialogState): void {
     if (selHouse) {
         selHouse.hidden = s.kind !== 'house';
         if (s.kind === 'house') {
-            setText(modal, '.book-house-name', house ? houseTitle(house) : D.chooseHouse);
+            const name = modal.querySelector<HTMLElement>('.book-house-name');
+            if (name) name.innerHTML = house ? houseTitleHtml(house) : esc(D.chooseHouse);
             const alias = modal.querySelector<HTMLElement>('.book-house-alias');
             if (alias) { alias.hidden = !house?.name; setText(modal, '.book-house-alias', house?.name ?? ''); }
             setText(modal, '.book-house-scope', house ? houseScopeText(s, house) : '');
@@ -563,7 +572,9 @@ function sync(s: DialogState): void {
         : (s.person ? shownName(s.data.persons[s.person]) : D.choose);
     modal.querySelectorAll<HTMLElement>('.book-kind[data-kind]').forEach(k => {
         const v = k.querySelector<HTMLElement>('.book-sum-v');
-        if (v) v.textContent = k.dataset.kind === s.kind ? selSum : '';
+        if (!v) return;
+        if (k.dataset.kind === s.kind && s.kind === 'house' && house) v.innerHTML = houseTitleHtml(house);
+        else v.textContent = k.dataset.kind === s.kind ? selSum : '';
     });
 
     if (pages) setText(modal, '.book-preset-hint', '');

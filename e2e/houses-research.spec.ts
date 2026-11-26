@@ -129,6 +129,18 @@ test.describe('Houses: the research\'s state', () => {
         await expect(page.locator('#research-overview .research-overview__waiting-item[data-id="T0042"]')).toBeVisible();
     });
 
+    test('a narrow window: a long state wraps in its badge; the number stays on one line and ⋯ at the row\'s right', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await setup(page, { houses: fakeHouses([row({ state: 'queued', work: 'takeover' })]) });
+        await openHouses(page);
+        await expect(side(page).locator('.hs[data-state="takeover"]')).toBeVisible();
+        const no = (await houseRow(page).locator('.house-no b').boundingBox())!;
+        expect(no.height).toBeLessThan(26);
+        const more = (await houseRow(page).locator('.house-more-btn').boundingBox())!;
+        const r = (await houseRow(page).boundingBox())!;
+        expect(Math.abs(more.x + more.width - (r.x + r.width))).toBeLessThan(2);
+    });
+
     test('a house the research does not list shows nothing; "none" shows "not researched"', async ({ page }) => {
         const { bridge, houses } = await setup(page, { houses: fakeHouses([]) });
         await openHouses(page);
@@ -176,6 +188,10 @@ test.describe('Houses: material of a house', () => {
         await openHouses(page);
         await openAttach(page);
         await expect(material(page).locator('.house-sub-sub')).toHaveText('Bělokamen čp. 16');
+        // The consent: its hint stands beside the box, under its label (not under the box).
+        const box = (await material(page).locator('.house-witness-consent').boundingBox())!;
+        const hint = (await material(page).locator('.house-consent .sub').boundingBox())!;
+        expect(hint.x).toBeGreaterThan(box.x + box.width);
         await expect(material(page).locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
         const go = material(page).getByRole('button', { name: 'Attach', exact: true });
         await expect(go).toBeDisabled();

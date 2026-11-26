@@ -193,4 +193,33 @@ test.describe('family book: a house on a phone', () => {
         await btn.click();
         await expect(page.locator('.tov-pop .tov-pop-row', { hasText: 'čp. 16' })).toBeVisible();
     });
+
+    test('a long town shortens, the number of the house stays whole; the name after the farm under it', async ({ page }) => {
+        await seedVillage(page);
+        await page.evaluate(async () => {
+            const S = window.Strom;
+            for (const p of Object.values(S.DataManager.getData().persons) as { id: string; birthPlace?: string; deathPlace?: string }[]) {
+                const town = (v?: string) => (v === 'Bělokamen' ? 'Horní Bělokamen nad Prouzalkou' : v);
+                S.DataManager.updatePerson(p.id as never, { birthPlace: town(p.birthPlace), deathPlace: town(p.deathPlace) } as never);
+            }
+            await S.TreeManager.flush();
+        });
+        const dialog = await openDialog(page);
+        const row = dialog.locator('.book-kind[data-kind="house"]');
+        await row.click();
+        const whole = async (el: Locator, within: Locator) => {
+            await expect(el).toHaveText('čp. 16');
+            const b = (await el.boundingBox())!;
+            const w = (await within.boundingBox())!;
+            expect(b.x + b.width).toBeLessThanOrEqual(w.x + w.width + 0.5);
+            expect(await el.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+        };
+        const sum = row.locator('.book-sum-v');
+        await expect(sum).toHaveText('Horní Bělokamen nad Prouzalkou čp. 16');
+        await whole(sum.locator('.book-hn'), sum);
+        await row.locator('.book-kind-sum').click();
+        const btn = dialog.locator('.book-house-btn');
+        await whole(btn.locator('.book-house-name .book-hn'), btn);
+        expect(await dialog.locator('.book-dlg').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+    });
 });
