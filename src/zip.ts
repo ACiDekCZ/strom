@@ -5,8 +5,10 @@
  * images are JPEG already (spec 026 §6.4) — or, written asynchronously,
  * deflated (method 8) by the browser's `CompressionStream('deflate-raw')`
  * where it pays (text; spec 093 §5): JPEG, PNG and archives stay stored, and
- * without `CompressionStream` everything is stored. No ZIP64: an archive
- * stays under 4 GB and 65 535 entries.
+ * without `CompressionStream` everything is stored. Past 4 GB (an entry,
+ * an offset, the archive) or 65 535 entries the values go into ZIP64 extra
+ * fields and the ZIP64 end record (a gift package of a large tree, 1127);
+ * a smaller archive is written as before, byte for byte.
  */
 
 export interface ZipEntry {
@@ -55,34 +57,65 @@ export type ZipMethod = 0 | 8;
 
 interface ZipFile { name: Uint8Array; size: number; csize: number; crc: number; offset: number; method: ZipMethod }
 
-/** A local or central header (30 or 46 bytes before the name). */
-function header(central: boolean, f: ZipFile, time: number, date: number): Uint8Array<ArrayBuffer> {
+/** A size or an offset that does not fit the 32-bit field: the field says 0xFFFFFFFF, the ZIP64 extra field holds it. */
+const MAX32 = 0xFFFFFFFF;
+
+function needs64(f: ZipFile, central: boolean, limit: number): boolean {
+    return f.size >= limit || f.csize >= limit || (central && f.offset >= limit);
+}
+
+/**
+ * The ZIP64 extended information extra field (0x0001) of an entry: in a
+ * local header both sizes; in the central one only the values too large for
+ * their field, in the order size, compressed size, offset. Empty when none is.
+ */
+function zip64Extra(f: ZipFile, central: boolean, limit: number): Uint8Array<ArrayBuffer> {
+    if (!needs64(f, central, limit)) return new Uint8Array(0);
+    const values = central
+        ? [f.size >= limit ? f.size : -1, f.csize >= limit ? f.csize : -1, f.offset >= limit ? f.offset : -1].filter(n => n >= 0)
+        : [f.size, f.csize];
+    const out = new Uint8Array(4 + 8 * values.length);
+    const v = new DataView(out.buffer);
+    v.setUint16(0, 0x0001, true);
+    v.setUint16(2, 8 * values.length, true);
+    values.forEach((n, i) => v.setBigUint64(4 + 8 * i, BigInt(n), true));
+    return out;
+}
+
+/** A local or central header (30 or 46 bytes before the name), and its extra field (ZIP64 when a value is too large). */
+function header(central: boolean, f: ZipFile, time: number, date: number, limit = MAX32): { head: Uint8Array<ArrayBuffer>; extra: Uint8Array<ArrayBuffer> } {
+    const extra = zip64Extra(f, central, limit);
+    const version = extra.length ? 45 : 20;
     const out = new Uint8Array(central ? 46 : 30);
     const v = new DataView(out.buffer);
     let at = 0;
     v.setUint32(at, central ? 0x02014B50 : 0x04034B50, true);
     at += 4;
-    if (central) { v.setUint16(at, 20, true); at += 2; }   // made by: 2.0, MS-DOS attributes
-    v.setUint16(at, 20, true);           // version needed: 2.0
+    if (central) { v.setUint16(at, version, true); at += 2; }   // made by: 2.0 (4.5 with ZIP64), MS-DOS attributes
+    v.setUint16(at, version, true);      // version needed: 2.0 (4.5 with ZIP64)
     v.setUint16(at + 2, 0x0800, true);   // UTF-8 names
     v.setUint16(at + 4, f.method, true); // STORE / DEFLATE
     v.setUint16(at + 6, time, true);
     v.setUint16(at + 8, date, true);
     v.setUint32(at + 10, f.crc, true);
-    v.setUint32(at + 14, f.csize, true);
-    v.setUint32(at + 18, f.size, true);
+    const big = !central && extra.length > 0;
+    v.setUint32(at + 14, big || f.csize >= limit ? MAX32 : f.csize, true);
+    v.setUint32(at + 18, big || f.size >= limit ? MAX32 : f.size, true);
     v.setUint16(at + 22, f.name.length, true);
-    v.setUint16(at + 24, 0, true);       // extra field
+    v.setUint16(at + 24, extra.length, true);   // extra field
     at += 26;
     if (central) {
         v.setUint16(at, 0, true);            // comment
         v.setUint16(at + 2, 0, true);        // disk
         v.setUint16(at + 4, 0, true);        // internal attributes
         v.setUint32(at + 6, 0, true);        // external attributes
-        v.setUint32(at + 10, f.offset, true);
+        v.setUint32(at + 10, f.offset >= limit ? MAX32 : f.offset, true);
     }
-    return out;
+    return { head: out, extra };
 }
+
+/** How many bytes are gathered into one Blob (the sink, a large deflated entry). */
+const FOLD_BYTES = 8 * 1024 * 1024;
 
 /** A part of the archive as it is written: bytes, or a stored entry's data as the Blob it already is. */
 export type ZipPart = Uint8Array<ArrayBuffer> | Blob;
@@ -134,19 +167,26 @@ async function* blobChunks(blob: Blob): AsyncGenerator<Uint8Array> {
  * Deflate (raw, as zip's method 8) the chunks while their CRC-32 is counted;
  * null when the browser cannot. The deflated bytes come as chunks too.
  */
-async function deflateChunks(chunks: AsyncIterable<Uint8Array>): Promise<{ out: Uint8Array<ArrayBuffer>[]; crc: number; size: number; csize: number } | null> {
+async function deflateChunks(chunks: AsyncIterable<Uint8Array>, fold = false): Promise<{ out: ZipPart[]; crc: number; size: number; csize: number } | null> {
     if (!canDeflate()) return null;
     const cs = new CompressionStream('deflate-raw');
-    const out: Uint8Array<ArrayBuffer>[] = [];
+    const out: ZipPart[] = [];
+    // `fold`: the deflated bytes gathered into a Blob every FOLD_BYTES (a large entry not held as arrays).
+    let run: Uint8Array<ArrayBuffer>[] = [];
+    let runBytes = 0;
     let csize = 0;
     const reading = (async () => {
         const reader = cs.readable.getReader();
         for (;;) {
             const r = await reader.read();
-            if (r.done) return;
-            out.push(r.value as Uint8Array<ArrayBuffer>);
+            if (r.done) break;
+            run.push(r.value as Uint8Array<ArrayBuffer>);
+            runBytes += r.value.length;
             csize += r.value.length;
+            if (fold && runBytes >= FOLD_BYTES) { out.push(new Blob(run)); run = []; runBytes = 0; }
         }
+        if (fold && run.length) out.push(new Blob(run));
+        else out.push(...run);
     })();
     const writer = cs.writable.getWriter();
     let crc = 0;
@@ -190,15 +230,18 @@ export class ZipWriter {
     private readonly out: (part: ZipPart) => void;
     /** Whether `out` takes a Blob as a part (else a stored Blob goes out read into arrays). */
     private readonly blobParts: boolean;
+    /** From this size or offset on the ZIP64 fields are written (4 GB; smaller only in tests). */
+    private readonly limit: number;
 
-    constructor(out: (part: Uint8Array<ArrayBuffer>) => void, when?: Date);
-    constructor(out: (part: ZipPart) => void, when: Date | undefined, opts: { blobParts: true });
+    constructor(out: (part: Uint8Array<ArrayBuffer>) => void, when?: Date, opts?: { zip64At?: number });
+    constructor(out: (part: ZipPart) => void, when: Date | undefined, opts: { blobParts: true; zip64At?: number });
     constructor(
         out: ((part: Uint8Array<ArrayBuffer>) => void) | ((part: ZipPart) => void),
-        when: Date = new Date(), opts?: { blobParts?: boolean },
+        when: Date = new Date(), opts?: { blobParts?: boolean; zip64At?: number },
     ) {
         this.out = out as (part: ZipPart) => void;
         this.blobParts = !!opts?.blobParts;
+        this.limit = Math.min(MAX32, opts?.zip64At ?? MAX32);
         ({ time: this.time, date: this.date } = dosDateTime(when));
     }
 
@@ -229,16 +272,42 @@ export class ZipWriter {
     finish(): void {
         const dirAt = this.at;
         for (const f of this.files) {
-            this.write(header(true, f, this.time, this.date));
+            const h = header(true, f, this.time, this.date, this.limit);
+            this.write(h.head);
             this.write(f.name as Uint8Array<ArrayBuffer>);
+            this.write(h.extra);
+        }
+        const count = this.files.length;
+        const dirSize = this.at - dirAt;
+        // Past 4 GB or 65 535 entries: the ZIP64 end record and its locator before the classic end record.
+        const zip64 = count > 0xFFFF || dirAt >= this.limit || dirSize >= this.limit;
+        if (zip64) {
+            const recAt = this.at;
+            const rec = new Uint8Array(56);
+            const r = new DataView(rec.buffer);
+            r.setUint32(0, 0x06064B50, true);
+            r.setBigUint64(4, 44n, true);           // the record's size after this field
+            r.setUint16(12, 45, true);              // made by 4.5
+            r.setUint16(14, 45, true);              // version needed 4.5
+            r.setBigUint64(24, BigInt(count), true);
+            r.setBigUint64(32, BigInt(count), true);
+            r.setBigUint64(40, BigInt(dirSize), true);
+            r.setBigUint64(48, BigInt(dirAt), true);
+            this.write(rec);
+            const loc = new Uint8Array(20);
+            const l = new DataView(loc.buffer);
+            l.setUint32(0, 0x07064B50, true);
+            l.setBigUint64(8, BigInt(recAt), true);
+            l.setUint32(16, 1, true);               // disks
+            this.write(loc);
         }
         const end = new Uint8Array(22);
         const v = new DataView(end.buffer);
         v.setUint32(0, 0x06054B50, true);
-        v.setUint16(8, this.files.length, true);
-        v.setUint16(10, this.files.length, true);
-        v.setUint32(12, this.at - dirAt, true);
-        v.setUint32(16, dirAt, true);
+        v.setUint16(8, zip64 ? 0xFFFF : count, true);
+        v.setUint16(10, zip64 ? 0xFFFF : count, true);
+        v.setUint32(12, zip64 ? MAX32 : dirSize, true);
+        v.setUint32(16, zip64 ? MAX32 : dirAt, true);
         this.write(end);
     }
 
@@ -252,7 +321,7 @@ export class ZipWriter {
         const deflate = compress === 'auto' && isCompressible(path) && canDeflate();
         if (data instanceof Blob) {
             if (deflate) {
-                const d = await deflateChunks(blobChunks(data));
+                const d = await deflateChunks(blobChunks(data), this.blobParts);
                 if (d && d.csize < d.size) return this.entry(path, { crc: d.crc, size: d.size, csize: d.csize, method: 8 }, d.out);
             }
             // Stored: read once for the CRC, then the Blob itself goes out (or its bytes, read again).
@@ -264,7 +333,7 @@ export class ZipWriter {
         }
         const bytes = (typeof data === 'string' ? this.enc.encode(data) : data) as Uint8Array<ArrayBuffer>;
         if (deflate && bytes.length > 0) {
-            const d = await deflateChunks((async function* () { yield bytes; })());
+            const d = await deflateChunks((async function* () { yield bytes; })(), this.blobParts);
             if (d && d.csize < d.size) return this.entry(path, { crc: d.crc, size: d.size, csize: d.csize, method: 8 }, d.out);
         }
         return this.entry(path, { crc: crc32(bytes), size: bytes.length, csize: bytes.length, method: 0 }, [bytes]);
@@ -273,8 +342,10 @@ export class ZipWriter {
     private entry(path: string, e: Omit<ZipFile, 'name' | 'offset'>, body: readonly ZipPart[]): ZipAdded {
         const f: ZipFile = { ...e, name: this.enc.encode(path), offset: this.at };
         this.files.push(f);
-        this.write(header(false, f, this.time, this.date));
+        const h = header(false, f, this.time, this.date, this.limit);
+        this.write(h.head);
         this.write(f.name as Uint8Array<ArrayBuffer>);
+        this.write(h.extra);
         for (const part of body) this.write(part);
         return { size: f.size, csize: f.csize, method: f.method };
     }
@@ -288,7 +359,7 @@ export class ZipWriter {
 }
 
 /** Bytes gathered into a Blob this often, so the parts of a large archive are not all held as arrays. */
-const SINK_FOLD_BYTES = 8 * 1024 * 1024;
+const SINK_FOLD_BYTES = FOLD_BYTES;
 
 /**
  * Where a ZipWriter writes to make a Blob: the parts folded into Blobs as

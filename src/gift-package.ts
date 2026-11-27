@@ -50,7 +50,9 @@ import { fanStyleFont, type FanColorMode, type FanStyle } from './fan-colors.js'
 import { fanMeasureFor } from './fan-labels.js';
 import { escapeXml, type PosterFooterMeta } from './export-image.js';
 import { exportToGedcom } from './ged-exporter.js';
-import { expandedData, hasPoolRefs } from './image-expand.js';
+import { exportGedcomBlobWithImages } from './ged-export-images.js';
+import { hasPoolRefs } from './image-expand.js';
+import { imageFileBytes, textBlobWithImages, treeWithPoolStandIns } from './image-standin.js';
 import { jsonBytesWithoutImages, treeImageChars } from './memory-limit.js';
 import { forEachImagePlace } from './image-intern.js';
 
@@ -251,8 +253,8 @@ export interface GiftFanOptions {
 export interface GiftPackageEnv {
     /** The app with these data embedded, as a Blob (AppExporter.buildFocusAppBlob); required for the app part. `cards` the detail its cards open with (K5.7). */
     app?: (data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string; cards: GiftCards }) => Promise<Blob>;
-    /** An SVG drawn to a PNG (svgToPngBlob); none or null: the fan only as SVG. */
-    png?: (svg: string, widthPx: number, heightPx: number) => Promise<Blob | null>;
+    /** An SVG (as a Blob, its images whole) drawn to a PNG (svgBlobToPngBlob); none or null: the fan only as SVG. */
+    png?: (svg: Blob, widthPx: number, heightPx: number) => Promise<Blob | null>;
     /** The cover page; default: buildGiftCover. */
     cover?: GiftCoverBuilder;
     /** The embedded @font-face rules of the pages, the book and the fan. */
@@ -262,7 +264,12 @@ export interface GiftPackageEnv {
     /** The pages' remembered choices (pagesChoicesFromMemory). */
     pages?: PagesChoices;
     fan?: GiftFanOptions;
-    /** The data with every image whole; default: the image pool's (expandedData) when the data hold references. */
+    /**
+     * The data with every image whole (tests: the package as the expanded tree makes it). Default: the
+     * pooled images are never expanded together (1127) — the app gets the references (its file reads them
+     * as it is written), the GEDCOM too, the pages, the book, the fan and the cover page are built with
+     * stand-ins (image-standin.ts) and each file gets its images put in a few at a time.
+     */
     expand?: (data: StromData) => Promise<StromData>;
     /** The pause between steps and pieces of work; default a macrotask (setTimeout 0). */
     pause?: () => Promise<void>;
@@ -428,7 +435,10 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
     let folder = '';
     const put = async (path: string, data: Uint8Array | string | Blob, part?: GiftPartKey): Promise<ZipAdded> => {
         checkAbort(signal);
-        const added = await writer.addAsync(`${folder}/${path}`, data);
+        // A text with stand-ins: a Blob with its images in place, read a few at a time.
+        const body = typeof data === 'string' && data.includes('STROMPOOL') ? await textBlobWithImages(data) : data;
+        checkAbort(signal);
+        const added = await writer.addAsync(`${folder}/${path}`, body);
         files.push({ path, bytes: added.size, zipBytes: added.csize });
         if (part) cover.push({ part, path, bytes: added.size });
         return added;
@@ -439,9 +449,11 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
         begin('cut');
         await hold();
         const whole = dataOf(input.data);
-        let data = giftProtectedData(input.data, settings.cut, settings.privacy, { photos: settings.photos, currentYear: now.getFullYear() });
-        if (env.expand) data = await env.expand(data);
-        else if (hasPoolRefs(data)) data = await expandedData(data);
+        // `withRefs`: the data with the pooled images' references (the app, the GEDCOM: their files read
+        // them as they are written); `data`: with a stand-in for each (the other parts' builders).
+        let withRefs = giftProtectedData(input.data, settings.cut, settings.privacy, { photos: settings.photos, currentYear: now.getFullYear() });
+        if (env.expand) withRefs = await env.expand(withRefs);
+        const data = hasPoolRefs(withRefs) ? await treeWithPoolStandIns(withRefs) : withRefs;
         checkAbort(signal);
         const recipients = settings.cut.recipients.filter(id => !!data.persons[id]);
         const people = recipients.map(id => ({ id, name: shownName(data.persons[id]) || shownName(whole.persons[id]) || '?' }));
@@ -459,7 +471,7 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
             if (!env.app) throw new Error('The gift package needs the app builder.');
             const message = giftMessage(settings.letter).trim();
             const signature = (settings.letter.signature ?? '').trim();
-            let blob: Blob | null = await env.app(data, {
+            let blob: Blob | null = await env.app(withRefs, {
                 treeName: input.treeName,
                 cards: settings.cards ?? 'detailed',
                 ...(signature ? { senderName: signature } : {}),
@@ -494,6 +506,7 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
                     const path = `${names.pages}/${e.path}`;
                     await put(path, e.data, e.path === 'index.html' ? 'pages' : undefined);
                 },
+                imageBytes: imageFileBytes,
             });
             end();
         }
@@ -546,11 +559,13 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
                     ...(env.fonts?.fan ? { fontCss: env.fonts.fan } : {}),
                 });
                 if (!poster) continue;
-                await put(`${f.stem}.svg`, poster.svg, 'fan');
+                // The SVG's file with its portraits whole: a Blob, drawn from it to the PNG as well.
+                const svg = await textBlobWithImages(poster.svg, 'image/svg+xml');
+                await put(`${f.stem}.svg`, svg, 'fan');
                 if (poster.model.desc.some(s => s.person)) cover[cover.length - 1].descendants = true;
                 if (env.png) {
                     await hold();
-                    const png = await env.png(poster.svg, poster.widthPx, poster.heightPx);
+                    const png = await env.png(svg, poster.widthPx, poster.heightPx);
                     if (png) await put(`${f.stem}.png`, png);
                 }
             }
@@ -561,7 +576,8 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
         if (parts.gedcom) {
             begin('gedcom');
             await hold();
-            const ged = exportToGedcom(data, input.treeName).content;
+            // From the references: the file reads its images a few at a time (ged-export-images.ts).
+            const ged = hasPoolRefs(withRefs) ? await exportGedcomBlobWithImages(withRefs, input.treeName) : exportToGedcom(withRefs, input.treeName).content;
             await put(names.gedcom, ged, 'gedcom');
             end();
         }

@@ -2078,6 +2078,8 @@ export async function buildPageSetFilesAsync(set: PageSet, opts: PageSetHtmlOpti
     pause?: () => Promise<void>;
     progress?: (done: number, total: number) => void;
     emit?: (entry: ZipEntry) => void | Promise<void>;
+    /** An image's bytes for its file (default: the data URL decoded); the gift package reads a stand-in's from the pool. */
+    imageBytes?: (src: string) => Promise<{ mime: string; bytes: Uint8Array } | null>;
 } = {}): Promise<ZipEntry[]> {
     const r = makeRender(set, 'file', opts);
     r.zip = true;
@@ -2103,7 +2105,7 @@ export async function buildPageSetFilesAsync(set: PageSet, opts: PageSetHtmlOpti
     // Last: every image of every page is in the registry by now.
     const files = new Map<number, string>();
     for (const e of set.images.entries()) {
-        const img = dataUrlBytes(e.src);
+        const img = opts.imageBytes ? await opts.imageBytes(e.src) : dataUrlBytes(e.src);
         if (!img) continue;
         const path = `${folders.images}/img-${e.n}.${IMAGE_EXT[img.mime] ?? 'bin'}`;
         files.set(e.n, path);

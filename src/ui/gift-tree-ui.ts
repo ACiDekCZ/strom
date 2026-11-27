@@ -53,7 +53,8 @@ import { openPersonPopover } from './person-popover.js';
 import { confirmMemoryForOutput } from './memory-limit-ui.js';
 import { barEl } from './prog-bar.js';
 import { spinEl } from './busy.js';
-import { svgToPngBlob } from './svg-png.js';
+import { svgBlobToPngBlob } from './svg-png.js';
+import { textBlobWithImages } from '../image-standin.js';
 import { FAN_STYLES, type FanStyle } from '../fan-colors.js';
 import type { FanShape } from '../fan-chart.js';
 import { fanPhotoPortrait } from './fan-view.js';
@@ -275,7 +276,7 @@ function giftPackageEnv(treeId: TreeId | null, settings: GiftSettings, onCover: 
         app: (data, { cards, ...o }) => AppExporter.buildFocusAppBlob(data, {
             ...o, view: giftCardsView(cards), ...(treeId ? { trackTreeId: treeId } : {}),
         }),
-        png: svgToPngBlob,
+        png: svgBlobToPngBlob,
         fonts: { pages: lineFonts, book: appFontFaceCss(POSTER_SERIF_FACES) + bookItalicFontCss(), fan: lineFonts },
         book,
         pages: pagesChoicesFromMemory(memory),
@@ -287,7 +288,9 @@ function giftPackageEnv(treeId: TreeId | null, settings: GiftSettings, onCover: 
         },
         cover: (data, info) => {
             const html = buildGiftCover(data, info);
+            // Shown after the making as the file has it: the recipients' portraits (stand-ins, image-standin.ts) put in.
             onCover(html);
+            if (html.includes('STROMPOOL')) void textBlobWithImages(html).then(b => b.text()).then(onCover, () => undefined);
             return html;
         },
     };

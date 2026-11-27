@@ -13,10 +13,10 @@
  */
 
 import { exportToGedcom, FILE_SLOT, gedcomFileLines, type GedcomExportOptions, type GedcomExportResult } from './ged-exporter.js';
-import { expandedData, poolRefIds, poolRefSnapshot } from './image-expand.js';
+import { expandedData, poolRefIds, poolRefSnapshot, withPoolRefsReplaced } from './image-expand.js';
 import { imageMetaOf } from './image-meta.js';
 import { ensureImageMeta, loadImageUrls } from './media-pool.js';
-import { poolIdOf } from './image-ref.js';
+import { poolIdOf, POOL_REF } from './image-ref.js';
 import type { StromData } from './types.js';
 
 /** exportToGedcom's result with its text in parts: `parts.join('')` is the content. */
@@ -44,23 +44,33 @@ function slotsOf(content: string): Slot[] | null {
     return out;
 }
 
-/** The parts with every slot filled, or null when an image is not readable now. */
-async function filled(content: string): Promise<string[] | null> {
+/**
+ * The parts with every slot filled, or null when an image is not readable now.
+ * `fold`: each read's parts gathered into one Blob at once (a large tree's
+ * images never held together); the strings as they are without it.
+ */
+async function filled(content: string): Promise<string[] | null>;
+async function filled(content: string, fold: true): Promise<Blob[] | null>;
+async function filled(content: string, fold = false): Promise<(string | Blob)[] | null> {
     const slots = slotsOf(content);
     if (!slots) return null;
-    const parts: string[] = [];
+    const parts: (string | Blob)[] = [];
     let from = 0;
     for (let i = 0; i < slots.length; i += IMAGES_PER_READ) {
         const group = slots.slice(i, i + IMAGES_PER_READ);
         const urls = await loadImageUrls([...new Set(group.map(s => s.id))]);
+        const out: string[] = [];
         for (const s of group) {
             const url = urls.get(s.id);
             if (!url) return null;
-            parts.push(content.slice(from, s.start), gedcomFileLines(s.level, url));
+            out.push(content.slice(from, s.start), gedcomFileLines(s.level, url));
             from = s.end;
         }
+        if (fold) parts.push(new Blob(out));
+        else parts.push(...out);
     }
-    parts.push(content.slice(from));
+    const last = content.slice(from);
+    parts.push(fold ? new Blob([last]) : last);
     return parts;
 }
 
@@ -90,4 +100,22 @@ export async function exportGedcomWithImages(data: StromData, treeName?: string,
 /** The GEDCOM's text (a send, a kept copy). */
 export function gedcomText(g: GedcomWithImages): string {
     return g.parts.length === 1 ? g.parts[0] : g.parts.join('');
+}
+
+/**
+ * exportGedcomWithImages as a file: a Blob of the text with every image in
+ * place, read a few at a time and put into the Blob at once (a large tree,
+ * 1127: its images never held together). An image not readable now: the
+ * export of the expanded tree, as there.
+ */
+export async function exportGedcomBlobWithImages(data: StromData, treeName?: string, options: GedcomExportOptions = {}): Promise<Blob> {
+    const ids = poolRefIds(data);
+    if (ids.size === 0) return new Blob([exportToGedcom(data, treeName, options).content]);
+    await ensureImageMeta(ids);
+    // An image the catalog has no entry for even now is not readable (not in the pool, locked): empty
+    // text, as the expanded tree has it — the rest is not read whole for it.
+    const tree = withPoolRefsReplaced(data, id => (imageMetaOf(id) ? POOL_REF + id : ''));
+    const parts = await filled(exportToGedcom(tree, treeName, options).content, true);
+    if (parts) return new Blob(parts);
+    return new Blob([exportToGedcom(await expandedData(tree), treeName, options).content]);
 }
