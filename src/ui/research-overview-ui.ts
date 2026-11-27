@@ -2312,7 +2312,7 @@ export const researchOverviewMethods = uiModule({
         const drawnAs = waitingDrawn();
         const li = el('li', 'research-overview__waiting-item');
         li.dataset.id = w.id;
-        // A growing branch is a suggestion: lit as new while it waits.
+        // A growing branch is a suggestion: marked fresh while it waits (no stripe since 1128; the "new" tag is its own).
         if (view.fresh.has(w.id) || w.kind === 'branch') li.classList.add('is-fresh');
         if (open) li.classList.add('is-open');
         const detailId = `ov-wait-${w.id.replace(/[^A-Za-z0-9_-]/g, '_')}`;

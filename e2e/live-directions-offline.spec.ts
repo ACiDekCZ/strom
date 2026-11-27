@@ -564,6 +564,8 @@ test.describe('work outside the directions through the bridge', () => {
         await expect(outToggle(page)).toHaveAttribute('aria-expanded', 'true');
         const item = overview(page).locator('.research-overview__waiting-item[data-id="W-B-P0031"]');
         await expect(item).toHaveClass(/is-fresh/);
+        // No stripe on the left (1128).
+        await expect(item.locator('.research-overview__waiting-row')).toHaveCSS('box-shadow', 'none');
         await expect(item.locator('.live-kind--decide')).toHaveText('suggestion');
         await expect(item.locator('.research-overview__waiting-what'))
             .toHaveText('suggestionBranch Alois Fíšek: 14 tasks outside the directions (6 new people). Near the direction Předci: Jan Fíšek.');

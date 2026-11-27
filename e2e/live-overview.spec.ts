@@ -2137,6 +2137,8 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await chip('images').click();
         await expect(chip('images')).not.toHaveClass(/has-new/);
         await expect(ov.locator('.research-overview__waiting-item.is-fresh')).toHaveText(/Uložit nový snímek/);
+        // Fresh, yet no stripe on the left (1128): the "new" tag carries it.
+        await expect(ov.locator('.research-overview__waiting-item.is-fresh > .research-overview__waiting-row')).toHaveCSS('box-shadow', 'none');
         await chip('all').click();
         await expect(ov.locator('.research-overview__waiting-group', { hasText: 'Archiv Vzorov' })).toHaveAttribute('aria-expanded', 'true');
         await expect(ov.locator('.research-overview__waiting-group', { hasText: 'Rodina' }).first()).toHaveAttribute('aria-expanded', 'false');

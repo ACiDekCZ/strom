@@ -26612,7 +26612,7 @@
         }
         @media (hover: hover) { .research-overview__waiting-row:hover { background: var(--hover-bg); } }
         .research-overview__waiting-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-        .research-overview__waiting-item.is-fresh > .research-overview__waiting-row { box-shadow: inset 3px 0 0 var(--warning); }
+        /* is-fresh in What waits draws nothing (1128): the "new" tag on the right carries the news. */
         .research-overview__waiting-what {
             font-size: 14px; overflow-wrap: anywhere;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -27568,7 +27568,6 @@
         @media (hover: hover) { .research-overview__knows-row:hover { text-decoration: underline; } }
         /* A research hypothesis in What waits (spec 074 §9): its choices in the row. */
         .hwr-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 4px; }
-        .hwr-item.is-fresh { box-shadow: inset 3px 0 0 var(--warning); }
         .hwr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
         .hwr-what { margin: 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
         .hwr-id { font-weight: 600; }
