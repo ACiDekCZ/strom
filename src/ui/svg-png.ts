@@ -6,7 +6,6 @@
  */
 
 import { posterPngScales } from '../export-image.js';
-import { dataUrlBytes } from '../zip.js';
 
 function svgDataUrl(svg: string): string {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -47,13 +46,6 @@ export async function svgToPngDataUrl(svg: string, widthPx: number, heightPx: nu
         if (url.startsWith('data:image/png')) return { dataUrl: url, scale: s };
     }
     return null;
-}
-
-/** The PNG as a Blob (the gift package's "Ancestor fan.png"); null as svgToPngDataUrl. */
-export async function svgToPngBlob(svg: string, widthPx: number, heightPx: number): Promise<Blob | null> {
-    const png = await svgToPngDataUrl(svg, widthPx, heightPx);
-    const bytes = png ? dataUrlBytes(png.dataUrl) : null;
-    return bytes ? new Blob([bytes.bytes as BlobPart], { type: 'image/png' }) : null;
 }
 
 /**
