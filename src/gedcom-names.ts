@@ -96,7 +96,7 @@ export function noName(given: string): boolean {
 export function notAName(given: string): boolean {
     const g = given.trim();
     if (!g) return false;
-    if (/^[(\[{].*[)\]}]$/su.test(g)) return true;
+    if (/^[(\[{][^()\[\]{}]*[)\]}]$/u.test(g)) return true;
     const words = foldText(g).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     return DESCRIPTION_SET.has(words) || NO_NAME_SET.has(words);
 }

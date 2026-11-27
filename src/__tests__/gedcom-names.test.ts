@@ -166,6 +166,33 @@ describe('a description in place of a name goes to the note', () => {
     });
 });
 
+describe('names with brackets (K055)', () => {
+    it('keeps brackets that are part of the given names as written', () => {
+        expect(readGedcomName('(Vincent) François (Paul) /SAUTET/')).toEqual({ firstName: '(Vincent) François (Paul)', lastName: 'SAUTET' });
+        expect(readGedcomName('Vincent François (Paul) /SAUTET/')).toEqual({ firstName: 'Vincent François (Paul)', lastName: 'SAUTET' });
+        expect(notAName('(Vincent) François (Paul)')).toBe(false);
+        expect(notAName('(a) (b)')).toBe(false);
+    });
+
+    it('still takes one bracketed group alone as a description', () => {
+        expect(readGedcomName('(dítě) /Novák/')).toEqual({ firstName: '?', lastName: 'Novák', description: '(dítě)' });
+        expect(readGedcomName('(mrtvě narozený) /Brdíšek/')).toEqual({ firstName: '?', lastName: 'Brdíšek', description: '(mrtvě narozený)' });
+        expect(readGedcomName('[syn] /Brdíšek/')).toEqual({ firstName: '?', lastName: 'Brdíšek', description: '[syn]' });
+        expect(readGedcomName('(Vincent) /SAUTET/')).toEqual({ firstName: '?', lastName: 'SAUTET', description: '(Vincent)' });
+        expect(notAName('{neznámý}')).toBe(true);
+    });
+
+    it('imports the person with the name and no note, and writes it back the same', () => {
+        const ged = ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+            '0 @I1@ INDI', '1 NAME (Vincent) François (Paul) /SAUTET/', '1 SEX M', '0 TRLR'].join('\n');
+        const [p] = people(importGed(ged));
+        expect(nameOf(p)).toBe('(Vincent) François (Paul) | SAUTET');
+        expect(p.notes).toBeUndefined();
+        const [back] = people(importGed(exportToGedcom(importGed(ged)).content));
+        expect(nameOf(back)).toBe('(Vincent) François (Paul) | SAUTET');
+    });
+});
+
 describe('import of a family tree file (T08)', () => {
     const ged = [
         '0 HEAD', '1 SOUR MYHERITAGE', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
