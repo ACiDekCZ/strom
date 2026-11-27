@@ -88,6 +88,33 @@ async function openOverview(page: Page): Promise<void> {
     await page.evaluate(() => window.Strom.UI.openResearchOverview());
     await expect(ov(page)).toBeVisible();
     await expect(sec(page)).toBeVisible();
+    await overviewStill(page);
+}
+
+/**
+ * The overview drawn for the last time before measuring. A moment after a poll the app draws it again (the sync
+ * state's refresh 1.5 s after the tree changed, the research's marks): on a loaded runner such a drawing fell
+ * between two measurements and one read a node it had taken away (a null box, a style of ""). The timers due are
+ * run at once, then nothing may draw the overview again for 300 ms.
+ */
+async function overviewStill(page: Page): Promise<void> {
+    await page.clock.fastForward(2000);
+    const draws = () => page.evaluate(() => {
+        const w = window as unknown as { __ovDraws?: number };
+        if (w.__ovDraws === undefined) {
+            w.__ovDraws = 0;
+            new MutationObserver(ms => { if (ms.some(m => (m.target as HTMLElement).id === 'research-overview')) w.__ovDraws!++; })
+                .observe(document.body, { childList: true, subtree: true });
+        }
+        return w.__ovDraws;
+    });
+    let seen = await draws();
+    let since = Date.now();
+    await expect.poll(async () => {
+        const now = await draws();
+        if (now !== seen) { seen = now; since = Date.now(); }
+        return Date.now() - since;
+    }, { intervals: [100], timeout: 10_000 }).toBeGreaterThanOrEqual(300);
 }
 
 async function closeOverview(page: Page): Promise<void> {
@@ -510,6 +537,7 @@ test.describe('Awaiting action by book', () => {
         const item = sec(page).locator(`.research-overview__waiting-item[data-id="${id}"]`);
         await item.locator('.research-overview__waiting-row').click();
         await expect(item).toHaveClass(/is-open/);
+        await overviewStill(page);
         return item;
     }
     /** A clamped text's lines: its height in line heights, and whether it is cut. */
@@ -629,6 +657,7 @@ test.describe('spec 105 U4 §5 an item waiting for images: images to deliver, no
         const item = sec(page).locator(`.research-overview__waiting-item[data-id="${id}"]`);
         await item.locator('.research-overview__waiting-row').click();
         await expect(item).toHaveClass(/is-open/);
+        await overviewStill(page);
         return item;
     }
     /** Nothing in the item wider than its box, and the page not scrolled sideways. */
