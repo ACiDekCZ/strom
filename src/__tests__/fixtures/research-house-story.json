@@ -1,0 +1,612 @@
+{
+  "//": "Synthetic. The shapes the research (strom-research 145 T4, b9a3b4c5/4ad0ee99) gives: GET /houses/<ref> bodies taken from its houseView on a made-up village (names changed), the reply of POST /houses/story as its live.ts builds it from `strom house story --yes --json`, an item of its waitingFor.",
+  "getQueued": {
+    "id": "A0001",
+    "key": "mechov|14",
+    "place": {
+      "key": "mechov",
+      "id": "L0001",
+      "name": "Mechov"
+    },
+    "house": "14",
+    "state": "done",
+    "at": "2026-11-27",
+    "task": "T0002",
+    "work": "house",
+    "persons": [
+      "P0002"
+    ],
+    "years": {
+      "from": 1810,
+      "to": 1850
+    },
+    "numbers": [],
+    "timeline": [],
+    "holders": [],
+    "residents": [],
+    "look": {
+      "certainty": "guess",
+      "origin": "research",
+      "text": "přízemní chalupa"
+    },
+    "lookCheck": {
+      "at": "2026-11-27T21:34:25.059Z",
+      "next": "none",
+      "origin": "research",
+      "task": "T0002",
+      "text": "nic"
+    },
+    "passed": [
+      {
+        "id": "p1",
+        "at": "2026-11-27",
+        "checklist": true,
+        "origin": "research",
+        "what": "prošlo"
+      }
+    ],
+    "manual": [],
+    "unknown": [
+      {
+        "id": "u1",
+        "about": "look",
+        "at": "2026-11-27",
+        "origin": "research",
+        "text": "podoba: víc automaticky nejde – nic",
+        "question": null
+      }
+    ],
+    "archiveOnly": [],
+    "materials": [],
+    "story": {
+      "status": null,
+      "task": {
+        "id": "T0003",
+        "state": "open"
+      }
+    },
+    "rev": "3f9c2a71b0d84e65"
+  },
+  "getDraft": {
+    "id": "A0001",
+    "key": "mechov|14",
+    "place": {
+      "key": "mechov",
+      "id": "L0001",
+      "name": "Mechov"
+    },
+    "house": "14",
+    "state": "done",
+    "at": "2026-11-27",
+    "task": "T0002",
+    "work": "house",
+    "persons": [
+      "P0002"
+    ],
+    "years": {
+      "from": 1810,
+      "to": 1850
+    },
+    "numbers": [],
+    "timeline": [
+      {
+        "id": "e1",
+        "kind": "fire",
+        "at": "2026-11-27",
+        "certainty": "medium",
+        "date": "1866",
+        "origin": "research",
+        "sources": [
+          "S0001"
+        ],
+        "text": "vyhořel"
+      }
+    ],
+    "holders": [
+      {
+        "id": "h1",
+        "name": "Trnoslav Mechovec",
+        "at": "2026-11-27",
+        "certainty": "high",
+        "from": "1830",
+        "how": "inheritance",
+        "origin": "research",
+        "person": "P0002",
+        "sources": [
+          "S0001"
+        ],
+        "to": "1850"
+      }
+    ],
+    "residents": [],
+    "look": {
+      "certainty": "guess",
+      "origin": "research",
+      "text": "přízemní chalupa"
+    },
+    "lookCheck": {
+      "at": "2026-11-27T21:34:25.059Z",
+      "next": "none",
+      "origin": "research",
+      "task": "T0002",
+      "text": "nic"
+    },
+    "passed": [
+      {
+        "id": "p1",
+        "at": "2026-11-27",
+        "checklist": true,
+        "origin": "research",
+        "what": "prošlo"
+      }
+    ],
+    "manual": [],
+    "unknown": [
+      {
+        "id": "u1",
+        "about": "look",
+        "at": "2026-11-27",
+        "origin": "research",
+        "text": "podoba: víc automaticky nejde – nic",
+        "question": null
+      }
+    ],
+    "archiveOnly": [],
+    "materials": [],
+    "story": {
+      "status": "draft",
+      "title": "Chalupa u rybníka",
+      "text": "Chalupu č. 14 držel od roku 1830 Trnoslav Mechovec. V roce 1866 nejspíš vyhořela.\n\nDruhý odstavec.",
+      "facts": [
+        "h1",
+        "e1",
+        "E0001"
+      ],
+      "sources": [
+        "S0001"
+      ],
+      "at": "2026-11-27T21:34:25.377Z",
+      "people": [
+        {
+          "id": "P0002",
+          "died": true
+        }
+      ],
+      "task": {
+        "id": "T0003",
+        "state": "open"
+      }
+    },
+    "rev": "3f9c2a71b0d84e65"
+  },
+  "getFinal": {
+    "id": "A0001",
+    "key": "mechov|14",
+    "place": {
+      "key": "mechov",
+      "id": "L0001",
+      "name": "Mechov"
+    },
+    "house": "14",
+    "state": "done",
+    "at": "2026-11-27",
+    "task": "T0002",
+    "work": "house",
+    "persons": [
+      "P0002"
+    ],
+    "years": {
+      "from": 1810,
+      "to": 1850
+    },
+    "numbers": [],
+    "timeline": [
+      {
+        "id": "e1",
+        "kind": "fire",
+        "at": "2026-11-27",
+        "certainty": "medium",
+        "date": "1866",
+        "origin": "research",
+        "sources": [
+          "S0001"
+        ],
+        "text": "vyhořel"
+      }
+    ],
+    "holders": [
+      {
+        "id": "h1",
+        "name": "Trnoslav Mechovec",
+        "at": "2026-11-27",
+        "certainty": "high",
+        "from": "1830",
+        "how": "inheritance",
+        "origin": "research",
+        "person": "P0002",
+        "sources": [
+          "S0001"
+        ],
+        "to": "1850"
+      }
+    ],
+    "residents": [],
+    "look": {
+      "certainty": "guess",
+      "origin": "research",
+      "text": "přízemní chalupa"
+    },
+    "lookCheck": {
+      "at": "2026-11-27T21:34:25.059Z",
+      "next": "none",
+      "origin": "research",
+      "task": "T0002",
+      "text": "nic"
+    },
+    "passed": [
+      {
+        "id": "p1",
+        "at": "2026-11-27",
+        "checklist": true,
+        "origin": "research",
+        "what": "prošlo"
+      }
+    ],
+    "manual": [],
+    "unknown": [
+      {
+        "id": "u1",
+        "about": "look",
+        "at": "2026-11-27",
+        "origin": "research",
+        "text": "podoba: víc automaticky nejde – nic",
+        "question": null
+      }
+    ],
+    "archiveOnly": [],
+    "materials": [],
+    "story": {
+      "status": "final",
+      "title": "Chalupa u rybníka",
+      "text": "Chalupu č. 14 držel od roku 1830 Trnoslav Mechovec. V roce 1866 nejspíš vyhořela.\n\nDruhý odstavec.",
+      "facts": [
+        "h1",
+        "e1",
+        "E0001"
+      ],
+      "sources": [
+        "S0001"
+      ],
+      "at": "2026-11-27T21:34:25.377Z",
+      "people": [
+        {
+          "id": "P0002",
+          "died": true
+        }
+      ],
+      "task": {
+        "id": "T0003",
+        "state": "open"
+      }
+    },
+    "rev": "3f9c2a71b0d84e65"
+  },
+  "getFinalDraft": {
+    "id": "A0001",
+    "key": "mechov|14",
+    "place": {
+      "key": "mechov",
+      "id": "L0001",
+      "name": "Mechov"
+    },
+    "house": "14",
+    "state": "done",
+    "at": "2026-11-27",
+    "task": "T0002",
+    "work": "house",
+    "persons": [
+      "P0002"
+    ],
+    "years": {
+      "from": 1810,
+      "to": 1850
+    },
+    "numbers": [],
+    "timeline": [
+      {
+        "id": "e1",
+        "kind": "fire",
+        "at": "2026-11-27",
+        "certainty": "medium",
+        "date": "1866",
+        "origin": "research",
+        "sources": [
+          "S0001"
+        ],
+        "text": "vyhořel"
+      }
+    ],
+    "holders": [
+      {
+        "id": "h1",
+        "name": "Trnoslav Mechovec",
+        "at": "2026-11-27",
+        "certainty": "high",
+        "from": "1830",
+        "how": "inheritance",
+        "origin": "research",
+        "person": "P0002",
+        "sources": [
+          "S0001"
+        ],
+        "to": "1850"
+      },
+      {
+        "id": "h2",
+        "name": "Kvasimír Mechovec",
+        "at": "2026-11-27",
+        "certainty": "medium",
+        "from": "1850",
+        "how": "purchase",
+        "origin": "research",
+        "sources": [
+          "S0001"
+        ],
+        "to": "1905"
+      },
+      {
+        "id": "h3",
+        "name": "Kapradina Mechovcová",
+        "at": "2026-11-27",
+        "certainty": "medium",
+        "from": "1905",
+        "how": "marriage",
+        "origin": "research",
+        "sources": [
+          "S0001"
+        ]
+      }
+    ],
+    "residents": [],
+    "look": {
+      "certainty": "guess",
+      "origin": "research",
+      "text": "přízemní chalupa"
+    },
+    "lookCheck": {
+      "at": "2026-11-27T21:34:25.059Z",
+      "next": "none",
+      "origin": "research",
+      "task": "T0002",
+      "text": "nic"
+    },
+    "passed": [
+      {
+        "id": "p1",
+        "at": "2026-11-27",
+        "checklist": true,
+        "origin": "research",
+        "what": "prošlo"
+      }
+    ],
+    "manual": [],
+    "unknown": [
+      {
+        "id": "u1",
+        "about": "look",
+        "at": "2026-11-27",
+        "origin": "research",
+        "text": "podoba: víc automaticky nejde – nic",
+        "question": null
+      }
+    ],
+    "archiveOnly": [],
+    "materials": [],
+    "story": {
+      "status": "final",
+      "title": "Chalupa u rybníka",
+      "text": "Chalupu č. 14 držel od roku 1830 Trnoslav Mechovec. V roce 1866 nejspíš vyhořela.\n\nDruhý odstavec.",
+      "facts": [
+        "h1",
+        "e1",
+        "E0001"
+      ],
+      "sources": [
+        "S0001"
+      ],
+      "at": "2026-11-27T21:34:25.377Z",
+      "people": [
+        {
+          "id": "P0002",
+          "died": true
+        }
+      ],
+      "draft": {
+        "text": "Chalupu č. 14 držel od roku 1830 Trnoslav Mechovec. V roce 1866 nejspíš vyhořela.\n\nDruhý odstavec.\n\nPak dům koupil Kvasimír Mechovec.",
+        "facts": [
+          "h1",
+          "e1",
+          "E0001",
+          "h2"
+        ],
+        "at": "2026-11-27T21:34:25.593Z",
+        "people": [
+          {
+            "id": "P0002",
+            "died": true
+          }
+        ]
+      },
+      "task": {
+        "id": "T0003",
+        "state": "done"
+      }
+    },
+    "rev": "3f9c2a71b0d84e65"
+  },
+  "postMade": {
+    "house": {
+      "id": "A0001",
+      "key": "mechov|14",
+      "place": {
+        "key": "mechov",
+        "id": "L0001",
+        "name": "Mechov"
+      },
+      "house": "14",
+      "state": "done",
+      "at": "2026-11-27",
+      "task": "T0002",
+      "work": "house",
+      "persons": [
+        "P0002"
+      ],
+      "years": {
+        "from": 1810,
+        "to": 1850
+      },
+      "numbers": [],
+      "timeline": [],
+      "holders": [],
+      "residents": [],
+      "look": {
+        "certainty": "guess",
+        "origin": "research",
+        "text": "přízemní chalupa"
+      },
+      "lookCheck": {
+        "at": "2026-11-27T21:34:25.059Z",
+        "next": "none",
+        "origin": "research",
+        "task": "T0002",
+        "text": "nic"
+      },
+      "passed": [
+        {
+          "id": "p1",
+          "at": "2026-11-27",
+          "checklist": true,
+          "origin": "research",
+          "what": "prošlo"
+        }
+      ],
+      "manual": [],
+      "unknown": [
+        {
+          "id": "u1",
+          "about": "look",
+          "at": "2026-11-27",
+          "origin": "research",
+          "text": "podoba: víc automaticky nejde – nic",
+          "question": null
+        }
+      ],
+      "archiveOnly": [],
+      "materials": [],
+      "story": {
+        "status": null,
+        "task": {
+          "id": "T0003",
+          "state": "open"
+        }
+      },
+      "rev": "3f9c2a71b0d84e65"
+    },
+    "task": "T0003",
+    "made": true,
+    "head": "42e1c19b019afbcc0c2028b2967c0885883e60b3",
+    "parent": "8504262900d7b214dd09b7462c9100002e585917"
+  },
+  "postAgain": {
+    "house": {
+      "id": "A0001",
+      "key": "mechov|14",
+      "place": {
+        "key": "mechov",
+        "id": "L0001",
+        "name": "Mechov"
+      },
+      "house": "14",
+      "state": "done",
+      "at": "2026-11-27",
+      "task": "T0002",
+      "work": "house",
+      "persons": [
+        "P0002"
+      ],
+      "years": {
+        "from": 1810,
+        "to": 1850
+      },
+      "numbers": [],
+      "timeline": [],
+      "holders": [],
+      "residents": [],
+      "look": {
+        "certainty": "guess",
+        "origin": "research",
+        "text": "přízemní chalupa"
+      },
+      "lookCheck": {
+        "at": "2026-11-27T21:34:25.059Z",
+        "next": "none",
+        "origin": "research",
+        "task": "T0002",
+        "text": "nic"
+      },
+      "passed": [
+        {
+          "id": "p1",
+          "at": "2026-11-27",
+          "checklist": true,
+          "origin": "research",
+          "what": "prošlo"
+        }
+      ],
+      "manual": [],
+      "unknown": [
+        {
+          "id": "u1",
+          "about": "look",
+          "at": "2026-11-27",
+          "origin": "research",
+          "text": "podoba: víc automaticky nejde – nic",
+          "question": null
+        }
+      ],
+      "archiveOnly": [],
+      "materials": [],
+      "story": {
+        "status": null,
+        "task": {
+          "id": "T0003",
+          "state": "open"
+        }
+      },
+      "rev": "3f9c2a71b0d84e65"
+    },
+    "task": "T0003",
+    "made": false,
+    "head": "42e1c19b019afbcc0c2028b2967c0885883e60b3",
+    "parent": "42e1c19b019afbcc0c2028b2967c0885883e60b3"
+  },
+  "waitingBeside": [
+    {
+      "id": "A0001",
+      "what": "Nová verze vyprávění o domě Mechov 14 – schválené zůstává až do rozhodnutí",
+      "on": "",
+      "at": "2026-11-27T21:34:25.593Z",
+      "kind": "story",
+      "section": "decide",
+      "group": {
+        "key": "stories",
+        "name": "Příběhy",
+        "kind": "other"
+      },
+      "phase": "todo",
+      "actions": [],
+      "house": "mechov|14",
+      "order": 0
+    }
+  ]
+}
