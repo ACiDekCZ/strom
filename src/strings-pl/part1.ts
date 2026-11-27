@@ -945,6 +945,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         titleProven2: 'Udokumentowane przez AI: dwóch czytelników zapisu zgodnie',
         titleProven1: 'Udokumentowane przez AI: jeden czytelnik zapisu',
         titleImport: (prog: string, date: string) => `Z drzewa (niezweryfikowane): przejęte z ${prog}, plik ${date}`,
+        mergedTreeProg: (prog: string, name: string) => `${prog} „${name}”`,
         titleNone: 'Bez źródła',
         fromImport: (prog: string, date: string) => `· przejęte z drzewa ${prog}, ${date}`,
         originMixed: (prog: string, date: string, loaded: string) => `Dane oznaczone „z drzewa” pochodzą z ${prog} (plik ${date}, wczytano ${loaded}).`,

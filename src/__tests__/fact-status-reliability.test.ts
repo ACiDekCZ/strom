@@ -107,6 +107,29 @@ describe('reliabilityTitle', () => {
         expect(t).toMatch(/^From the family tree \(unverified\)/);
     });
 
+    it('a merged tree of the app names the tree when the merge kept its name; without one, as before (1128)', () => {
+        const named: ImportRecord = { id: 'I2', program: 'Strom', file: 'Jilmovi – zkouška', at: '2026-11-25' };
+        const nameless: ImportRecord = { id: 'I3', program: 'Strom', at: '2026-11-25' };
+        const tree = (rec: ImportRecord) => reliabilityTitle({ step: 'import', importRecord: rec, fromParts: ['DATE'], changedParts: [] });
+        const said = {
+            en: ['taken from Strom “Jilmovi – zkouška”, file', 'taken from Strom, file'],
+            cs: ['převzato z rodokmenu Strom „Jilmovi – zkouška“, soubor', 'převzato z rodokmenu Strom, soubor'],
+            de: ['übernommen aus Strom „Jilmovi – zkouška“, Datei vom', 'übernommen aus Strom, Datei vom'],
+            pl: ['przejęte z Strom „Jilmovi – zkouška”, plik', 'przejęte z Strom, plik'],
+        } as const;
+        try {
+            for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+                setLanguage(lang);
+                expect(tree(named), lang).toContain(said[lang][0]);
+                expect(tree(nameless), lang).toContain(said[lang][1]);
+            }
+        } finally {
+            setLanguage('en');
+        }
+        // A GEDCOM of another program keeps its program alone, even with a file name.
+        expect(importOriginParts({ ...I1, file: 'export.ged' }, 'en').prog).toBe('Rodokmenar');
+    });
+
     it('partly changed: which part is from the file, and no source yet outside the research', () => {
         const r = { step: 'import' as const, importRecord: I1, fromParts: ['PLAC' as const], changedParts: ['DATE' as const] };
         expect(reliabilityTitle(r)).toBe('The place is from the family tree; the date was changed by a person. There is no source for this fact yet.');

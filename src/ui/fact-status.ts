@@ -15,6 +15,7 @@ import { FactPart, FactStatus, ImportRecord, Person, StromData } from '../types.
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import { importDateText, importProgramLabel } from '../import-next.js';
+import { isMergedTreeImport } from '../import-origin.js';
 import {
     CardStatus, CardStatusClass, CardStatusOptions, FactReliability, PersonOriginSummary, ReliabilityStep, ReliabilityStepName,
     cardStatus, reliabilityStep, sameStep,
@@ -46,11 +47,15 @@ export function reliabilityLabel(step: ReliabilityStepName): string {
     return strings.factStatus[step];
 }
 
-/** `{prog}` and `{date}` of an import record, in the UI language. */
+/**
+ * `{prog}` and `{date}` of an import record, in the UI language. A merged tree of the app says its name
+ * when the merge kept one (1128: "Strom „Jilmovi“"; the tree's, the file's or the sender's name).
+ */
 export function importOriginParts(rec: ImportRecord, lang: Lang = uiLang()): { prog: string; date: string; loaded: string } {
     const day = rec.at.slice(0, 10);
+    const name = isMergedTreeImport(rec) ? rec.file?.trim() ?? '' : '';
     return {
-        prog: importProgramLabel(rec),
+        prog: name ? strings.reliability.mergedTreeProg(importProgramLabel(rec), name) : importProgramLabel(rec),
         date: importDateText(rec, lang),
         loaded: /^\d{4}-\d{2}-\d{2}$/.test(day) ? formatFlexDate(day, lang) : rec.at,
     };
