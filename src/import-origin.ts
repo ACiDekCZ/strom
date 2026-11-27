@@ -901,6 +901,23 @@ export function nextImportId(imports: readonly ImportRecord[] | undefined, taken
     return `I${max + 1}`;
 }
 
+/**
+ * The program of the import record a merge of another tree of the app makes
+ * (1127): that tree is the family tree its facts came from, not a file of
+ * another program (no "Back to", no "loaded from a file" of the tree's row).
+ */
+export const MERGED_TREE_PROGRAM = 'Strom';
+
+/** Whether an import record stands for a merged tree of the app (MERGED_TREE_PROGRAM). */
+export function isMergedTreeImport(rec: Pick<ImportRecord, 'program'>): boolean {
+    return typeof rec.program === 'string' && rec.program.trim() === MERGED_TREE_PROGRAM;
+}
+
+/** The import records of files of other programs (a merged tree's aside), in their order. */
+export function fileImports<T extends Pick<ImportRecord, 'program'>>(imports: readonly T[] | undefined): T[] {
+    return (imports ?? []).filter(r => !isMergedTreeImport(r));
+}
+
 /** The record of an import id, if the tree has it. */
 export function importRecordOf(data: Pick<StromData, 'imports'>, id: string | undefined): ImportRecord | undefined {
     return id ? data.imports?.find(r => r.id === id) : undefined;

@@ -11,6 +11,7 @@ import { StromData } from '../types.js';
 import { CONTENT_PRESETS, ContentOptions, PrivacyMode, countCitations, countLivingPersons, droppedSources } from '../privacy.js';
 import { backSourceRecordCount, firstResearchNoteSource } from '../ged-exporter.js';
 import { importProgramName } from '../import-next.js';
+import { fileImports } from '../import-origin.js';
 import { allShareCopies } from '../shared-events.js';
 import { TreeManager } from '../tree-manager.js';
 import { uiModule } from './module.js';
@@ -102,10 +103,10 @@ export const exportGedcomMethods = uiModule({
         return purpose === 'back' ? { ...CONTENT_PRESETS.back } : null;
     },
 
-    /** "Back": the import the file goes back to (the tree's last one, as its title says); undefined otherwise. */
+    /** "Back": the import the file goes back to (the tree's last file of another program, as its title says); undefined otherwise. */
     exportGedcomBackTo(data: Pick<StromData, 'imports'>): string | undefined {
         if (purpose !== 'back') return undefined;
-        const imports = data.imports ?? [];
+        const imports = fileImports(data.imports);
         return imports[imports.length - 1]?.id;
     },
 
@@ -135,7 +136,7 @@ export const exportGedcomMethods = uiModule({
         const data = this.exportMeasuredData();
         if (!data) return null;
         if (treeFacts?.data === data) return treeFacts;
-        const imports = data.imports ?? [];
+        const imports = fileImports(data.imports);
         const last = imports[imports.length - 1];
         treeFacts = {
             data,

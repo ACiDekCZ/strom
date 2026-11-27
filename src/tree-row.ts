@@ -5,6 +5,7 @@
  */
 import { strings } from './strings.js';
 import type { StromData, TreeMetadata } from './types.js';
+import { fileImports } from './import-origin.js';
 
 /** What a tree is, for its row's third line (in this order of precedence). */
 export type TreeOriginKind = 'sample' | 'research' | 'copy' | 'fromTree' | 'import' | 'none';
@@ -41,10 +42,11 @@ export function researchShortId(id: string): string {
 
 /**
  * The file a tree's data was last loaded from (its last StromData.imports
- * record with a file name; every record is a GEDCOM load), or undefined.
+ * record with a file name, a merged tree's record aside), or undefined.
  */
 export function importOriginOf(data: Pick<StromData, 'imports'>): TreeMetadata['importedFrom'] | undefined {
-    const records = data.imports ?? [];
+    // A merged tree's record (1127) names no file the tree was loaded from.
+    const records = fileImports(data.imports);
     for (let i = records.length - 1; i >= 0; i--) {
         const file = records[i]?.file?.trim();
         if (file) return { file, kind: /\.json$/i.test(file) ? 'json' : 'gedcom' };

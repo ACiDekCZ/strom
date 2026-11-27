@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { card, openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeDone, mergeJoinPending, mergeToStep5, mergeWrite } from './helpers.js';
+import { card, openApp, importAsNewTree, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeDone, mergeJoinPending, mergeToStep5, mergeTreeInto, mergeWrite } from './helpers.js';
 import { type FakeBridge, fakeBridge, links, openResearch, poll } from './research-bridge.js';
 
 /**
@@ -140,6 +140,49 @@ test('Send to the research… of step 6 closes the guide and sends the merge; it
     await expect(take.locator('.research-open-mark')).toHaveCount(1);
     await take.click();
     await expect.poll(async () => (await links(page)).filter(l => l.includes('://sync-undo?'))).toEqual([expect.stringMatching(/^strom-research:\/\/sync-undo\?tree=[^&]+&intake=I0042$/)]);
+});
+
+/** An older tree of the app (data version 14, no import record): the same family with Bedřich. */
+const OLD_TREE = {
+    version: 14,
+    persons: {
+        o1: { id: 'o1', firstName: 'Josef', lastName: 'Fíšek', gender: 'male', isPlaceholder: false, partnerships: ['ou1'], parentIds: [], childIds: ['o3', 'o4'] },
+        o2: { id: 'o2', firstName: 'Anna', lastName: 'Svobodová', gender: 'female', isPlaceholder: false, partnerships: ['ou1'], parentIds: [], childIds: ['o3', 'o4'] },
+        o3: { id: 'o3', firstName: 'Jan', lastName: 'Fíšek', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: ['o1', 'o2'], childIds: [] },
+        o4: { id: 'o4', firstName: 'Bedřich', lastName: 'Fíšek', gender: 'male', isPlaceholder: false, birthDate: '1901', partnerships: [], parentIds: ['o1', 'o2'], childIds: [] },
+    },
+    partnerships: { ou1: { id: 'ou1', person1Id: 'o1', person2Id: 'o2', childIds: ['o3', 'o4'], status: 'married' } },
+};
+
+test('a tree of the app without an import record merged into the research\'s tree goes as a family tree: the HEAD names it (SOUR Strom), its new person carries the marks (1127)', async ({ page }) => {
+    await page.clock.install({ time: WRITTEN });
+    await openResearch(page, { auto: true });
+    const bridge = await fakeBridge(page);
+    const researchId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
+    await importAsNewTree(page, OLD_TREE, 'Fíškovi – starý strom');
+    const sourceId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
+    expect(sourceId).not.toBe(researchId);
+    const wizard = await mergeTreeInto(page, sourceId, researchId);
+    await mergeCompare(wizard);
+    await mergeJoinPending(wizard);
+    await mergeWrite(wizard, 'tree');
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '6');
+    await research(wizard).locator('[data-ract="send"]').click();
+    await expect(panel(page)).toBeVisible();
+    await expect(panel(page)).toContainText('From a family tree (unverified)');
+    await panel(page).locator('[data-act="send"]').click();
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    const records = bridge.posts[0].split('\n0 ');
+    const head = records[0];
+    const id = /\n1 _STROM_IMPORT (I\d+)\n2 SOUR Strom\n2 _AT 2026-11-22\n2 FILE Fíškovi – starý strom(\n|$)/.exec(head)?.[1];
+    expect(id, head).toBeDefined();
+    const bedrich = records.find(r => r.includes('1 NAME Bedřich /Fíšek/'))!;
+    expect(bedrich).toContain(`\n1 _STROM_IMPORT ${id}`);
+    expect(bedrich).toMatch(new RegExp(`1 BIRT\n2 DATE 1901\n2 _STROM_IMPORT ${id}`));
+    // The people joined stay the research's own.
+    const josef = records.find(r => r.includes('1 NAME Josef /Fíšek/'))!;
+    expect(josef).toContain('1 REFN P0001');
+    expect(josef).not.toContain('_STROM_IMPORT');
 });
 
 test('a tree without a research: no step of the guide says a word about a research', async ({ page }) => {

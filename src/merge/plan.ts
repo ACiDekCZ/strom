@@ -23,6 +23,7 @@ import { imageMetaOf, headMime } from '../image-meta.js';
 import { dataUrlByteSize } from '../photo.js';
 import { contentFingerprint } from '../research-link.js';
 import { withoutResearchMarks } from './research-marks.js';
+import { withMergedTreeImport } from './merged-import.js';
 import { mergeEdits, personPrint, valueKey } from './record.js';
 import { PERSON_CITATION_FIELDS } from '../model-values.js';
 import type { GedcomDroppedTag } from '../ged-parser.js';
@@ -937,7 +938,8 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
             sources: same(Object.keys(source.sources ?? {})),
         };
     } else {
-        const result = await executeMerge(stateOfPlan(plan, target, source));
+        // A merged tree is an import (1127): what it brings is its own, not a person's.
+        const result = await executeMerge(stateOfPlan(plan, target, withMergedTreeImport(source, plan.source)));
         if (!result.success || !result.trace) {
             const issues: VerifyIssue[] = result.check?.problems.map(p => ({ ...p })) ?? [];
             return { ok: false, data: target, record: emptyRecord(plan), issues, ownTrees: [], ...(result.backupKey ? { backupKey: result.backupKey } : {}) };
