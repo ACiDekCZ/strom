@@ -36,6 +36,7 @@ import { imageCacheStats, setImageCacheLimits, releaseImageUrls } from './image-
 import { expandedData } from './image-expand.js';
 import { satellitesHolding } from './windows/window-images.js';
 import { MemoryLimit, initMemoryLimitNotice } from './ui/memory-limit-ui.js';
+import { sweepGoneSpools } from './spool.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
@@ -1023,10 +1024,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // "On this day" reminder — after the first render, off the critical path.
         const showOtd = () => { void UI.maybeShowOnThisDay(); };
+        // The page's own files of pages now closed (a large package's, spool.ts): removed while the app is idle.
+        const sweepSpools = () => { void sweepGoneSpools(); };
         if ('requestIdleCallback' in window) {
             (window as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(showOtd);
+            (window as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(sweepSpools);
         } else {
             setTimeout(showOtd, 800);
+            setTimeout(sweepSpools, 1000);
         }
     };
 

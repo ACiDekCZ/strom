@@ -111,3 +111,24 @@ test('a package written to the page\'s own files: a whole ZIP, only its file kep
     await (await again).saveAs(second);
     expect(statSync(second).size).toBe(size);
 });
+
+test('at the start the files of a closed page are removed, a live page\'s kept (no output made)', async ({ page, context }) => {
+    await openApp(page);
+    // Another page of the app still open: it holds its lock while it lives.
+    const other = await context.newPage();
+    await other.goto(page.url());
+    await other.evaluate(() => { void navigator.locks.request('strom-spool:live-page', () => new Promise<void>(() => { /* held */ })); });
+    await page.evaluate(async () => {
+        const root = await (await navigator.storage.getDirectory()).getDirectoryHandle('strom-spool', { create: true });
+        for (const name of ['gone-page', 'live-page']) {
+            const dir = await (await root.getDirectoryHandle(name, { create: true })).getDirectoryHandle('gift-1', { create: true });
+            const w = await (await dir.getFileHandle('1.part', { create: true })).createWritable();
+            await w.write('a package');
+            await w.close();
+        }
+    });
+    expect(Object.keys(await spoolFiles(page)).sort()).toEqual(['gone-page/gift-1', 'live-page/gift-1']);
+    await page.reload();
+    await expect.poll(async () => Object.keys(await spoolFiles(page)).sort()).toEqual(['live-page/gift-1']);
+    await other.close();
+});

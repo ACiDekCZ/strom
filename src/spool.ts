@@ -12,7 +12,7 @@
  * A spool is one making's files (a folder). Its Blobs stay readable until
  * it is disposed: a newer spool of the same owner disposes the older one,
  * and the spools of a page that is gone are removed by the next page that
- * opens one (Web Locks tell which pages still live). Without the file
+ * opens one or starts (Web Locks tell which pages still live). Without the file
  * system (a page opened as a file, an older browser) there is no spool: the
  * caller builds its Blobs in memory as before (memoryOut).
  */
@@ -215,6 +215,38 @@ function canSpool(): boolean {
         && typeof FileSystemFileHandle !== 'undefined' && typeof FileSystemFileHandle.prototype.createWritable === 'function';
 }
 
+/**
+ * Remove the folders of pages gone (no page holds their lock), never this
+ * page's. The folders are listed before the locks are asked: a page takes its
+ * lock before it makes its folder, so a folder listed is one whose page held
+ * its lock already, and is kept while that page lives.
+ */
+async function removeGone(root: FileSystemDirectoryHandle, locks: LockManager): Promise<void> {
+    const names: string[] = [];
+    for await (const name of (root as unknown as { keys(): AsyncIterable<string> }).keys()) names.push(name);
+    const live = new Set(((await locks.query()).held ?? []).map(l => l.name));
+    for (const name of names) {
+        if (name !== PAGE && !live.has(LOCK + name)) await root.removeEntry(name, { recursive: true }).catch(() => { /* in use */ });
+    }
+}
+
+/**
+ * The folders of pages gone removed at the app's start (1127): a large
+ * package made by a page now closed would otherwise stay in the origin's
+ * storage until some page makes another large output. Only removes (this
+ * page makes no folder of its own here); nothing without the file system or
+ * Web Locks; an error leaves things as they are.
+ */
+export async function sweepGoneSpools(): Promise<void> {
+    if (!canSpool() || !navigator.locks) return;
+    try {
+        const root = await (await navigator.storage.getDirectory()).getDirectoryHandle(ROOT);
+        await removeGone(root, navigator.locks);
+    } catch {
+        /* no spools yet, or the storage refused: nothing to remove */
+    }
+}
+
 /** This page's folder of spools; the folders of pages gone removed the first time. */
 function pageFolder(): Promise<FileSystemDirectoryHandle | null> {
     pageDir ??= (async () => {
@@ -230,12 +262,7 @@ function pageFolder(): Promise<FileSystemDirectoryHandle | null> {
                         return new Promise<void>(() => { /* held until the page goes */ });
                     });
                 });
-                const live = new Set(((await locks.query()).held ?? []).map(l => l.name));
-                const names: string[] = [];
-                for await (const name of (root as unknown as { keys(): AsyncIterable<string> }).keys()) names.push(name);
-                for (const name of names) {
-                    if (name !== PAGE && !live.has(LOCK + name)) await root.removeEntry(name, { recursive: true }).catch(() => { /* in use */ });
-                }
+                await removeGone(root, locks);
             }
             return await root.getDirectoryHandle(PAGE, { create: true });
         } catch {

@@ -7,10 +7,10 @@
  * files go when dropped or disposed; without the file system there is none.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ZipBlobSink, ZipWriter } from '../zip.js';
 import { memoryOut, Spool, spoolFor } from '../spool.js';
-import { fakeSpoolFolders } from './helpers/fake-opfs.js';
+import { FakeDirectoryHandle, FakeFileHandle, fakeSpoolFolders } from './helpers/fake-opfs.js';
 import { blobBytes, readZipEntries } from './helpers/zip-read.js';
 
 const WHEN = new Date(2026, 11, 24, 10, 30, 0);
@@ -120,5 +120,54 @@ describe('a spool (1127)', () => {
     it('none without the file system (Node) or under the size it is for', async () => {
         expect(await spoolFor('test', 10)).toBeNull();
         expect(await spoolFor('test', 10 * 1024 * 1024 * 1024)).toBeNull();
+    });
+});
+
+describe('the folders of closed pages removed at the start (1127)', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.resetModules();
+    });
+
+    /** The origin's storage with a closed page's package and a live page's; `held`: the Web Locks pages hold. */
+    async function storage(held: string[] | null): Promise<{ spools: FakeDirectoryHandle; root: FakeDirectoryHandle }> {
+        const root = new FakeDirectoryHandle('');
+        const spools = await root.getDirectoryHandle('strom-spool', { create: true });
+        for (const page of ['closed', 'open']) {
+            const gift = await (await spools.getDirectoryHandle(page, { create: true })).getDirectoryHandle('gift-1', { create: true });
+            await gift.getFileHandle('1.part', { create: true });
+        }
+        vi.stubGlobal('FileSystemFileHandle', FakeFileHandle);
+        vi.stubGlobal('navigator', {
+            storage: { getDirectory: async () => root },
+            ...(held ? { locks: { query: async () => ({ held: held.map(name => ({ name })) }), request: () => new Promise(() => { /* held */ }) } } : {}),
+        });
+        return { spools, root };
+    }
+
+    it('removes the closed page\'s folder, keeps the live page\'s, makes none of its own', async () => {
+        const { spools } = await storage(['strom-spool:open', 'other-lock']);
+        const { sweepGoneSpools } = await import('../spool.js');
+        await sweepGoneSpools();
+        expect([...spools.entries.keys()]).toEqual(['open']);
+        expect((spools.entries.get('open') as FakeDirectoryHandle).files()).toHaveLength(1);
+    });
+
+    it('without spools, without Web Locks or with a storage that refuses: nothing made, nothing removed, no error', async () => {
+        const { root } = await storage([]);
+        root.entries.clear();
+        const { sweepGoneSpools } = await import('../spool.js');
+        await expect(sweepGoneSpools()).resolves.toBeUndefined();
+        expect(root.entries.size).toBe(0);
+
+        vi.resetModules();
+        const { spools } = await storage(null);
+        await (await import('../spool.js')).sweepGoneSpools();
+        expect([...spools.entries.keys()]).toEqual(['closed', 'open']);
+
+        vi.resetModules();
+        await storage([]);
+        vi.stubGlobal('navigator', { ...navigator, storage: { getDirectory: () => Promise.reject(new DOMException('no', 'SecurityError')) } });
+        await expect((await import('../spool.js')).sweepGoneSpools()).resolves.toBeUndefined();
     });
 });
