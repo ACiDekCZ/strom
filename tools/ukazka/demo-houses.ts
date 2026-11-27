@@ -43,6 +43,9 @@ interface HousesText {
   town: { summary: string; green: string; valley: string; fields: [string, string, string][] };
   /** The person's request answered (a person's run only): the research's sessions. */
   sessions: { townResult: string; townSummary: string; townNext: string; result: string; summary: string; next: string };
+  /** The task of its look that follows the mill's research (its look check: picture): the picture gone through, its
+   * check closed (none: no more automatically), so the mill is researched (a person's run only). */
+  lookSession: { check: string; result: string; summary: string; next: string };
 }
 
 const TEXT: Record<HousesLang, HousesText> = {
@@ -81,6 +84,12 @@ const TEXT: Record<HousesLang, HousesText> = {
       summary: "Mlýn čp. 12 v Dolní Lhotě: pět držitelů od roku 1801, z toho čtyři Horákové; do roku 1805 čp. 9; požár 1868 a obnova 1869.",
       next: "Podoba mlýna: projít obrázek údolí pod vsí.",
     },
+    lookSession: {
+      check: "Obrázek údolí pod vsí ukazuje u potoka budovu s vodním kolem – mlýn čp. 12; fotografie z doby před požárem se nenašla.",
+      result: "Podoba mlýna čp. 12: obrázek údolí ji potvrzuje; fotografie před požárem 1868 se nenašla.",
+      summary: "Podoba mlýna čp. 12 ověřená obrázkem údolí; víc automaticky nejde.",
+      next: "Domy v Horní Lhotě: čp. 5.",
+    },
   },
   en: {
     name: "The Mill",
@@ -116,6 +125,12 @@ const TEXT: Record<HousesLang, HousesText> = {
       result: "The history of the mill no. 12: holders 1801–1950, its numbers, the fire of 1868, its look and what stays open.",
       summary: "The mill no. 12 at Thornbury: five holders since 1801, four of them Hartleys; no. 9 until 1805; the fire of 1868 and the rebuilding in 1869.",
       next: "The look of the mill: the picture of the valley below the village.",
+    },
+    lookSession: {
+      check: "The picture of the valley below the village shows a building with a water wheel by the brook — the mill no. 12; no photograph from before the fire was found.",
+      result: "The look of the mill no. 12: the picture of the valley bears it out; no photograph from before the fire of 1868 was found.",
+      summary: "The look of the mill no. 12 checked against the picture of the valley; nothing more to be had automatically.",
+      next: "The houses of Oakley: no. 5.",
     },
   },
   de: {
@@ -153,6 +168,12 @@ const TEXT: Record<HousesLang, HousesText> = {
       summary: "Die Mühle Nr. 12 in Oberndorf: fünf Besitzer seit 1801, davon vier Weber; bis 1805 Nr. 9; Brand 1868 und Wiederaufbau 1869.",
       next: "Aussehen der Mühle: das Bild des Tals unterhalb des Dorfes durchgehen.",
     },
+    lookSession: {
+      check: "Das Bild des Tals unterhalb des Dorfes zeigt am Bach ein Gebäude mit Wasserrad – die Mühle Nr. 12; ein Foto aus der Zeit vor dem Brand fand sich nicht.",
+      result: "Aussehen der Mühle Nr. 12: das Bild des Tals bestätigt es; ein Foto vor dem Brand 1868 fand sich nicht.",
+      summary: "Aussehen der Mühle Nr. 12 am Bild des Tals geprüft; mehr geht nicht automatisch.",
+      next: "Die Häuser in Unterdorf: Nr. 5.",
+    },
   },
   pl: {
     name: "Młyn",
@@ -188,6 +209,12 @@ const TEXT: Record<HousesLang, HousesText> = {
       result: "Dzieje młyna nr 12: właściciele 1801–1950, numery domu, pożar 1868, wygląd i to, co pozostaje otwarte.",
       summary: "Młyn nr 12 w Wierzbnie Dolnym: pięciu właścicieli od 1801 r., w tym czterech Jaworskich; do 1805 r. nr 9; pożar 1868 i odbudowa 1869.",
       next: "Wygląd młyna: przejrzeć obraz doliny poniżej wsi.",
+    },
+    lookSession: {
+      check: "Obraz doliny poniżej wsi pokazuje nad potokiem budynek z kołem wodnym – młyn nr 12; fotografii sprzed pożaru nie znaleziono.",
+      result: "Wygląd młyna nr 12: obraz doliny go potwierdza; fotografii sprzed pożaru 1868 nie znaleziono.",
+      summary: "Wygląd młyna nr 12 sprawdzony z obrazem doliny; więcej automatycznie się nie da.",
+      next: "Domy w Wierzbnie Górnym: nr 5.",
     },
   },
 };
@@ -241,12 +268,16 @@ export function addHouses(c: HousesCtx): { mill: string; other: string } {
 
   // the person's word: look for the mill's history (its municipality's skeleton first) — only a person's run
   const asked = c.consent ? person("house", "request", ...mill, "--yes") as { task?: string; town?: string } : {};
-  const session = (task: string | undefined, work: () => void, result: string, summary: string, next: string) => {
-    if (!task) return work();
+  const session = (task: string | undefined, work: () => void, result: string, summary: string, next: string): { look?: string } | undefined => {
+    if (!task) {
+      work();
+      return undefined;
+    }
     person("session", "start", task);
     work();
-    person("task", "done", task, "--result", result);
+    const done = person("task", "done", task, "--result", result) as { look?: string };
     person("session", "close", "--summary", summary, "--next", next);
+    return done;
   };
 
   // the municipality's skeleton: what its houses' research stands on
@@ -259,7 +290,7 @@ export function addHouses(c: HousesCtx): { mill: string; other: string } {
 
   // the mill
   const holder0 = T.holder0;
-  session(asked.task, () => {
+  const millDone = session(asked.task, () => {
     item("name", "--name", T.name);
     item("number", "--number", "9", "--until", "1805", "--certainty", "high");
     item("number", "--number", HOUSE_MILL, "--since", "1805", "--certainty", "high");
@@ -286,6 +317,11 @@ export function addHouses(c: HousesCtx): { mill: string; other: string } {
     item("passed", "--checklist", "--what", T.passed.checklist);
     item("material", "--memory", T.memory);
   }, T.sessions.result, T.sessions.summary, T.sessions.next);
+
+  // its look check found a picture to go through: the research closes the mill with a task of its look (research
+  // 1.38, spec 145 T1); while that one is open the mill is queued, not researched — so it is done too, the check closed
+  const look = millDone?.look;
+  if (look) session(look, () => item("look-check", "--next", "none", "--text", T.lookSession.check), T.lookSession.result, T.lookSession.summary, T.lookSession.next);
 
   // the house of the other village: asked for too, its task in the queue in its place (not first)
   if (c.consent) {
