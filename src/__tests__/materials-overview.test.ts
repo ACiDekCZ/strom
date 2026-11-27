@@ -8,7 +8,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { strings, setLanguage } from '../strings.js';
 import { Attachment } from '../types.js';
-import { MaterialFile, MaterialList, MaterialResult, ThumbSize, researchMakesThumb } from '../materials.js';
+import { MaterialFile, MaterialList, MaterialResult, ThumbSize, researchMakesThumb, researchPersonsOf } from '../materials.js';
 import {
     overviewItems, overviewGroups, overviewRows, overviewSummary, emptyFilters, passesFilters, activeFilterCount,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, nameWithoutYears, personsShort, parseViewPrefs, localDay,
@@ -89,6 +89,20 @@ describe('overview items', () => {
         expect(items[0].persons).toEqual(['p_anna', 'p_karel']);
         expect(items[0].uses).toBe(4);
         expect(items[0].at).toBe('2026-11-02T10:00:00.000Z');
+    });
+
+    it('a research\'s file linked to a person in the tree only has that person, never "Without a person" (spec 147 K3)', () => {
+        const original = { sha256: sha(1), name: 'a.jpg', mimeType: 'image/jpeg', bytes: 1 };
+        const items = overviewItems(list([file(1, { persons: ['P0001'] }), file(2)]), [rec(att('a1', { original }), ['P0001', 'P0003'])]);
+        const joined = items.find(i => i.key === 'm:I0001')!;
+        expect(joined.persons).toEqual(['P0001', 'P0003']);
+        expect(joined.treePersons).toEqual(['P0003']);
+        // What the research itself has: the person in the tree only is still to be written there.
+        expect(researchPersonsOf(joined)).toEqual(['P0001']);
+        expect(itemWithoutPerson(joined)).toBe(false);
+        const plain = items.find(i => i.key === 'm:I0002')!;
+        expect(plain.treePersons).toBeUndefined();
+        expect(researchPersonsOf(plain)).toEqual([]);
     });
 
     it('works without a remembered list (only the tree)', () => {

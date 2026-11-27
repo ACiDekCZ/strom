@@ -21,15 +21,16 @@ import type { Attachment, MaterialKind, MediaPlace, PersonId } from '../types.js
 import {
     MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_FILES, SORT_MAX_TEXT, type EditRequest,
     startMaterialSort, fetchMaterialSort, cancelMaterialSort, fetchMaterialSortRun, cancelMaterialSortRun, fetchMaterial, cachedMaterialList,
+    decideMaterialSort, type SortDecision,
     type SortRunState,
-    fileExt, mergeIntoCache, materialErrorText, materialKindLabel, isPortraitCandidate, materialType,
+    fileExt, mergeIntoCache, materialErrorText, materialKindLabel, isPortraitCandidate, materialType, researchPersonsOf,
 } from '../materials.js';
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import { materialThumbs } from '../material-thumbs.js';
 import { setTileState, standInState } from './image-slot.js';
 import {
     sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
-    sortNext, sortLeftMap, sortCopyOf, sortStripState, sortRunBatches, sortProposalCounts, sortLeftIds, sortBackRow,
+    sortNext, sortLeftMap, sortCopyOf, sortStripState, sortRunBatches, sortProposalCounts, sortLeftIds, sortLeftDecided, sortBackRow,
     sortJobsMerged, sortRunView, sortRunAdvance, sortRunEnded, sortRunCancelled, sortRunRest, sortFinishedSorts, sortRunContinued, type SortRunView,
     sortJobWithout, sortRememberedWithout,
     type SortNext, type SortNextOpts, type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite, type SortCounts, type SortStripState,
@@ -816,6 +817,9 @@ export const materialSortMethods = uiModule({
             if (res.value.filesDone !== undefined) job.filesDone = res.value.filesDone;
         }
         w.job = job;
+        // The sorting finished (spec 147 K5), or is first seen finished (done by the first ask, after a reload):
+        // the Materials list read anew, so what the research says of its files now shows.
+        if ((!was || running(was)) && !running(job)) void this.mwLoad();
         if (running(job) || earlier.missing) {
             again(document.hidden ? POLL_HIDDEN_MS : POLL_MS);
         } else if (hasProposal(job)) {
@@ -897,6 +901,8 @@ export const materialSortMethods = uiModule({
         const current = res.value.parts.find(p => p.part === view.batch);
         if (view.running && current?.filesDone !== undefined) job.filesDone = current.filesDone;
         w.job = job;
+        // The run finished (spec 147 K5): the Materials list read anew, so what the research says of its files now shows.
+        if ((!was || running(was)) && !running(job)) void this.mwLoad();
         // The remembered run moves on (what was decided meanwhile stays: read anew); once it ended,
         // a batch that did not run or a stop from elsewhere is remembered (spec 102 §3).
         const r = researchAutoState(w.treeId).materialSort;
@@ -1006,7 +1012,8 @@ export const materialSortMethods = uiModule({
         const byId = new Map(items.filter(i => i.file).map(i => [i.file!.id, i]));
         // E: the files the agent left unassigned (this proposal's, or remembered from the closed ones) still without a title or a person.
         const leftItems = (): MaterialItem[] => {
-            const ids = new Set(marks.left.keys());
+            // Only what the agent left: a proposal a person accepted or rejected is handled (spec 147 K6).
+            const ids = new Set([...marks.left].filter(([, x]) => !sortLeftDecided(x.why)).map(([id]) => id));
             if (r && job) {
                 const rows = sortRows(job, id => byId.get(id) ?? null, countChip);
                 for (const row of rows) if (!r.decided[row.id] && !sortRowProposes(row)) ids.add(row.id);
@@ -1285,6 +1292,29 @@ export const materialSortMethods = uiModule({
         split();
         const open = () => assigned.filter(x => !decided[x.id]);
         const done = () => assigned.filter(x => decided[x.id]);
+        /**
+         * A row's decision kept beside the research for good (spec 147 K2, `material.decided`): the next sorting
+         * does not offer it again, on any device. Without it this browser's memory (sortLeft) is the only one.
+         * Not waited for; a row of an earlier sorting of the proposal (Try again) is told to that one.
+         */
+        const tell = (ids: readonly string[], how: SortDecision) => {
+            const now = this.materialsContext();
+            if (!ids.length || !now?.base || !now.caps.bridgeUp || !now.caps.decided) return;
+            const base = now.base;
+            const sorts = [sortKey(r), ...(r.earlier ?? [])];
+            const one = async (part: readonly string[]): Promise<boolean> => {
+                for (const id of sorts) {
+                    const res = await decideMaterialSort(base, id, part, how);
+                    if (res.ok) return true;
+                    if (res.error.status !== 400) { console.warn('Sorting: the decision was not kept in the research', res.error); return false; }
+                }
+                return false;
+            };
+            void (async () => {
+                if (await one(ids) || ids.length < 2 || sorts.length < 2) return;
+                for (const id of ids) await one([id]);
+            })();
+        };
         const remember = () => {
             const now = researchAutoState(mc.treeId).materialSort;
             if (!now || sortKey(now) !== sortKey(r)) return;
@@ -1495,7 +1525,7 @@ export const materialSortMethods = uiModule({
                 acts.append(
                     button(s.accept, 'is-primary msp-accept', () => void accept([row.id])),
                     button(s.edit, 'msp-edit', () => { editing = row.id; focusId = row.id; draw(); }),
-                    button(s.reject, 'msp-reject', () => { decided[row.id] = 'rejected'; selected.delete(row.id); remember(); draw(); }),
+                    button(s.reject, 'msp-reject', () => { decided[row.id] = 'rejected'; selected.delete(row.id); remember(); tell([row.id], 'refused'); draw(); }),
                 );
             } else if (tab === 'unassigned' && row.unrelated && item) {
                 const can = hideCan();
@@ -1514,7 +1544,7 @@ export const materialSortMethods = uiModule({
             } else if (tab === 'done' && state) {
                 acts.appendChild(h('span', `msp-state is-${state}`, state === 'accepted' ? s.accepted : s.rejected));
                 // A rejected row comes back to the proposals; an accepted one is written back as it was, then comes back too.
-                if (state === 'rejected') acts.appendChild(button(s.undoRow, 'msp-undo', () => { delete decided[row.id]; remember(); draw(); }));
+                if (state === 'rejected') acts.appendChild(button(s.undoRow, 'msp-undo', () => { delete decided[row.id]; remember(); tell([row.id], 'open'); draw(); }));
                 else if (parseSortRevert(reverts[row.id])) acts.appendChild(button(s.undoRow, 'msp-undo', () => void revert(row.id)));
             }
             el.appendChild(acts);
@@ -1687,7 +1717,10 @@ export const materialSortMethods = uiModule({
                 } else acts.remove();
             }
             if (unassigned.length) {
-                const { el, acts } = sec(s.leftLine(unassigned.length), s.leftNote);
+                // Those the research did not judge (left out, not read) go to the agent again (sortLeftIds): said so (spec 147 K6).
+                const again = unassigned.filter(x => { const w = unproposed.get(x.id)?.why; return w === 'left-out' || w === 'reader-failed'; }).length;
+                const note = !again ? s.leftNote : again === unassigned.length ? s.leftNoteAgain : s.leftNoteSome(again);
+                const { el, acts } = sec(s.leftLine(unassigned.length), note);
                 if (!next.length) el.insertBefore(h('p', 'mdlg-note msp-end-nothing', s.nothingLeft), el.firstChild);
                 if (items.length && materialsWindowOpen()) {
                     acts.appendChild(button(s.reviewByHand(items.length), `msp-review${next.length ? '' : ' is-primary'}`, () => { dialog.close(); this.mwReview(items); }));
@@ -1780,36 +1813,39 @@ export const materialSortMethods = uiModule({
             // Material outside the tree: its details and people through the bridge; what the research's
             // assign does not carry (an event, a couple, a source) makes it a file of the tree (§4).
             const staged: Array<{ row: SortRow; w: SortWrite; rv: SortRevert; id: string | null; record: Omit<Attachment, 'id' | 'places'> | null }> = [];
+            /** The research's part of a row: its details (`/material/edit`) and people (`/material/assign`); `rv` gets what undoes it. */
+            const bridgeWrite = async (row: SortRow, w: SortWrite, fileId: string, rv: SortRevert): Promise<boolean> => {
+                if (!now?.base || !now.caps.bridgeUp) return false;
+                const edit: EditRequest = { ids: [fileId] };
+                if (w.title) edit.title = w.title.value;
+                if (w.kind) edit.kind = w.kind.value;
+                if (w.date) edit.date = w.date.value;
+                if (Object.keys(edit).length > 1) {
+                    if (!now.caps.edit) return false;
+                    const res = await this.writeMaterialEdit(now, edit);
+                    if (!res.ok) return false;
+                    const was = res.value.was[fileId] ?? {};
+                    rv.was = {};
+                    for (const k of ['title', 'kind', 'date'] as const) if (edit[k] !== undefined) rv.was[k] = (was[k] as string | undefined) ?? '';
+                }
+                if (w.persons.length) {
+                    // The research's own people: those only at the tree's file are not the research's yet (spec 147 K3).
+                    const has = row.item ? researchPersonsOf(row.item) : [];
+                    const added = w.persons.filter(p => !has.includes(p));
+                    if (!now.caps.assign) return false;
+                    if (added.length) {
+                        if (!(await this.writeAssign(now, { files: [fileId], add: added })).ok) return false;
+                        rv.persons = added;
+                    }
+                }
+                return true;
+            };
             dialog.busy(true);
             for (const { row, w } of writes) {
                 if (!w || w.mediaId || !w.fileId) continue;
                 if (!now?.base || !now.caps.bridgeUp) { refused++; continue; }
                 const rv: SortRevert = {};
-                let good = true;
-                const edit: EditRequest = { ids: [w.fileId] };
-                if (w.title) edit.title = w.title.value;
-                if (w.kind) edit.kind = w.kind.value;
-                if (w.date) edit.date = w.date.value;
-                if (Object.keys(edit).length > 1) {
-                    if (!now.caps.edit) good = false;
-                    else {
-                        const res = await this.writeMaterialEdit(now, edit);
-                        good = res.ok;
-                        if (res.ok) {
-                            const was = res.value.was[w.fileId] ?? {};
-                            rv.was = {};
-                            for (const k of ['title', 'kind', 'date'] as const) if (edit[k] !== undefined) rv.was[k] = (was[k] as string | undefined) ?? '';
-                        }
-                    }
-                }
-                if (good && w.persons.length) {
-                    const added = w.persons.filter(p => !(row.item?.persons ?? []).includes(p));
-                    if (!now.caps.assign) good = false;
-                    else if (added.length) {
-                        good = (await this.writeAssign(now, { files: [w.fileId], add: added })).ok;
-                        if (good) rv.persons = added;
-                    }
-                }
+                let good = await bridgeWrite(row, w, w.fileId, rv);
                 if (good && (w.places.length || w.newSources.length)) {
                     const id = row.item?.removedId ?? null;
                     const record = readOnly || id || !row.item ? null : await this.materialWorkingCopy(row.item, now);
@@ -1821,12 +1857,30 @@ export const materialSortMethods = uiModule({
                     if (!staged.some(x => x.row === row) && Object.keys(rv).length) reverts[row.id] = rv;
                 } else refused++;
             }
+            // A tree's file the research keeps too (spec 147 K3): written through the bridge as well, so the
+            // Materials list has it at once and the next sorting does not offer it again. Followed live the
+            // tree is locked (K4): the research's part is the whole of it, never "not written".
+            const bridged = new Map<string, SortRevert>();
+            for (const { row, w } of writes) {
+                if (!w?.mediaId || !w.researchId || !now?.base || !now.caps.bridgeUp) continue;
+                const rv: SortRevert = {};
+                if (await bridgeWrite(row, w, w.researchId, rv)) bridged.set(row.id, rv);
+            }
             dialog.busy(false);
             const tree = writes.filter(x => x.w?.mediaId);
             const treeOk = tree.filter(x => !readOnly && DataManager.canEditMedia(x.w!.mediaId!));
-            refused += tree.length - treeOk.length;
             for (const { row } of treeOk) ok.add(row.id);
+            for (const { row } of tree) {
+                if (ok.has(row.id)) continue;
+                const rv = bridged.get(row.id);
+                if (rv) {
+                    ok.add(row.id);
+                    if (Object.keys(rv).length) reverts[row.id] = rv;
+                } else refused++;
+            }
             for (const id of ok) if (!backIds.has(id)) { decided[id] = 'accepted'; selected.delete(id); }
+            // Kept for good (K2): an edited acceptance is no match the research finds by itself (K1).
+            tell([...ok].filter(id => !backIds.has(id) && picked.some(x => x.id === id)), 'accepted');
             const a = Object.values(decided).filter(d => d === 'accepted').length;
             const rj = Object.values(decided).filter(d => d === 'rejected').length;
             const text = s.done(a, rj, unassigned.length);
@@ -1867,7 +1921,7 @@ export const materialSortMethods = uiModule({
                         for (const place of [...w!.places, ...made.places]) if (DataManager.addMediaPlace(id, place)) added.push(place);
                         if (added.length) rv.places = added;
                         if (made.ids.length) rv.sources = made.ids;
-                        reverts[row.id] = rv;
+                        reverts[row.id] = { ...bridged.get(row.id), ...rv };
                     }
                     for (const st of staged) {
                         const made = sourcesFor(st.w, byOf(st.row));
@@ -1945,6 +1999,7 @@ export const materialSortMethods = uiModule({
             delete decided[id];
             delete reverts[id];
             remember();
+            tell([id], 'open');
             draw();
             // Its back side, written with it, goes back with it.
             const backId = rows.find(x => x.id === id)?.back?.id;
@@ -1988,6 +2043,7 @@ export const materialSortMethods = uiModule({
                 selected.delete(id);
                 focusId = all[i + 1]?.dataset.id ?? all[i - 1]?.dataset.id ?? null;
                 remember();
+                tell([id], 'refused');
                 draw();
                 list.querySelector<HTMLElement>(`.msp-row[data-id="${CSS.escape(focusId ?? '')}"]`)?.focus();
             }

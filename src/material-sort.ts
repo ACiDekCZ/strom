@@ -266,9 +266,25 @@ export function sortProposalCounts(rows: readonly SortRow[], decided: Readonly<R
 export function sortLeftIds(rows: readonly SortRow[], unproposed: readonly { id: string; why: string }[] = [],
     decided: Readonly<Record<string, 'accepted' | 'rejected'>> = {}): { id: string; why?: string }[] {
     const why = new Map(unproposed.map(u => [u.id, u.why]));
-    return rows.filter(r => !decided[r.id] && !sortRowProposes(r))
-        .filter(r => { const w = why.get(r.id); return w !== 'left-out' && w !== 'reader-failed'; })
-        .map(r => ({ id: r.id, ...(r.unrelated ? { why: 'unrelated' } : why.get(r.id) ? { why: why.get(r.id)! } : {}) }));
+    return rows.filter(r => {
+        // A row a person decided is handled (spec 147 K1, K2): accepted or rejected, it is not offered again.
+        if (decided[r.id]) return true;
+        if (sortRowProposes(r)) return false;
+        const w = why.get(r.id);
+        return w !== 'left-out' && w !== 'reader-failed';
+    }).map(r => {
+        const d = decided[r.id];
+        if (d) return { id: r.id, why: d === 'accepted' ? 'accepted' : 'refused' };
+        return { id: r.id, ...(r.unrelated ? { why: 'unrelated' } : why.get(r.id) ? { why: why.get(r.id)! } : {}) };
+    });
+}
+
+/**
+ * Left because a person decided its proposal (spec 147 K1, K2: `accepted`, `refused`), not
+ * because the agent said nothing: never "Not assigned by the agent", never "Go through by hand".
+ */
+export function sortLeftDecided(why: string | undefined): 'accepted' | 'refused' | null {
+    return why === 'accepted' || why === 'refused' ? why : null;
 }
 
 /**
@@ -680,6 +696,12 @@ export interface SortWrite {
     mediaId: string | null;
     /** Material outside the tree: its I… (written through the bridge). */
     fileId: string | null;
+    /**
+     * A file of the tree the research keeps too (spec 147 K3): its I…, so its
+     * details and people go to the research through the bridge as well (the
+     * Materials list reads the research's), not only with the next send.
+     */
+    researchId: string | null;
     title?: { value: string; by: 'user' | 'agent' };
     date?: { value: string; by: 'user' | 'agent' };
     kind?: { value: MaterialKind | ''; by: 'user' | 'agent' };
@@ -689,7 +711,7 @@ export interface SortWrite {
      * a person without the research's REFN) — it becomes a file of the tree (§4).
      */
     places: MediaPlace[];
-    /** People of material outside the tree (REFN, `/material/assign`). */
+    /** People through the research (REFN, `/material/assign`): of material outside the tree, and of a tree's file the research keeps. */
     persons: string[];
     /** Sources the tree does not know: made new (title) and the file placed there. */
     newSources: Array<{ ref: string; title: string }>;
@@ -702,6 +724,7 @@ export function sortWrite(row: SortRow, choice: SortChoice = {}): SortWrite | nu
         id: row.id,
         mediaId: row.item.attachment && !row.item.removedId ? row.item.attachment.id : null,
         fileId: row.item.attachment && !row.item.removedId ? null : row.item.file?.id ?? null,
+        researchId: row.item.attachment && !row.item.removedId && row.item.file && !row.item.tree ? row.item.file.id : null,
         places: [], persons: [], newSources: [],
     };
     const e = choice.edit;
@@ -726,6 +749,8 @@ export function sortWrite(row: SortRow, choice: SortChoice = {}): SortWrite | nu
         }
         if (out.mediaId) {
             if (c.place) out.places.push({ ...c.place, by });
+            // The research keeps it too: its people there as well (spec 147 K3).
+            if (out.researchId && c.person && (c.kind === 'person' || c.kind === 'event') && !out.persons.includes(c.person)) out.persons.push(c.person);
             continue;
         }
         // Material outside the tree: its people through the research (an event's person too) ...

@@ -1663,6 +1663,8 @@ export interface FakeMaterial {
     sorts?: Record<string, unknown>[];
     /** Every sorting cancelled (`POST /material/sort/<id>/cancel`). */
     cancels?: string[];
+    /** Every `POST /material/sort/<id>/decided` body with its sorting (`sort`; only with `material.decided`, spec 147 K2). */
+    decisions?: Record<string, unknown>[];
     /** The sortings, by id; a new one starts `working` (or `done` with `sortDoneAt` 0). */
     sortJobs?: Map<string, { id: string; state: string; files: string[]; at: string; polls: number; proposals?: unknown[]; reason?: string; filesDone?: number; unproposed?: unknown[]; run?: string; part?: number; parts?: number }>;
     /**
@@ -1854,7 +1856,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
     { status: number; body: unknown; headers?: Record<string, string> } | null {
     const m = b.material;
     const rest = url.pathname.replace(/^\/[^/]+/, '');
-    const sortPath = /^\/material\/sort(?:\/([^/]+)(\/cancel)?)?$/.exec(rest);
+    const sortPath = /^\/material\/sort(?:\/([^/]+)(\/cancel|\/decided)?)?$/.exec(rest);
     if (!m || (!sortPath && !/^\/material(\/assign|\/hide|\/edit|\/delete)?$/.test(rest))) return null;
     const features = b.features ?? [];
     const refusal = (status: number, code: string, params?: Record<string, unknown>) =>
@@ -1863,7 +1865,18 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         // Sort with the agent (spec 102 §13): only with an agent, only the research's files.
         if (!features.includes('material.sort')) return { status: 404, body: '' };
         const jobs = (m.sortJobs ??= new Map());
-        const [, id, cancel] = sortPath;
+        const [, id, tail] = sortPath;
+        const cancel = tail === '/cancel' ? tail : undefined;
+        if (tail === '/decided') {
+            // A row decided for good (spec 147 K2, only with `material.decided`): kept, said back.
+            if (!features.includes('material.decided') || method !== 'POST') return { status: 404, body: '' };
+            let body: Record<string, unknown>;
+            try { body = JSON.parse(postData ?? ''); } catch { return refusal(400, 'material.body'); }
+            (m.decisions ??= []).push({ sort: id, ...body });
+            const at = new Date().toISOString();
+            const ids = Array.isArray(body.ids) ? body.ids as string[] : [];
+            return { status: 200, body: { id, decided: ids.map(x => ({ id: x, how: body.how, at })) } };
+        }
         const shownJob = (j: NonNullable<FakeMaterial['sortJobs']> extends Map<string, infer J> ? J : never) => {
             const { polls: _p, ...out } = j;
             return out;

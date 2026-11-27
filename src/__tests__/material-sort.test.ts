@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseSortJob, parseMaterialFile, startMaterialSort, parseSortRun, fileWithoutPerson, type MaterialItem, type SortLink, type SortJob } from '../materials.js';
+import { parseSortJob, parseMaterialFile, startMaterialSort, decideMaterialSort, parseSortRun, fileWithoutPerson, type MaterialItem, type SortLink, type SortJob } from '../materials.js';
 import { sortRememberedFrom, type ResearchSortRemembered } from '../research-device.js';
-import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, sortRunBatches, sortJobsMerged, sortRunView, sortRunAdvance, sortRunEnded, sortRunCancelled, sortRunRest, sortRunContinued, sortFinishedSorts, sortRunErrorCode, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
+import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, sortRunBatches, sortJobsMerged, sortRunView, sortRunAdvance, sortRunEnded, sortRunCancelled, sortRunRest, sortRunContinued, sortFinishedSorts, sortRunErrorCode, sortLeftDecided, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
 import type { PartnershipId } from '../types.js';
 import type { Attachment, PersonId } from '../types.js';
 
@@ -94,6 +94,26 @@ describe('reading a sorting', () => {
         expect(calls).toHaveLength(1);
         expect(calls[0].url).toContain('/material/sort');
         expect((calls[0].body as { text: string }).text).toHaveLength(2000);
+    });
+});
+
+describe('a decision kept by the research (spec 147 K2, material.decided)', () => {
+    it('POSTs the rows and how they were decided to the sorting\'s or run\'s decided; nothing off is sent', async () => {
+        const calls: { url: string; body: unknown }[] = [];
+        const fetchImpl = async (url: string, init?: RequestInit) => {
+            calls.push({ url, body: JSON.parse(String(init?.body)) });
+            return new Response(JSON.stringify({ id: 'sort-20261127100000-ab12', decided: [] }), { status: 200 });
+        };
+        const res = await decideMaterialSort('http://b/x', 'sort-20261127100000-ab12', ['I0001', 'I0002'], 'refused', { fetchImpl });
+        expect(res.ok).toBe(true);
+        expect(calls[0].url).toContain('/material/sort/sort-20261127100000-ab12/decided');
+        expect(calls[0].body).toEqual({ ids: ['I0001', 'I0002'], how: 'refused' });
+        expect((await decideMaterialSort('http://b/x', 'run-20261127100000-ab12', ['I0003'], 'open', { fetchImpl })).ok).toBe(true);
+        expect(calls[1].url).toContain('/material/sort/run-20261127100000-ab12/decided');
+        expect((await decideMaterialSort('http://b/x', '../x', ['I0001'], 'accepted', { fetchImpl })).ok).toBe(false);
+        expect((await decideMaterialSort('http://b/x', 'sort-20261127100000-ab12', ['nope'], 'accepted', { fetchImpl })).ok).toBe(false);
+        expect((await decideMaterialSort('http://b/x', 'sort-20261127100000-ab12', [], 'accepted', { fetchImpl })).ok).toBe(false);
+        expect(calls).toHaveLength(2);
     });
 });
 
@@ -343,7 +363,34 @@ describe('what "Sort the next" takes and what a closed proposal leaves (spec 102
         const after = sortRows(job, id => id === 'I0001' ? titled(id) : item(id), chip);
         expect(sortRowProposes(after[0])).toBe(false);
         expect(sortProposalCounts(after, { I0001: 'accepted' })).toMatchObject({ accepted: 1, unassigned: 3, open: 2 });
-        expect(sortLeftIds(after, job.unproposed, { I0001: 'accepted' }).map(x => x.id)).toEqual(['I0006', 'I0007']);
+        // Accepted, it is remembered as handled (spec 147 K1): "Sort N" never counts it again.
+        expect(sortLeftIds(after, job.unproposed, { I0001: 'accepted' })).toEqual([
+            { id: 'I0001', why: 'accepted' }, { id: 'I0006', why: 'unrelated' }, { id: 'I0007', why: 'nothing-said' },
+        ]);
+    });
+    it('a row rejected is remembered as refused, an open one is not; "Sort the next" leaves both decided files out (spec 147 K1, K2)', () => {
+        const left = sortLeftIds(rows, job.unproposed, { I0001: 'accepted', I0002: 'rejected' });
+        expect(left).toEqual([
+            { id: 'I0001', why: 'accepted' }, { id: 'I0002', why: 'refused' }, { id: 'I0006', why: 'unrelated' }, { id: 'I0007', why: 'nothing-said' },
+        ]);
+        // I0005 stays open: offered again.
+        expect(left.map(x => x.id)).not.toContain('I0005');
+        const all = ['I0001', 'I0002', 'I0005'].map(id => item(id));
+        const map = Object.fromEntries(left.map(x => [x.id, { why: x.why }]));
+        expect(sortNext(all, { scope: 'all', left: sortLeftMap(all, { research: false, app: map }) }).send.map(i => i.file!.id)).toEqual(['I0005']);
+    });
+    it('the research\'s accepted and refused are a person\'s decisions, never the agent\'s silence (spec 147 K6)', () => {
+        expect(sortLeftDecided('accepted')).toBe('accepted');
+        expect(sortLeftDecided('refused')).toBe('refused');
+        for (const w of ['nothing-said', 'unrelated', 'left-out', 'dropped', undefined]) expect(sortLeftDecided(w)).toBeNull();
+    });
+    it('a file the research says was accepted or refused is not counted for sorting (spec 147 K1)', () => {
+        const at = '2026-11-27T10:00:00Z';
+        const parsed = ['accepted', 'refused'].map((why, i) => parseMaterialFile({ id: `I000${i + 1}`, name: 'a.jpg', sha: String(i).repeat(64), persons: [], left: { at, why } })!);
+        expect(parsed.map(f => f.left?.why)).toEqual(['accepted', 'refused']);
+        const items = [...parsed.map(f => item(f.id, { file: f })), item('I0009')];
+        const left = sortLeftMap(items, { research: true });
+        expect(sortNext(items, { scope: 'all', left }).send.map(i => i.file!.id)).toEqual(['I0009']);
     });
 });
 
@@ -492,6 +539,20 @@ describe('what accepting writes beyond people (spec 102 §13)', () => {
         expect(w.places.map(p => Object.keys(p)[0])).toEqual(['personId', 'personId', 'partnershipId', 'sourceId']);
         expect(w.places.every(p => p.by === 'user')).toBe(true);
         expect(w.newSources).toEqual([{ ref: 'S0009', title: 'The wedding' }]);
+    });
+
+    it('a file of the tree the research keeps too: its people go to the research as well (spec 147 K3)', () => {
+        const [row] = sortRows(job, () => treeItem('I0001', {}), chipOf);
+        const w = sortWrite(row)!;
+        expect(w.mediaId).toBe('att-I0001');
+        expect(w.researchId).toBe('I0001');
+        // Before the fix: nothing went to the research, its list said "Without a person".
+        expect(w.persons).toEqual(['P0001', 'P0404']);
+        // The tree's own file (only in the tree) has no research's record to write.
+        const only = { ...treeItem('I0001', {}), origin: 'tree' as const, file: undefined };
+        const w2 = sortWrite(sortRows(job, () => only, chipOf)[0])!;
+        expect(w2.researchId).toBeNull();
+        expect(w2.persons).toEqual([]);
     });
 
     it('a person added by hand without the research\'s REFN goes to the tree for material outside it', () => {

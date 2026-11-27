@@ -163,6 +163,12 @@ export function overviewItems(list: MaterialList | null, tree: readonly TreeReco
         if (rec) {
             item.uses = rec.uses;
             if (rec.source) item.source = rec.source;
+            // Its people at the tree's file count as its people (spec 147 K3): linked in the tree, never "Without a person".
+            const more = rec.persons.filter(p => !item.persons.includes(p));
+            if (more.length) {
+                item.persons.push(...more);
+                item.treePersons = more;
+            }
         }
         const out = !rec ? removed.get(f.id) : undefined;
         if (out) {

@@ -17,7 +17,7 @@ import { isPendingImageUrl } from '../research-image-refs.js';
 import { DataManager, LIVE_FOLLOW_EVENT } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source } from '../types.js';
 import { strings } from '../strings.js';
-import { MATERIAL_TIMEOUT_MS, MaterialError, MaterialItem, directPersons, fileUrl, materialErrorOf, materialRecordNote } from '../materials.js';
+import { MATERIAL_TIMEOUT_MS, MaterialError, MaterialItem, directPersons, fileUrl, materialErrorOf, materialRecordNote, researchPersonsOf, type AssignRequest } from '../materials.js';
 import { mediaAt, mediaPersonIds, placePersonId } from '../media.js';
 import { mediaPlaceLabel, mediaUseLabel, mediaUses } from '../media-uses.js';
 import { MultiPersonPicker, PersonPicker } from '../person-picker.js';
@@ -104,6 +104,25 @@ export function attachFixedPeople(files: MaterialItem[], persons: Person[], reco
         const p = known.get(id);
         return !!p && !p.isPlaceholder && files.every(i => has(i, p));
     });
+}
+
+/**
+ * What "Link to…" writes to the research besides the tree (spec 147 K3): the
+ * people of the places chosen (a person, or their fact or event) by REFN, to
+ * the research's files among the items that lack one of them. null: nothing
+ * (no research file, no person the research knows).
+ */
+export function attachResearchAssign(files: readonly MaterialItem[], places: readonly MediaPlace[],
+    refnOf: (id: PersonId) => string | null = id => researchPersonRef(DataManager.getPerson(id)?.refn)): AssignRequest | null {
+    const add: string[] = [];
+    for (const p of places) {
+        if (!('personId' in p)) continue;
+        const refn = refnOf(p.personId);
+        if (refn && !add.includes(refn)) add.push(refn);
+    }
+    if (!add.length) return null;
+    const ids = files.filter(i => !!i.file && !i.tree && add.some(r => !researchPersonsOf(i).includes(r))).map(i => i.file!.id);
+    return ids.length ? { files: [...new Set(ids)], add } : null;
 }
 
 function placeKeyOf(p: MediaPlace): string {
@@ -459,9 +478,22 @@ export const materialAttachMethods = uiModule({
                     refused(m.attachNothing, false);
                     return;
                 }
+                // The research keeps these files too: their people there as well (spec 147 K3), as ⋯ Assign does,
+                // so the Materials list has them at once and the next sorting does not offer them again.
+                const assign = attachResearchAssign(files, places);
+                const assigned = assign && mc?.base && mc.caps.bridgeUp && mc.caps.assign ? await this.writeAssign(mc, assign) : null;
                 dialog.busy(false);
                 dialog.close();
                 this.afterMediaChange();
+                if (assigned && !assigned.ok && mc && assign) {
+                    console.warn('Link to…: the research did not take the people', assigned.error);
+                    const again = async (): Promise<void> => {
+                        const res = await this.writeAssign(mc, assign);
+                        if (!res.ok) this.materialErrorToast(mc, res.error, () => void again());
+                        else this.refreshMaterialsWindow();
+                    };
+                    this.materialErrorToast(mc, assigned.error, () => void again());
+                } else if (assigned?.ok) this.refreshMaterialsWindow();
                 ctx.done?.();
             } catch (err) {
                 console.warn('Link to… failed', err);

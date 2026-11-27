@@ -28,7 +28,7 @@ import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
 import { researchPersonRef, researchSchemeUrl, researchLinkMark, researchSourceRef } from '../research-link.js';
-import { announcedResearchScheme } from '../research-device.js';
+import { announcedResearchScheme, researchAutoState } from '../research-device.js';
 import { PersonPicker } from '../person-picker.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE, MQ_TABLET } from '../breakpoints.js';
 import {
@@ -54,7 +54,7 @@ import {
 } from './materials-ui.js';
 import { uiModule } from './module.js';
 import type { SortStripView } from './material-sort-ui.js';
-import { sortLacksPerson, type SortStripState } from '../material-sort.js';
+import { sortLacksPerson, sortLeftDecided, type SortStripState } from '../material-sort.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { barHtml } from './prog-bar.js';
@@ -64,6 +64,12 @@ import { closeHeadMenu, openHeadMenu, SEP, type MenuEntry } from './table-view/t
 import { materialScopeSource } from './search-scope-ui.js';
 
 const MODAL_ID = 'materials-modal';
+
+/** The files a closed proposal left in this browser's memory and why (spec 147 K6): a proposal closed tags them at once. */
+function sortLeftKey(treeId: string): string {
+    const left = researchAutoState(treeId).sortLeft ?? {};
+    return Object.keys(left).sort().map(id => `${id}:${left[id]?.why ?? ''}`).join(',');
+}
 const VIEW_KEY = 'strom.materials.view';
 const THUMB_PX = 256;
 /** The tiles' sizes as drawn (a grid's tile, a list row's): "Not loaded" under the glyph only on the grid's (spec 116 §5). */
@@ -213,6 +219,8 @@ interface Win {
     drawnCaps: string;
     /** The tree's attachments its items were built from (see treeAttachmentsKey). */
     drawnAttachments: string;
+    /** This browser's memory of the files a closed proposal left (sortLeft) the tags were drawn with (spec 147 K6). */
+    drawnLeft: string;
     /** The one strip of sorting over the window (spec 102 §1) as drawn last. */
     sortView: SortStripView | null;
     /** The strip closed with its × (A, E): away while its state stays, back with the next state or the next opening. */
@@ -231,7 +239,7 @@ interface SelAction {
 }
 
 function capsKey(caps: MaterialCaps, base: string | null): string {
-    return `${caps.list}|${caps.assign}|${caps.thumb}|${caps.bridgeUp}|${caps.openLinks !== false}|${caps.links}|${caps.edit}|${caps.uses}|${caps.sort}|${caps.sortRun}|${caps.sourceOf}|${caps.left}|${caps.sameAs}|${caps.delete}|${!!caps.trees}|${caps.mediaApp}|${base ?? ''}`;
+    return `${caps.list}|${caps.assign}|${caps.thumb}|${caps.bridgeUp}|${caps.openLinks !== false}|${caps.links}|${caps.edit}|${caps.uses}|${caps.sort}|${caps.sortRun}|${caps.sourceOf}|${caps.left}|${caps.sameAs}|${!!caps.decided}|${caps.delete}|${!!caps.trees}|${caps.mediaApp}|${base ?? ''}`;
 }
 
 let win: Win | null = null;
@@ -370,6 +378,7 @@ export const materialsWindowMethods = uiModule({
             bridgeUp: ctx.caps.bridgeUp,
             drawnCaps: '',
             drawnAttachments: '',
+            drawnLeft: '',
             sortView: null,
             sortClosedState: null,
             sortAdded: 0,
@@ -466,7 +475,7 @@ export const materialsWindowMethods = uiModule({
         // The agent's sorting moves on its own (its progress, its proposal ready).
         this.mwSortStrip();
         const changed = capsKey(ctx.caps, ctx.base) !== w.drawnCaps || (cachedMaterials(w.treeId)?.list ?? null) !== w.list
-            || treeAttachmentsKey() !== w.drawnAttachments;
+            || treeAttachmentsKey() !== w.drawnAttachments || sortLeftKey(w.treeId) !== w.drawnLeft;
         if (changed && !w.raf) {
             w.raf = requestAnimationFrame(() => {
                 w.raf = 0;
@@ -641,6 +650,7 @@ export const materialsWindowMethods = uiModule({
         // A research without assigning never sends hidden files; "Show hidden" is not offered.
         if (!ctx.caps.assign) w.filters.showHidden = false;
         this.mwSortMarks();
+        w.drawnLeft = sortLeftKey(w.treeId);
         w.summary = overviewSummary(w.items, list, !!rec?.full);
         // "Not assigned by the agent" is offered only while there is such a file: its filter goes with the last one.
         if (!w.summary.left) w.filters.left = false;
@@ -687,11 +697,15 @@ export const materialsWindowMethods = uiModule({
         const marks = w.model === 'archive' && this.materialSortGate() ? this.materialSortMarks(w.items) : null;
         for (const i of w.items) {
             delete i.agentLeft;
+            delete i.sortDecided;
             delete i.copyOf;
             // The file of a source is assigned (spec 102 §7): no "Not assigned by the agent", no copy tag.
             if (!marks || !i.file || i.hidden || i.sourceOf?.length || (i.titled && !sortLacksPerson(i))) continue;
             const left = marks.left.get(i.file.id);
-            if (left) i.agentLeft = { ...left };
+            // A proposal a person accepted or rejected is no "Not assigned by the agent" (spec 147 K6).
+            const decided = sortLeftDecided(left?.why);
+            if (decided) i.sortDecided = decided;
+            else if (left) i.agentLeft = { ...left };
             const copy = marks.copyOf.get(i.file.id);
             if (copy) i.copyOf = copy;
         }
@@ -700,8 +714,16 @@ export const materialsWindowMethods = uiModule({
     /** The tag before the people of a tile or a row: the agent left it unassigned, or it is a copy (spec 102 §4). */
     mwSortTagHtml(item: MaterialItem): string {
         const s = strings.materials.agentSort;
-        const tag = item.agentLeft ? s.tagLeft : item.copyOf ? s.tagCopy : '';
-        return tag ? `<span class="mw-intree-tag mw-sort-tag" data-tag="${item.agentLeft ? 'left' : 'copy'}">${esc(tag)}</span>` : '';
+        const tag = this.mwSortTag(item);
+        const kind = item.agentLeft ? 'left' : item.sortDecided ? item.sortDecided : 'copy';
+        return tag ? `<span class="mw-intree-tag mw-sort-tag" data-tag="${kind}">${esc(tag)}</span>` : '';
+    },
+
+    /** The sorting's tag of a file: left by the agent, its proposal accepted or rejected (spec 147 K6), a copy; '' none. */
+    mwSortTag(item: MaterialItem): string {
+        const s = strings.materials.agentSort;
+        return item.agentLeft ? s.tagLeft : item.sortDecided === 'accepted' ? s.tagAccepted : item.sortDecided === 'refused' ? s.tagRefused
+            : item.copyOf ? s.tagCopy : '';
     },
 
     /** "File of a source" / "File of 2 sources" (spec 102 §7), '' for any other file. */
@@ -1151,7 +1173,7 @@ export const materialsWindowMethods = uiModule({
         if (item.tree) return [item.title, this.mwTreeFileLine(item), this.mwTreeFileOf(item)].filter(Boolean).join(', ');
         const persons = this.mwPersons(item).text;
         const hidden = item.hidden ? m.hiddenLabel[item.hidden.reason ?? 'none'] ?? m.hiddenLabel.none : '';
-        const tag = item.agentLeft ? m.agentSort.tagLeft : item.copyOf ? m.agentSort.tagCopy : this.mwSourceOfTag(item);
+        const tag = this.mwSortTag(item) || this.mwSourceOfTag(item);
         return [item.title, persons, tag, hidden].filter(Boolean).join(', ');
     },
 

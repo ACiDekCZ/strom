@@ -797,7 +797,9 @@ export const materialViewerMethods = uiModule({
         // Why the agent left it unassigned (spec 102 §4.4): the reader's own words, else the reason.
         if (item.agentLeft) {
             const why = item.agentLeft.why as keyof typeof m.agentSort.unproposed | undefined;
-            field(m.agentSort.unassignedWhy, item.agentLeft.said || (why && m.agentSort.unproposed[why]) || m.agentSort.unproposed['left-out']);
+            // Not about the family, or no reason kept (the agent proposed nothing): never "left out" (spec 147 K6).
+            const said = item.agentLeft.said || (item.agentLeft.why === 'unrelated' ? m.reason.unrelated : why && m.agentSort.unproposed[why]);
+            field(m.agentSort.unassignedWhy, said || m.agentSort.unproposed['nothing-said']);
         }
         if (agent && inArchive) {
             if (item.state === 'processed') field(m.f.state, m.agentDone);

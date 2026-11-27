@@ -43,6 +43,11 @@ export const MATERIAL_SORT_RUN_FEATURE = 'material.sortRun';
 export const MATERIAL_LEFT_FEATURE = 'material.left';
 /** `sameAs: "I…"` on a file of `/material`: an older file of the material has the same content (spec 102 K1.13). */
 export const MATERIAL_SAME_AS_FEATURE = 'material.sameAs';
+/**
+ * `POST /material/sort/<id>/decided {ids, how: accepted|refused|open}`: a row of a finished sorting decided for good,
+ * on every device (spec 147 K2); GET /material then says it as `left.why` accepted / refused.
+ */
+export const MATERIAL_DECIDED_FEATURE = 'material.decided';
 /** `POST /material/delete` with `dryRun` and the bridge's `confirm`: a file deleted for good (spec 102 K1.17). */
 export const MATERIAL_DELETE_FEATURE = 'material.delete';
 /**
@@ -122,7 +127,11 @@ export interface MaterialLeft {
     at: string;
     /** The sorting that left it (sort-…). */
     sort?: string;
-    why: 'nothing-said' | 'nothing-new' | 'dropped';
+    /**
+     * Why: the agent said nothing usable (nothing-said, nothing-new, dropped), or a person decided its
+     * proposal (spec 147 K1, K2: accepted — the file has what was proposed —, refused — rejected).
+     */
+    why: 'nothing-said' | 'nothing-new' | 'dropped' | 'accepted' | 'refused';
     /** What its reader wrote of it. */
     said?: string;
 }
@@ -207,6 +216,11 @@ export interface MaterialItem {
     persons: string[];
     /** People only through the batch the file came in. */
     viaBatch: string[];
+    /**
+     * People only at the tree's file of it, not the research's yet (spec 147 K3; in `persons` too):
+     * the list shows them, the research's assign still adds them.
+     */
+    treePersons?: string[];
     /** The sender's note (notes by "user"), else the attachment's note. */
     noteUser?: string;
     hidden?: { reason?: HiddenReason };
@@ -221,6 +235,8 @@ export interface MaterialItem {
     removedId?: string;
     /** The agent left it unassigned and it still lacks a title or a person (spec 102 §4.4; set by the Materials window). */
     agentLeft?: { why?: string; said?: string };
+    /** A person decided its proposal and it still lacks a title or a person (spec 147 K1, K2; set by the Materials window): not sent again. */
+    sortDecided?: 'accepted' | 'refused';
     /** It has the same content as an older file (its I…) and is not sent to the agent (spec 102 §4.2; set by the Materials window). */
     copyOf?: string;
     /** The sources whose file it is (`material.sourceOf`, spec 102 §7; set by the overview with the gate): it counts as assigned. */
@@ -348,7 +364,7 @@ export function parseMaterialFile(raw: unknown): MaterialFile | null {
     return file;
 }
 
-const LEFT_WHYS: readonly MaterialLeft['why'][] = ['nothing-said', 'nothing-new', 'dropped'];
+const LEFT_WHYS: readonly MaterialLeft['why'][] = ['nothing-said', 'nothing-new', 'dropped', 'accepted', 'refused'];
 
 function leftOf(v: unknown): MaterialLeft | undefined {
     if (!v || typeof v !== 'object') return undefined;
@@ -645,6 +661,12 @@ export function attachmentItem(att: Attachment, persons: string | null | readonl
     return item;
 }
 
+/** The item's people as the research has them: without those only at the tree's file (`treePersons`). */
+export function researchPersonsOf(item: Pick<MaterialItem, 'persons' | 'treePersons'>): string[] {
+    const tree = item.treePersons;
+    return tree?.length ? item.persons.filter(p => !tree.includes(p)) : item.persons;
+}
+
 /** Does the file concern the person (directly, from sorting, or through its batch)? */
 export function fileConcerns(file: MaterialFile, refn: string, batches: Map<string, MaterialBatch>): boolean {
     if (file.persons.includes(refn) || file.sorted?.persons?.includes(refn)) return true;
@@ -771,6 +793,11 @@ export function matLeft(env: MaterialEnv): boolean {
     return matList(env) && has(env, MATERIAL_LEFT_FEATURE);
 }
 
+/** The research keeps a person's decision of a sorting's row for good (`material.decided`, spec 147 K2). */
+export function matDecided(env: MaterialEnv): boolean {
+    return matSort(env) && has(env, MATERIAL_DECIDED_FEATURE);
+}
+
 /** The research says which files have the same content as an older one (`material.sameAs`). */
 export function matSameAs(env: MaterialEnv): boolean {
     return matList(env) && has(env, MATERIAL_SAME_AS_FEATURE);
@@ -807,6 +834,8 @@ export interface MaterialCaps {
     left: boolean;
     /** The research says which files have the same content as an older one (`material.sameAs`). */
     sameAs: boolean;
+    /** The research keeps a sorting's rows decided for good (`material.decided`, spec 147 K2); absent: an older research. */
+    decided?: boolean;
     /** The research deletes a file for good (`material.delete`). */
     delete: boolean;
     /** The research lists its family tree files and deletes them with their source (`material.trees`, spec 117 §5). */
@@ -825,6 +854,7 @@ export function materialCaps(env: MaterialEnv & { openLinks?: boolean }): Materi
         sortRun: matSortRun(env), sourceOf: matSourceOf(env), left: matLeft(env), sameAs: matSameAs(env), delete: matDelete(env), trees: matTrees(env),
         mediaApp: env.linked && has(env, MEDIA_APP_FEATURE),
     };
+    if (matDecided(env)) caps.decided = true;
     if (env.openLinks !== undefined) caps.openLinks = env.openLinks;
     return caps;
 }
@@ -1779,6 +1809,21 @@ export async function fetchMaterialSort(base: string, id: string, opts: BridgeOp
 export async function cancelMaterialSort(base: string, id: string, opts: BridgeOptions = {}): Promise<MaterialResult<true>> {
     if (!isSortId(id)) return bodyError();
     const answer = await request(withAppVersion(`${base}/material/sort/${encodeURIComponent(id)}/cancel`), postInit({}), opts);
+    if ('kind' in answer) return { ok: false, error: answer };
+    if (answer.status >= 200 && answer.status < 300) return { ok: true, value: true };
+    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
+/** How a person decided a sorting's row (spec 147 K2); `open`: the decision taken back. */
+export type SortDecision = 'accepted' | 'refused' | 'open';
+
+/**
+ * A sorting's rows decided for good (`POST /material/sort/<sort-…|run-…>/decided`, behind material.decided):
+ * kept beside the research, so the next sorting does not offer them again on any device.
+ */
+export async function decideMaterialSort(base: string, id: string, ids: readonly string[], how: SortDecision, opts: BridgeOptions = {}): Promise<MaterialResult<true>> {
+    if (!(isSortId(id) || isRunId(id)) || !ids.length || ids.some(x => !FILE_ID.test(x))) return bodyError();
+    const answer = await request(withAppVersion(`${base}/material/sort/${encodeURIComponent(id)}/decided`), postInit({ ids: [...ids], how }), opts);
     if ('kind' in answer) return { ok: false, error: answer };
     if (answer.status >= 200 && answer.status < 300) return { ok: true, value: true };
     return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };

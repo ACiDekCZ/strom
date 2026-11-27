@@ -22,7 +22,7 @@ import {
     MaterialItem, MaterialFile, MaterialBatch, MaterialActionId, MaterialError, MaterialResult, AssignRequest, AssignAnswer, HideRequest, HideAnswer,
     HiddenReason, assignMaterial, hideMaterial, fetchMaterial, saveMaterialList, mergeAssignIntoCache, mergeIntoCache,
     cachedMaterialList, addedPersons, assignUndoRequests, batchUndoRequest, directPersons,
-    materialErrorText, materialErrorAction,
+    materialErrorText, materialErrorAction, researchPersonsOf,
 } from '../materials.js';
 import { MultiPersonPicker } from '../person-picker.js';
 import { nameWithoutYears } from '../materials-overview.js';
@@ -372,7 +372,8 @@ export const materialActionsMethods = uiModule({
                     : m.assignWhat.filesOnly(files.length);
         const already = (refn: string) => wholeBatch
             ? (wholeBatch.persons ?? []).includes(refn)
-            : files.every(i => i.persons.includes(refn));
+            // The research's own people (spec 147 K3): one only at the tree's file can still be assigned there.
+            : files.every(i => researchPersonsOf(i).includes(refn));
         const dialog = materialDialog({ title: m.assignTitle, sub, modifier: 'assign' });
         const host = h('div');
         host.id = PICKER_ID;

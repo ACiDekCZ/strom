@@ -288,7 +288,7 @@ const treeRecordOf = (page: Page, sha: string) => page.evaluate((sha) => {
 test.describe('Link to… beside an archive', () => {
     test.use({ viewport: DESKTOP });
 
-    test('material only in the archive: from the empty "Where used", linked with a working copy from the bridge; the research is not written', async ({ page }) => {
+    test('material only in the archive: from the empty "Where used", linked with a working copy from the bridge; the person assigned in the research too (spec 147 K3)', async ({ page }) => {
         const sha = materialSha('I0001');
         const { material } = await research(page, [materialFile(1, { title: 'Křest' })]);
         await view(page, 'Křest');
@@ -302,7 +302,8 @@ test.describe('Link to… beside an archive', () => {
         await expect(dialog(page)).toHaveCount(0);
         await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Linked to Jan Fíšek.');
         await expect.poll(() => treeRecordOf(page, sha)).toEqual({ places: 1, mime: 'image/jpeg', copy: true });
-        expect(material.assigns).toHaveLength(0);
+        // The research's list has the person too, never "Without a person" (spec 147 K3).
+        await expect.poll(() => material.assigns).toEqual([expect.objectContaining({ files: ['I0001'], add: ['P0003'] })]);
         await expect.poll(() => links(page)).toEqual(['Jan Fíšek']);
         // A file in the tree: Remove from the tree…, no Hide.
         await expect(act(page, 'removeFromTree')).toBeVisible();

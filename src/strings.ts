@@ -3485,9 +3485,15 @@ const stringsEN = {
             restNote: 'This closes the proposal and opens the Sort with the agent dialog.',
             leftLine: (n: number) => `The agent did not assign ${nEn(n, 'file', 'files')}`,
             leftNote: 'They stay without title and person and are tagged “Not assigned by the agent” in Materials. They are not sent to the agent next time.',
+            // Some of them the research did not judge (left out, not read, spec 147 K6): those go to the agent again.
+            leftNoteSome: (n: number) => `${nEn(n, 'file', 'files')} the agent left out or could not read: they go to the agent again next time. The others stay without title and person, are tagged “Not assigned by the agent” in Materials and are not sent again.`,
+            leftNoteAgain: 'The agent left them out or could not read them: they go to the agent again next time.',
             // What goes to the agent and what not (spec 102 §4); the proposal's own chips (§10).
             fLeft: 'Not assigned by the agent',
             tagLeft: 'Not assigned by the agent',
+            // A proposal a person decided (spec 147 K1, K2): not sent to the agent again.
+            tagAccepted: 'Proposal accepted',
+            tagRefused: 'Proposal rejected',
             tagCopy: 'Same content',
             // A file that is the file of a source (spec 102 §7, material.sourceOf): assigned, with the people citing the source.
             tagSourceOf: 'File of a source',
@@ -16721,9 +16727,13 @@ const stringsCZ: StringsType = {
             restNote: 'Návrh se tím uzavře a otevře se dialog Roztřídit agentem.',
             leftLine: (n: number) => `${nCs(n, 'soubor', 'soubory', 'souborů')} agent nezařadil`,
             leftNote: 'Zůstávají bez titulku a osoby, v Materiálech mají štítek „Agent nezařadil“. Příště se agentovi neposílají.',
+            leftNoteSome: (n: number) => `${nCs(n, 'soubor', 'soubory', 'souborů')} agent vynechal nebo nepřečetl: příště se mu pošlou znovu. Ostatní zůstávají bez titulku a osoby, v Materiálech mají štítek „Agent nezařadil“ a znovu se neposílají.`,
+            leftNoteAgain: 'Agent je vynechal nebo nepřečetl: příště se mu pošlou znovu.',
             // What goes to the agent and what not (spec 102 §4); the proposal's own chips (§10).
             fLeft: 'Agent nezařadil',
             tagLeft: 'Agent nezařadil',
+            tagAccepted: 'Návrh přijat',
+            tagRefused: 'Návrh odmítnut',
             tagCopy: 'Stejný obsah',
             // A file that is the file of a source (spec 102 §7, material.sourceOf): assigned, with the people citing the source.
             tagSourceOf: 'Zdroj pramene',
@@ -29688,9 +29698,13 @@ const stringsDE: StringsType = {
             restNote: 'Damit wird der Vorschlag geschlossen und der Dialog „Mit dem Agenten sortieren“ öffnet sich.',
             leftLine: (n: number) => `${nDe(n, 'Datei', 'Dateien')} hat der Agent nicht zugeordnet`,
             leftNote: 'Die Dateien bleiben ohne Titel und Person und tragen in den Materialien „Vom Agenten nicht zugeordnet“. Beim nächsten Mal gehen sie nicht an den Agenten.',
+            leftNoteSome: (n: number) => `${nDe(n, 'Datei', 'Dateien')} hat der Agent ausgelassen oder nicht lesen können; sie gehen beim nächsten Mal wieder an ihn. Die übrigen bleiben ohne Titel und Person, tragen in den Materialien „Vom Agenten nicht zugeordnet“ und gehen nicht noch einmal an den Agenten.`,
+            leftNoteAgain: 'Der Agent hat sie ausgelassen oder nicht lesen können: Beim nächsten Mal gehen sie wieder an ihn.',
             // What goes to the agent and what not (spec 102 §4); the proposal's own chips (§10).
             fLeft: 'Vom Agenten nicht zugeordnet',
             tagLeft: 'Vom Agenten nicht zugeordnet',
+            tagAccepted: 'Vorschlag angenommen',
+            tagRefused: 'Vorschlag abgelehnt',
             tagCopy: 'Gleicher Inhalt',
             // A file that is the file of a source (spec 102 §7, material.sourceOf): assigned, with the people citing the source.
             tagSourceOf: 'Datei einer Quelle',

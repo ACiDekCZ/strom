@@ -668,9 +668,13 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
             restNote: 'To zamknie propozycję i otworzy okno „Uporządkuj agentem”.',
             leftLine: (n: number) => `${nPl(n, 'plik', 'pliki', 'plików')} agent nie przypisał`,
             leftNote: 'Zostają bez tytułu i osoby, w Materiałach mają etykietę „Agent nie przypisał”. Następnym razem nie trafią do agenta.',
+            leftNoteSome: (n: number) => `${nPl(n, 'plik', 'pliki', 'plików')} agent pominął lub nie odczytał: następnym razem trafią do niego ponownie. Pozostałe zostają bez tytułu i osoby, w Materiałach mają etykietę „Agent nie przypisał” i nie są wysyłane ponownie.`,
+            leftNoteAgain: 'Agent je pominął lub nie odczytał: następnym razem trafią do niego ponownie.',
             // What goes to the agent and what not (spec 102 §4); the proposal's own chips (§10).
             fLeft: 'Agent nie przypisał',
             tagLeft: 'Agent nie przypisał',
+            tagAccepted: 'Propozycja przyjęta',
+            tagRefused: 'Propozycja odrzucona',
             tagCopy: 'Ta sama treść',
             // A file that is the file of a source (spec 102 §7, material.sourceOf): assigned, with the people citing the source.
             tagSourceOf: 'Plik źródła',
