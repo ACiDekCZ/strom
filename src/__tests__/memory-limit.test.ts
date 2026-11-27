@@ -84,6 +84,17 @@ describe('memory limit: an output that holds its images whole', () => {
     });
 });
 
+describe('memory limit: an output that streams its images and keeps none (the gift package, 1127)', () => {
+    const h = steadyHeap(1 * MB);
+    it('the images do not count, only 3 × H: 4 GB of photos do not ask', () => {
+        expect(outputPeak(4096 * MB, h, 'streamed')).toBe(90 * MB);
+        expect(nearLimitOutput(4096 * MB, h, L2, 'streamed')).toBe(false);
+        expect(nearLimitOutput(4096 * MB, h, L2)).toBe(true);
+        // A tree near the limit while open still asks.
+        expect(nearLimitOutput(0, 600 * MB, L2, 'streamed')).toBe(true);
+    });
+});
+
 describe('memory limit: an output written a few images at a time (D10c)', () => {
     const h = steadyHeap(1 * MB); // a small tree: 30 MB
     it('S_out = 2.5 × images + 3 × H (the default)', () => {

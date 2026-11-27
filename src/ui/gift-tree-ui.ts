@@ -801,7 +801,7 @@ export const giftTreeMethods = uiModule({
         const s = u.g.settings;
         // Near the browser's limit: the question first; "Leave the photos out" makes it without them.
         const answer = await confirmMemoryForOutput({
-            what: 'gift', canLeaveOut: s.photos, data: giftCutData(u.data, s.cut), whole: true,
+            what: 'gift', canLeaveOut: s.photos, data: giftCutData(u.data, s.cut), streamed: true,
         });
         if (ui !== u || answer === 'cancel') return;
         if (answer === 'without') s.photos = false;
@@ -866,7 +866,7 @@ export const giftTreeMethods = uiModule({
         const largest = rows.reduce<GiftRecipientRow | null>((m, r) => !m || (stats.get(r.key)?.bytes ?? 0) > (stats.get(m.key)?.bytes ?? 0) ? r : m, null);
         if (largest) {
             const s = giftBatchRowSettings(u.data, b, common, largest);
-            const answer = await confirmMemoryForOutput({ what: 'gift', canLeaveOut: s.photos, data: giftCutData(u.data, s.cut), whole: true });
+            const answer = await confirmMemoryForOutput({ what: 'gift', canLeaveOut: s.photos, data: giftCutData(u.data, s.cut), streamed: true });
             if (ui !== u || answer === 'cancel') return;
             if (answer === 'without') {
                 common.photos = false;

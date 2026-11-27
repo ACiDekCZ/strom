@@ -170,7 +170,8 @@ function exportBaseline(treeId: TreeId, exportId: string, data: StromData): () =
     return () => {
         void (async () => {
             const { saveBaselineJson } = await import('./share-baselines.js');
-            const json = typeof kept === 'string' ? kept : await (await jsonFileWithImages(kept)).blob.text();
+            // With its images read from the pool as a Blob: a tree whose images weigh gigabytes is never one text (1127).
+            const json = typeof kept === 'string' ? kept : (await jsonFileWithImages(kept)).blob;
             await saveBaselineJson(treeId, exportId, json, Date.now());
         })().catch(() => {});
     };

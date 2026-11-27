@@ -104,16 +104,24 @@ export function nearLimitSteady(heap: number, limit: number, used?: number | nul
 }
 
 /**
- * The peak of an output carrying `imageChars` of images (data URL
- * characters); `whole`: the output holds its images whole (see above).
+ * How an output holds its images: whole (true), a few at a time with a
+ * copy kept (false, the saved app with its share baseline), or 'streamed':
+ * a few at a time and none kept (the gift package, 1127) — their volume
+ * does not count, only the steady heap.
  */
-export function outputPeak(imageChars: number, heap: number, whole = false): number {
-    const k = whole ? WHOLE_OUTPUT_IMAGE_FACTOR : OUTPUT_IMAGE_FACTOR;
+export type OutputImageHold = boolean | 'streamed';
+
+/**
+ * The peak of an output carrying `imageChars` of images (data URL
+ * characters); `whole`: how it holds them (OutputImageHold).
+ */
+export function outputPeak(imageChars: number, heap: number, whole: OutputImageHold = false): number {
+    const k = whole === 'streamed' ? 0 : whole ? WHOLE_OUTPUT_IMAGE_FACTOR : OUTPUT_IMAGE_FACTOR;
     return k * Math.max(0, imageChars) + OUTPUT_HEAP_FACTOR * heap;
 }
 
-/** An output may go past the limit (`whole`: it holds its images whole). */
-export function nearLimitOutput(imageChars: number, heap: number, limit: number, whole = false): boolean {
+/** An output may go past the limit (`whole`: how it holds its images, OutputImageHold). */
+export function nearLimitOutput(imageChars: number, heap: number, limit: number, whole: OutputImageHold = false): boolean {
     return outputPeak(imageChars, heap, whole) > PEAK_SHARE * limit;
 }
 

@@ -172,6 +172,12 @@ export interface OutputCheck {
      */
     whole?: boolean;
     /**
+     * The output reads its images a few at a time and keeps none (the gift
+     * package, 1127): their volume does not count, only the steady heap;
+     * the question still names it and offers to leave them out.
+     */
+    streamed?: boolean;
+    /**
      * The images' volume the output really carries, when it carries only
      * some of the tree's (the family pages' set, the poster's portraits):
      * worked out only when the tree's images would be near the limit.
@@ -200,7 +206,7 @@ function outputImageChars(o: OutputCheck): number {
 export function outputNearLimit(o: OutputCheck = {}): number | null {
     const heap = steadyNow();
     const limit = currentLimit();
-    const whole = !!o.whole;
+    const whole = o.streamed ? 'streamed' as const : !!o.whole;
     let chars = outputImageChars(o);
     if (!nearLimitOutput(chars, heap, limit, whole)) return null;
     if (o.refine) {

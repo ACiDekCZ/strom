@@ -20,7 +20,17 @@ interface StoredBaseline {
     savedAt: number;
     encrypted?: EncryptedData;
     plain?: string;
+    /**
+     * The JSON as a Blob (1127): a baseline too large to be held as one text
+     * (a tree whose images weigh gigabytes, written with its images read from
+     * the pool), stored by the browser outside the page's memory. Only
+     * without encryption (the text must be held whole to be encrypted).
+     */
+    blob?: Blob;
 }
+
+/** A baseline over this many bytes is stored as a Blob (StoredBaseline.blob), not as text. */
+export const BASELINE_TEXT_MAX = 64 * 1024 * 1024;
 
 /**
  * Save the shared data as a baseline. When encryption is enabled but the session
@@ -31,14 +41,22 @@ export async function saveBaseline(treeId: string, exportId: string, data: Strom
     return saveBaselineJson(treeId, exportId, JSON.stringify(data), now);
 }
 
-/** saveBaseline of data already written as JSON (`JSON.stringify(data)`; an export writes it with its images read from the pool). */
-export async function saveBaselineJson(treeId: string, exportId: string, json: string, now: number): Promise<boolean> {
+/**
+ * saveBaseline of data already written as JSON (`JSON.stringify(data)`; an
+ * export writes it with its images read from the pool, as a Blob). A Blob
+ * over BASELINE_TEXT_MAX is stored as it is; with encryption on it is not
+ * kept ("send only changes" is not offered for that export).
+ */
+export async function saveBaselineJson(treeId: string, exportId: string, json: string | Blob, now: number): Promise<boolean> {
     const rec: StoredBaseline = { exportId, treeId, savedAt: now };
+    const large = typeof json !== 'string' && json.size > BASELINE_TEXT_MAX;
     if (SettingsManager.isEncryptionEnabled()) {
-        if (!CryptoSession.isUnlocked()) return false;
-        rec.encrypted = await CryptoSession.encrypt(json);
+        if (!CryptoSession.isUnlocked() || large) return false;
+        rec.encrypted = await CryptoSession.encrypt(typeof json === 'string' ? json : await json.text());
+    } else if (typeof json !== 'string' && large) {
+        rec.blob = json;
     } else {
-        rec.plain = json;
+        rec.plain = typeof json === 'string' ? json : await json.text();
     }
     await StorageManager.set('shareBaselines', exportId, rec);
     await enforceRetention(treeId);
@@ -52,6 +70,14 @@ export async function loadBaseline(exportId: string): Promise<StromData | null> 
     if (rec.encrypted) {
         if (!CryptoSession.isUnlocked()) return null;
         return JSON.parse(await CryptoSession.decrypt(rec.encrypted)) as StromData;
+    }
+    if (rec.blob) {
+        try {
+            return JSON.parse(await rec.blob.text()) as StromData;
+        } catch (err) {
+            console.error('Reading a baseline failed', exportId, err);
+            return null;
+        }
     }
     return rec.plain ? (JSON.parse(rec.plain) as StromData) : null;
 }
@@ -68,7 +94,7 @@ export async function hasBaseline(exportId: string): Promise<boolean> {
     const rec = await StorageManager.get<StoredBaseline>('shareBaselines', exportId);
     if (!rec) return false;
     if (rec.encrypted) return CryptoSession.isUnlocked();
-    return rec.plain !== undefined;
+    return rec.plain !== undefined || rec.blob !== undefined;
 }
 
 async function allForTree(treeId: string): Promise<StoredBaseline[]> {
@@ -106,8 +132,12 @@ export async function reencodeAllBaselines(): Promise<number> {
             if (b.encrypted) {
                 if (!CryptoSession.isUnlocked()) { failed++; continue; }
                 json = await CryptoSession.decrypt(b.encrypted);
+            } else if (b.blob && b.blob.size > BASELINE_TEXT_MAX) {
+                // Too large to be encrypted as one text: not kept in plain text with encryption on.
+                await StorageManager.delete('shareBaselines', b.exportId);
+                continue;
             } else {
-                json = b.plain;
+                json = b.plain ?? (b.blob ? await b.blob.text() : undefined);
             }
             if (json === undefined) continue;
             const next: StoredBaseline = { exportId: b.exportId, treeId: b.treeId, savedAt: b.savedAt };

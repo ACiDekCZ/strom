@@ -45,7 +45,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { SettingsManager } from '../settings.js';
 import { CryptoSession, encrypt, isEncrypted } from '../crypto.js';
 import { createSnapshot, deleteSnapshotsForTree, listSnapshots, reencodeAllSnapshots, getSnapshotJson } from '../snapshots.js';
-import { saveBaseline, reencodeAllBaselines, loadBaseline } from '../share-baselines.js';
+import { saveBaseline, saveBaselineJson, reencodeAllBaselines, loadBaseline, hasBaseline, BASELINE_TEXT_MAX } from '../share-baselines.js';
 import { findAnyEncryptedRecord } from '../encryption-migrate.js';
 import { isMultiTreeBackup, readEmbeddedHtml, readWindowAssignment } from '../backup-formats.js';
 import { handleMessage, onTreeSavedElsewhere } from '../tab-sync.js';
@@ -404,6 +404,29 @@ describe('S23 encryption toggle converts side stores', () => {
         expect(await getSnapshotJson(id)).toContain('Plain');
         expect((await loadBaseline('exp_1'))?.persons).toBeTruthy();
         expect(await findAnyEncryptedRecord()).toBeNull();
+    });
+
+    it('a baseline too large for one text (a tree with gigabytes of photos, 1127) is kept as a Blob, not in plain text once encryption is on', async () => {
+        const pad = new Uint8Array(BASELINE_TEXT_MAX + 1).fill(0x78);
+        const big = new Blob(['{"persons":{"p1":{"firstName":"Big"}},"partnerships":{},"pad":"', pad, '"}']);
+        expect(await saveBaselineJson('t1', 'exp_big', big, 1000)).toBe(true);
+        const rec = st('shareBaselines').get('exp_big') as { plain?: string; blob?: Blob };
+        expect(rec.plain).toBeUndefined();
+        expect(rec.blob?.size).toBe(big.size);
+        expect(await hasBaseline('exp_big')).toBe(true);
+        expect((await loadBaseline('exp_big'))?.persons).toHaveProperty('p1');
+        // A small one stays text.
+        expect(await saveBaselineJson('t1', 'exp_small', new Blob([JSON.stringify(tree(['Small']))]), 1000)).toBe(true);
+        expect(typeof (st('shareBaselines').get('exp_small') as { plain?: string }).plain).toBe('string');
+
+        encryptionOn = true;
+        await CryptoSession.unlock('enc-password');
+        expect(await reencodeAllBaselines()).toBe(0);
+        expect(st('shareBaselines').has('exp_big')).toBe(false);
+        expect(isEncrypted((st('shareBaselines').get('exp_small') as { encrypted?: unknown }).encrypted)).toBe(true);
+        expect(await saveBaselineJson('t1', 'exp_big2', big, 2000)).toBe(false);
+        encryptionOn = false;
+        CryptoSession.lock();
     });
 
     it('audit logs follow encryption on', async () => {
