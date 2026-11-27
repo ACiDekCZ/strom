@@ -11,6 +11,8 @@ import {
     familyHasWindowPage, pageSetLivingNames, pageSetPrivacyWarning, sizeVerdict, uniqueSlug, windowFamilyPages,
 } from '../family-pages.js';
 import { ImageRegistry } from '../image-registry.js';
+import { clearImageMeta, setImageMeta } from '../image-meta.js';
+import { POOL_REF, poolStandIn } from '../image-ref.js';
 import {
     PERSON_PAGE_ALL_GROUPS, PersonPageOptions, buildPersonPageBody, preparePersonPageData, prefixPageIds,
 } from '../person-page.js';
@@ -352,5 +354,37 @@ describe('size estimate (§6.3)', () => {
         const huge = estimatePageSetSize(rodsSet(withExcerpts(30, 2000)));
         expect(huge.bytes).toBeGreaterThan(PAGE_SET_SPLIT_BYTES);
         expect(sizeVerdict(huge.bytes)).toBe('set');
+    });
+
+    // 1127: a tree with its photos in the pool holds references (the dialog) or stand-ins (the save): both are
+    // counted by the catalog's entry, not left out or taken for their few characters.
+    it('pooled images (references and stand-ins) count by the catalog: their volume, number and reduced size', () => {
+        const hex = (n: number): string => n.toString(16).padStart(40, '0');
+        const ids = Array.from({ length: 30 }, (_, i) => `e:${hex(i + 1)}`);
+        const photoId = `p:${hex(99)}`;
+        try {
+            for (const id of [...ids, photoId]) {
+                setImageMeta(id, { len: 2_000_000, head: 'data:image/jpeg;base64,', bytes: 1_500_000, w: 3000, h: 2000, token: 't', mtok: 'm' });
+            }
+            const pooled = (ref: (id: string) => string): StromData => {
+                const data = withExcerpts(30, 1);
+                data.sources!['s-marr1846'].excerpts!.forEach((x, i) => { x.dataUrl = ref(ids[i]); });
+                data.persons['josef' as PersonId].photo = ref(photoId);
+                return data;
+            };
+            for (const ref of [(id: string) => POOL_REF + id, (id: string) => poolStandIn(id, 'image/jpeg')]) {
+                const set = rodsSet(pooled(ref));
+                const size = estimatePageSetSize(set);
+                expect(size.images).toBe(31);
+                expect(size.imageBytes).toBe(31 * 2_000_000);
+                expect(sizeVerdict(size.bytes)).toBe('set');
+                const small = estimatePageSetSize(set, { clips: 'small', photos: 'small' });
+                expect(small.images).toBe(31);
+                expect(small.imageBytes).toBeGreaterThan(0);
+                expect(small.imageBytes).toBeLessThan(size.imageBytes / 4);
+            }
+        } finally {
+            clearImageMeta();
+        }
     });
 });

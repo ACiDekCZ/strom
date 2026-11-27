@@ -34,6 +34,8 @@ import { sortRods } from './rods-overview.js';
 import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree, protectedHouseOutputs, type PersonPageOptions } from './person-page.js';
 import { housePageTitle } from './house-page.js';
 import { ImageChoice, ImageRegistry, RegistryImageKind, SHRINK_CLIP_PX, SHRINK_PHOTO_PX } from './image-registry.js';
+import { poolIdOf, standInOf } from './image-ref.js';
+import { imageMetaOf } from './image-meta.js';
 import type { HistoryPayload, PersonHistoryEnv } from './history.js';
 
 export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other' | 'persons' | 'ancestors' | 'rodTimeline' | 'house';
@@ -922,18 +924,29 @@ const SMALL_BYTES_PER_PX = 0.34;
 /** A reduced copy without a known size: a fraction of the original. */
 const SMALL_UNKNOWN_RATIO = 0.35;
 
-export interface PageSetImage { dataUrl: string; kind: RegistryImageKind; w?: number; h?: number }
+/** `chars`: the image's data URL characters (a pooled image's from the catalog). */
+export interface PageSetImage { dataUrl: string; kind: RegistryImageKind; w?: number; h?: number; chars?: number }
 
-/** The images the set's pages show, each once: portraits and image attachments (photos), excerpts of the cited sources (clips). */
+/**
+ * The images the set's pages show, each once: portraits and image attachments (photos), excerpts of the cited sources (clips).
+ * A pooled image (its reference, or its stand-in) by its catalog entry: its volume and size, not the reference's few
+ * characters (1127: a tree with its photos in the pool was estimated without them).
+ */
 export function pageSetImages(set: PageSet): PageSetImage[] {
     const tree = set.protectedTree.tree;
     const seen = new Set<string>();
     const out: PageSetImage[] = [];
     const add = (dataUrl: string | undefined, kind: RegistryImageKind, w?: number, h?: number): void => {
-        const key = dataUrl?.replace(/\s+/g, '');
-        if (!key || !key.startsWith('data:image/') || seen.has(key)) return;
+        const ref = poolIdOf(dataUrl);
+        const pooled = ref ?? standInOf(dataUrl)?.id;
+        const key = ref ? dataUrl : dataUrl?.replace(/\s+/g, '');
+        if (!key || seen.has(key)) return;
+        const meta = pooled ? imageMetaOf(pooled) : undefined;
+        // A reference says nothing of its type: an image unless the catalog says otherwise.
+        if (!(ref ? !meta || meta.head.startsWith('data:image/') : key.startsWith('data:image/'))) return;
         seen.add(key);
-        out.push({ dataUrl: key, kind, ...(w && h ? { w, h } : {}) });
+        if (meta && !(w && h) && meta.w && meta.h) { w = meta.w; h = meta.h; }
+        out.push({ dataUrl: key, kind, ...(w && h ? { w, h } : {}), ...(pooled ? { chars: meta?.len ?? 0 } : {}) });
     };
     const sources = new Set<string>();
     for (const id of set.personSlug.keys()) {
@@ -954,7 +967,7 @@ export function pageSetImages(set: PageSet): PageSetImage[] {
 /** Bytes of one image in the file under a choice. */
 function imageBytes(img: PageSetImage, choice: ImageChoice): number {
     if (choice === 'none') return 0;
-    const full = img.dataUrl.length;
+    const full = img.chars ?? img.dataUrl.length;
     if (choice === 'full') return full;
     const max = img.kind === 'clip' ? SHRINK_CLIP_PX : SHRINK_PHOTO_PX;
     if (!img.w || !img.h) return Math.round(full * SMALL_UNKNOWN_RATIO);
