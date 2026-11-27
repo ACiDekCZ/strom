@@ -147,6 +147,7 @@ import { createSha256 } from '../sha256.js';
 import { localIsoDay } from '../import-origin.js';
 import { deviceClient, type DeviceClient } from '../device-client.js';
 import { otherDeviceWords, sendSourceWords } from '../conflict-devices.js';
+import { importAskWho } from '../research-import-ask.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -3843,7 +3844,7 @@ export const researchUiMethods = uiModule({
         s.working = withFamilyPersons(status.working, s.bridge);
         s.features = status.features;
         s.accepts = status.accepts;
-        s.waiting = this.withoutAsideAnswers(this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting)));
+        s.waiting = this.withoutImportAnswers(this.withoutAsideAnswers(this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting))));
         // A task new since the overview opened unfolds as it does while following (the first answer is no news).
         const fresh = status.waiting.filter(w => !s.seenWaiting.has(w.id));
         for (const w of fresh) s.seenWaiting.add(w.id);
@@ -3953,6 +3954,8 @@ export const researchUiMethods = uiModule({
         }
         // A house's story (spec 145 T4): its page at the story.
         if (w.kind === 'houseStory') { this.openHouseStoryWaiting(w); return; }
+        // A question about a send of the app (1127): answered in the overview's row, through the bridge.
+        if (w.kind === 'import') { this.showOverviewWaitingItem(w.id); return; }
         // An archive's question: the research asks it there (an older research only opens).
         if (w.kind === 'permission' && w.host) {
             const url = this.activeResearchLink('archive', { host: w.host }) ?? this.activeResearchLink('open');
@@ -4791,7 +4794,7 @@ export const researchUiMethods = uiModule({
         s.features = status.features;
         s.accepts = status.accepts;
         // A row moved by a write the research has not reported yet stays where it was moved.
-        s.waiting = this.withoutAsideAnswers(this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting)));
+        s.waiting = this.withoutImportAnswers(this.withoutAsideAnswers(this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting))));
         // A task that was not there before unfolds "Waiting for you" (its phase and its group;
         // the section is expanded by default). Collapsed or hidden by the user, nothing opens:
         // the heading counts it as new, and expanding it later opens what came meanwhile.
@@ -5282,6 +5285,23 @@ export const researchUiMethods = uiModule({
                 const at = timeEl(w.at, 'ago');
                 if (at) text.appendChild(at);
                 li.append(text, open);
+                return li;
+            }
+            if (w.kind === 'import') {
+                // A question about a send of the app (1127): decided in the overview's row (it opens there).
+                const q = text.appendChild(el('span', 'live-waiting-what'));
+                q.append(waitingKindLabel(w), strings.live.importAsk.question);
+                text.appendChild(el('small', 'live-time live-waiting-on', importAskWho(w, strings.live.importAsk.count)));
+                const at = timeEl(w.at, 'ago');
+                if (at) text.appendChild(at);
+                li.appendChild(text);
+                if (answerable && this.canExpandLivePanel()) {
+                    const open = el('button', 'live-waiting-answer', strings.live.aside.panelOpen);
+                    open.type = 'button';
+                    open.dataset.action = 'import-open';
+                    open.onclick = () => this.showOverviewWaitingItem(w.id);
+                    li.appendChild(open);
+                }
                 return li;
             }
             const what = text.appendChild(el('span', 'live-waiting-what'));

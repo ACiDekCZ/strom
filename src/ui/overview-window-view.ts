@@ -37,6 +37,10 @@ import type { ResearchLinkKind } from './research-ui.js';
 import { auditRefusalOf, auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
 import { asAuditPreview } from '../research-audit.js';
 import { readAsideOutcome, type AsideDo, type AsideOutcome } from '../research-aside.js';
+import {
+    readImportAskOutcome, readImportAskWritten, sanitizeImportAskPreview,
+    type ImportAskDo, type ImportAskOutcome, type ImportAskPreview, type ImportAskWritten,
+} from '../research-import-ask.js';
 import type { GroupRetryResult, WaitingAuditPreviewResult, WaitingAuditResult, WaitingFileResult, WaitingRetryResult } from '../research-waiting-write.js';
 import { itemKey } from './waiting-images-ui.js';
 import { SECTION_PREFS_EVENT, sectionPrefs, watchSectionPrefsStorage } from './live-section-prefs.js';
@@ -362,6 +366,17 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         async writeAsideAnswer(this: UIClass, s: LiveSession, w: LiveWaiting, what: AsideDo, image?: number): Promise<AsideOutcome> {
             const r = await port.ask('waiting-aside', { itemId: w.id, do: what, ...(what === 'image' && image !== undefined ? { image } : {}) }, OVERVIEW_ANSWER_WAIT_MS);
             const out = readAsideOutcome(r) ?? { ok: false, text: strings.busy.mainWindowSilent, retry: true, tone: 'danger' };
+            if (out.ok || out.gone) s.waiting = s.waiting.filter(x => x.id !== w.id);
+            return out;
+        },
+        // "Did this come from a family tree?" (1127): read and written by the main window (its toast, its tree loaded again).
+        async readImportAskItem(_s: LiveSession, w: LiveWaiting): Promise<ImportAskOutcome<ImportAskPreview>> {
+            const r = await port.ask('waiting-import', { itemId: w.id, do: 'preview' }, OVERVIEW_ANSWER_WAIT_MS);
+            return readImportAskOutcome(r, sanitizeImportAskPreview) ?? { ok: false, text: strings.busy.mainWindowSilent, retry: true, tone: 'danger' };
+        },
+        async writeImportAskAnswer(this: UIClass, s: LiveSession, w: LiveWaiting, what: ImportAskDo): Promise<ImportAskOutcome<ImportAskWritten>> {
+            const r = await port.ask('waiting-import', { itemId: w.id, do: what }, OVERVIEW_ANSWER_WAIT_MS);
+            const out = readImportAskOutcome(r, readImportAskWritten) ?? { ok: false, text: strings.busy.mainWindowSilent, retry: true, tone: 'danger' };
             if (out.ok || out.gone) s.waiting = s.waiting.filter(x => x.id !== w.id);
             return out;
         },

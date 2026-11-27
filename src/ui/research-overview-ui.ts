@@ -89,6 +89,8 @@ import { agentMirror } from '../windows/agent-mirror.js';
 import { greyOverviewActions } from './overview-window-states.js';
 import { markShowcaseOff, sampleNoteEl, showcaseDayText, showcaseItemActions, researchLastWork } from './sample-why.js';
 import { houseLabel } from '../houses.js';
+import { importAskWho } from '../research-import-ask.js';
+import { importAskDayText } from './waiting-import-ui.js';
 import { arrangeOverviewColumns, beginOverviewColumns, noteOverviewSectionRows, nodesAfter, resetOverviewColumns } from './overview-columns-ui.js';
 
 /**
@@ -1872,10 +1874,12 @@ export const researchOverviewMethods = uiModule({
      */
     waitingSearchDoc(s: LiveSession, w: LiveWaiting): SearchDoc {
         const people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : w.kind === 'houseStory' ? [this.houseStoryWaitingWho(w)].filter(Boolean)
-            : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
+            : w.kind === 'import' ? (w.importAsk?.samples ?? []).map(p => p.name)
+                : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
         const task = researchTaskRef(w.id);
         const hypo = w.kind === 'hypothesis' ? w.id : /\bH\d+\b/.exec(w.on)?.[0];
-        const what = w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'houseStory' ? this.houseStoryWaitingText(w) : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s) : w.what;
+        const what = w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'houseStory' ? this.houseStoryWaitingText(w) : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s)
+            : w.kind === 'import' ? `${strings.live.importAsk.question} ${w.what}` : w.what;
         const place = w.kind === 'place' ? strings.places.waiting.group : w.group?.name;
         // Its book's title and archive (spec 105 §1), as its book's heading says them.
         const book = booksOn(s) ? bookById(s, w.book) : null;
@@ -2325,16 +2329,19 @@ export const researchOverviewMethods = uiModule({
         else if (w.kind === 'branch') head.appendChild(el('span', 'live-kind live-kind--decide', L.waitBranchKind));
         else if (w.section || w.kind) head.appendChild(waitingKindLabel(w));
         // A question of a house (spec 030 §14): the kind "Houses" with it.
-        const houseQ = w.kind === 'story' || w.kind === 'houseStory' || w.kind === 'branch' || w.kind === 'aside' ? null : this.houseOfWaiting(w.id);
+        const houseQ = w.kind === 'story' || w.kind === 'houseStory' || w.kind === 'branch' || w.kind === 'aside' || w.kind === 'import' ? null : this.houseOfWaiting(w.id);
         if (houseQ) {
             const tag = el('span', 'live-kind live-kind--house', strings.live.taskKinds.house ?? '');
             tag.dataset.house = houseQ.key;
             head.appendChild(tag);
         }
-        head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'houseStory' ? this.houseStoryWaitingText(w) : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s) : w.what);
+        head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'houseStory' ? this.houseStoryWaitingText(w) : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s)
+            : w.kind === 'import' ? strings.live.importAsk.question : w.what);
         row.appendChild(head);
         const meta = el('span', 'research-overview__waiting-meta');
-        let people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : w.kind === 'houseStory' ? [this.houseStoryWaitingWho(w)].filter(Boolean) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
+        // A question about a send (1127): its day, how many people and three of them.
+        let people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : w.kind === 'houseStory' ? [this.houseStoryWaitingWho(w)].filter(Boolean)
+            : w.kind === 'import' ? [importAskRowWho(w)] : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
         // A number the section's search matched (spec 083 §1): the amber tag, that part left out of the line.
         if (hit?.t) meta.appendChild(searchHitTag(researchTaskRef(w.id) ?? w.id));
         if (hit?.p && w.person) {
@@ -2499,6 +2506,11 @@ export const researchOverviewMethods = uiModule({
         if (w.kind === 'aside') {
             // A file of a book's inbox set aside: the image it is compared with, the book's folder, the answers through the bridge.
             this.appendAsideWaitingActions(detail, w, s);
+            return detail;
+        }
+        if (w.kind === 'import') {
+            // A question about a send of the app (1127): the send, what Yes would change, the answers through the bridge.
+            this.appendImportAskDetail(detail, w, s);
             return detail;
         }
         // Images, a website or a check (spec 048 U6): the actions of their kind, an answer written here, the images' state.
@@ -4123,3 +4135,10 @@ export const researchOverviewMethods = uiModule({
         }
     },
 });
+
+/** A question about a send in its row (1127): "25. 11. 2026 · 142 people: A, B, C". */
+function importAskRowWho(w: LiveWaiting): string {
+    const day = w.importAsk ? importAskDayText(w.importAsk.day) : '';
+    const who = importAskWho(w, strings.live.importAsk.count);
+    return day ? `${day} · ${who}` : who;
+}

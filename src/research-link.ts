@@ -3240,9 +3240,13 @@ export interface LiveWaiting {
      * 'permission': the research asks how it may download from an archive (`host`); `on` carries its terms.
      * 'houseStory' (spec 145 T4): a house's story (or its new version) waits for approval — the research's `story`
      * without a person, its id the house's record (A…), the house's key in `house`; never a person's story.
+     * 'import' (`waiting.import`, 1127): one send of the app added many people the research holds as written by a
+     * person; it asks whether they came from a family tree (import, merge). Its id `W-S-I…`, its send in `importAsk`.
      * The rest only from a research with `waiting.groups` in its features (see below).
      */
-    kind?: 'story' | 'houseStory' | 'permission' | 'place' | 'branch' | 'hypothesis' | 'aside' | WaitingTaskKind;
+    kind?: 'story' | 'houseStory' | 'permission' | 'place' | 'branch' | 'hypothesis' | 'aside' | 'import' | WaitingTaskKind;
+    /** 'import': the send it asks about (its input, day, how many people it added, up to 3 of them). */
+    importAsk?: WaitingImportAsk;
     /**
      * 'aside' (`inbox.aside`): a file of a book's inbox folder the research set aside (`/status.books.aside`), made
      * an item here (asideWaiting): its id `aside:<book>/<file>`, its book in `book`, a decision (section 'decide').
@@ -3325,6 +3329,30 @@ export interface LiveWaiting {
 
 /** `/status.features`: a waiting task can go back to the agent from the app (`retry` of its item, `{do: "retry"}`; spec 089). */
 export const WAITING_RETRY_FEATURE = 'waiting.retry';
+/**
+ * `/status.features` (1127): the research asks in Awaiting action whether a big send of the app came from a family
+ * tree (`kind: import`, `W-S-I…`), its preview (`GET waiting/W-S-I…/preview`) and its answer (`POST waiting/W-S-I…`
+ * `{do: import | own}`). Without it no such item is taken.
+ */
+export const WAITING_IMPORT_FEATURE = 'waiting.import';
+
+/** One person of an import question: the research's REFN and name. */
+export interface WaitingImportSample {
+    id: string;
+    name: string;
+}
+
+/** The send an import question asks about (`kind: import`). */
+export interface WaitingImportAsk {
+    /** The research's input of the send ("I0042"). */
+    input: string;
+    /** The day of the send (YYYY-MM-DD). */
+    day: string;
+    /** How many people the send added. */
+    persons: number;
+    /** Up to 3 of them still unedited, in the send's order. */
+    samples: WaitingImportSample[];
+}
 /**
  * Why a task that can go back to the agent waits now: the agent's browser held
  * its downloads back, the agent's session stopped midway, the archive's viewer
@@ -3500,7 +3528,7 @@ export interface WaitingInbox {
 /** Each kind's chip. */
 const KIND_SECTION: Record<string, WaitingSection> = {
     story: 'decide', permission: 'decide', place: 'decide', branch: 'decide', hypothesis: 'decide', takeover: 'decide', check: 'decide',
-    images: 'images', letter: 'letter', family: 'family', web: 'web', other: 'other',
+    import: 'decide', images: 'images', letter: 'letter', family: 'family', web: 'web', other: 'other',
 };
 
 /** A research direction ("research" in the research, id G…): kinds, state, counts. */
@@ -5384,12 +5412,19 @@ export function waitingPlaceFields(r: Record<string, unknown>): Partial<LiveWait
  * announces `waiting.groups` (kind, section, group, phase … are read only then).
  * A place question (kind 'place') is read with or without them.
  */
-export function sanitizeWaiting(value: unknown, groups = false, branches = false, audit = false, gain = false, retry = false): LiveWaiting[] {
+export function sanitizeWaiting(value: unknown, groups = false, branches = false, audit = false, gain = false, retry = false,
+    imports = false): LiveWaiting[] {
     if (!Array.isArray(value)) return [];
     const out: LiveWaiting[] = [];
     for (const item of value.slice(0, MAX_WAITING)) {
         const r = asRecord(item);
         if (!r) continue;
+        // A question about a send (`waiting.import`): only from a research that announces it, only a well-formed one.
+        if (r.kind === 'import') {
+            const ask = imports ? waitingImportItem(r) : null;
+            if (ask) out.push(ask);
+            continue;
+        }
         const what = cleanText(r.what);
         if (!what) continue;
         const person = researchPersonRef(r.person);
@@ -5430,6 +5465,56 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
         });
     }
     return out;
+}
+
+/** A research's id of an import question ("W-S-I0042"). */
+export function isImportAskId(v: unknown): v is string {
+    return typeof v === 'string' && /^W-S-I\d{1,9}$/.test(v);
+}
+
+/** The people of an import question or its preview: valid REFNs with a name, at most `max`, each once. */
+export function waitingImportSamples(value: unknown, max = 3): WaitingImportSample[] {
+    const out: WaitingImportSample[] = [];
+    for (const raw of Array.isArray(value) ? value.slice(0, 20) : []) {
+        const p = asRecord(raw);
+        const id = p ? researchPersonRef(p.id) : null;
+        const name = p ? cleanText(p.name, MAX_NAME) : '';
+        if (!id || !name || out.some(x => x.id === id)) continue;
+        out.push({ id, name });
+        if (out.length >= max) break;
+    }
+    return out;
+}
+
+/** A day "YYYY-MM-DD" that is a real date, else ''. */
+export function importAskDay(v: unknown): string {
+    if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return '';
+    const t = Date.parse(`${v}T12:00:00Z`);
+    return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === v ? v : '';
+}
+
+/**
+ * An import question of `/status.waiting` (`kind: import`, 1127), or null when it is not a valid one (its id, its
+ * input, its count of people): then it is not shown at all. Always a decision, never sent; the research's own
+ * sentence (`what`) is kept for the search only — the app says it in its own words. Its day: `day`, else `at`'s.
+ */
+function waitingImportItem(r: Record<string, unknown>): LiveWaiting | null {
+    const id = isImportAskId(r.id) ? r.id : null;
+    const input = typeof r.input === 'string' && /^I\d{1,9}$/.test(r.input) ? r.input : null;
+    const persons = asCount(r.persons);
+    const at = cleanText(r.at, 40);
+    const day = importAskDay(r.day) || (Number.isFinite(Date.parse(at)) ? new Date(Date.parse(at)).toISOString().slice(0, 10) : '');
+    if (!id || !input || persons === null || persons < 1 || !day) return null;
+    const group = asRecord(r.group);
+    const key = group ? cleanText(group.key, 200) : '';
+    const name = group ? cleanText(group.name, MAX_NAME) : '';
+    const order = asCount(r.order);
+    return {
+        id, what: cleanText(r.what), on: '', at: Number.isFinite(Date.parse(at)) ? at : '', kind: 'import', section: 'decide',
+        importAsk: { input, day, persons, samples: waitingImportSamples(r.samples) },
+        ...(key && name ? { group: { key, name, kind: 'other' as const } } : {}),
+        ...(order !== null ? { order } : {}),
+    };
 }
 
 /** An item's gain (`waiting.gain`, spec 105 K4.1): only a well-formed one with a positive score. */
@@ -5910,7 +5995,8 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE), holdsSaid(features), !!features?.includes(WORKING_SAVING_FEATURE)),
         waiting: [
             ...sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE),
-                !!features?.includes(TASKS_AUDIT_FEATURE), !!features?.includes(WAITING_GAIN_FEATURE), !!features?.includes(WAITING_RETRY_FEATURE)),
+                !!features?.includes(TASKS_AUDIT_FEATURE), !!features?.includes(WAITING_GAIN_FEATURE), !!features?.includes(WAITING_RETRY_FEATURE),
+                !!features?.includes(WAITING_IMPORT_FEATURE)),
             // The files of the books' inbox set aside (`inbox.aside`): decisions under their book.
             ...asideWaiting(statusBooks(r.books, features)),
         ],

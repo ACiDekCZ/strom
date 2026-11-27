@@ -121,7 +121,12 @@ export function noteResearchWaiting(
         const groups = !!extra.features?.includes(WAITING_GROUPS_FEATURE);
         // A file of a book's inbox set aside is kept as the research said it (made an item again when read).
         const aside = items.flatMap(w => (w.kind === 'aside' && w.aside ? [w.aside] : []));
-        const kept = items.filter(w => w.kind !== 'aside').map(w => ({
+        // A question about a send of the app (1127) is kept as the research said it (read again only with it).
+        const imports = items.flatMap(w => (w.kind === 'import' && w.importAsk ? [{
+            id: w.id, what: w.what, at: w.at, kind: w.kind, section: w.section, ...(w.group ? { group: w.group } : {}),
+            ...(w.order !== undefined ? { order: w.order } : {}), ...w.importAsk,
+        }] : []));
+        const kept = items.filter(w => w.kind !== 'aside' && w.kind !== 'import').map(w => ({
             id: w.id, what: w.what, at: w.at, ...(w.person ? { person: w.person } : {}),
             // An archive's question keeps what answers it there, and its terms.
             ...(w.kind === 'permission' && w.host ? { kind: w.kind, host: w.host, on: w.on } : {}),
@@ -137,8 +142,9 @@ export function noteResearchWaiting(
             } : {}),
         }));
         localStorage.setItem(WAITING_KEY + researchId, JSON.stringify({
-            items: kept,
+            items: [...kept, ...imports],
             ...(aside.length > 0 ? { aside } : {}),
+            ...(imports.length > 0 ? { imports: true } : {}),
             ...(groups ? { groups: true } : {}),
             at: new Date().toISOString(),
             ...(extra.update ? { update: extra.update } : {}),
@@ -164,11 +170,11 @@ export function storedResearchWaiting(researchId: string, now = Date.now()): Sto
     try {
         const raw = localStorage.getItem(WAITING_KEY + researchId);
         if (!raw) return null;
-        const parsed = JSON.parse(raw) as { items?: unknown; aside?: unknown; groups?: unknown; at?: unknown; update?: unknown; busy?: unknown; lastIntake?: unknown };
+        const parsed = JSON.parse(raw) as { items?: unknown; aside?: unknown; groups?: unknown; imports?: unknown; at?: unknown; update?: unknown; busy?: unknown; lastIntake?: unknown };
         const at = typeof parsed.at === 'string' ? Date.parse(parsed.at) : NaN;
         if (!Number.isFinite(at) || now - at > WAITING_MAX_AGE_MS) return null;
         return {
-            items: [...sanitizeWaiting(parsed.items, parsed.groups === true), ...asideWaiting({ aside: sanitizeBooksAside(parsed.aside) })],
+            items: [...sanitizeWaiting(parsed.items, parsed.groups === true, false, false, false, false, parsed.imports === true), ...asideWaiting({ aside: sanitizeBooksAside(parsed.aside) })],
             at,
             update: sanitizeUpdate(parsed.update),
             ...(sanitizeBusy(parsed.busy) ? { busy: sanitizeBusy(parsed.busy)! } : {}),

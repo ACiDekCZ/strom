@@ -26622,6 +26622,15 @@
         .research-overview__waiting-detail { display: flex; flex-direction: column; gap: 6px; padding: 2px 4px 10px; }
         .research-overview__waiting-text { font-size: 14px; overflow-wrap: anywhere; }
         .research-overview__waiting-on { color: var(--text-faint); font-size: 12px; overflow-wrap: anywhere; }
+        /* "Did this come from a family tree?" (1127): the send, what Yes changes, the marks' meaning; long names wrap. */
+        .research-overview__import-ask { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 13.5px; }
+        .research-overview__import-ask p { margin: 0; overflow-wrap: anywhere; }
+        .research-overview__import-preview { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 6px 10px; border-radius: 6px; background: var(--surface-2, rgba(127, 127, 127, 0.08)); }
+        .research-overview__import-preview.is-loading { background: none; padding-left: 0; }
+        .research-overview__import-change { font-weight: 600; }
+        .research-overview__import-meaning { color: var(--text-light); font-size: 12.5px; }
+        .research-overview__import-help { font-size: inherit; white-space: nowrap; }
+        .research-overview__import-actions .live-waiting-answer { max-width: 100%; white-space: normal; text-align: center; }
         /* An open item (spec 105 U4 §3): its text whole in the row (no clamp, not even sideways), not again in the body. */
         .research-overview__waiting-item.is-open .research-overview__waiting-what { display: block; -webkit-line-clamp: unset; overflow: visible; }
         /* "Waiting on": the research's whole instruction in a framed block, clamped at 10 lines with "more" (3 sideways). */
@@ -28543,6 +28552,8 @@
             .research-offline__wait-actions .is-primary { width: 100%; justify-content: center; }
             .research-offline__wait-actions .live-waiting-answer { min-height: 44px; }
             .research-offline__add { width: 100%; }
+            /* The import question's two answers weigh the same (1127): both the whole width. */
+            .research-overview__import-actions .live-waiting-answer { width: 100%; justify-content: center; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .research-offline__branch { padding: 4px 0; }

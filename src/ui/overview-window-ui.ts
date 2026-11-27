@@ -354,6 +354,12 @@ export const overviewWindowMethods = uiModule({
                 if (!s || !w?.aside) return { ok: false, gone: true };
                 return this.writeAsideAnswer(s, w, a.args.do, a.args.image);
             }
+            case 'waiting-import': {
+                // Read or written through this window's bridge, the outcome to the window (it says a refusal at its item).
+                const w = item(a.args.itemId);
+                if (!s || !w?.importAsk) return { ok: false, gone: true };
+                return a.args.do === 'preview' ? this.readImportAskItem(s, w) : this.writeImportAskAnswer(s, w, a.args.do);
+            }
             case 'hypothesis-ask': {
                 const h = researchHypotheses(DataManager.getData()).get(a.args.hypothesisId);
                 if (!h) return false;

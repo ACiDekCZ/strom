@@ -418,6 +418,11 @@ export type OverviewAction =
      * bridge (answered: AsideOutcome; the main window says it in its toast).
      */
     | { action: 'waiting-aside'; args: { itemId: string; do: AsideDo; image?: number } }
+    /**
+     * "Did this come from a family tree?" (1127): its preview read, or its answer written, by the main window
+     * through its bridge (answered: ImportAskOutcome; the main window says the answer in its toast).
+     */
+    | { action: 'waiting-import'; args: { itemId: string; do: 'preview' | 'import' | 'own' } }
     /** Ask the research (its terminal) to decide a hypothesis of "Awaiting action". */
     | { action: 'hypothesis-ask'; args: { hypothesisId: string; do: 'decide' | 'abandon' | 'keep-open'; variant?: string } }
     /** "Accept proposals (n)". */
@@ -447,7 +452,7 @@ export const OVERVIEW_ACTION_IDS = [
     'hover-person', 'verify-stop', 'run-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'follow-run', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
     'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-agent-retry', 'waiting-group-agent-retry', 'waiting-file', 'waiting-audit', 'waiting-aside',
-    'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
+    'waiting-import', 'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
     'queue-list', 'queue-order',
 ] as const satisfies readonly OverviewActionId[];
 
@@ -588,6 +593,8 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             const n = imageNumber(a.image);
             return n !== null && a.image === n ? { action, args: { itemId: a.itemId, do: 'image', image: n } } : null;
         }
+        case 'waiting-import':
+            return str(a.itemId) && (a.do === 'preview' || a.do === 'import' || a.do === 'own') ? { action, args: { itemId: a.itemId, do: a.do } } : null;
         case 'waiting-file':
             return str(a.itemId) && isFile(a.file) ? { action, args: { itemId: a.itemId, file: a.file } } : null;
         case 'hypothesis-ask': {
