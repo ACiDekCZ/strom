@@ -78,11 +78,18 @@ const formatSize = (n: number, lang: string): string => n >= 1024 * 1024
     : `${Math.max(1, Math.round(n / 1024)).toLocaleString(lang)} kB`;
 
 export const houseMaterialMethods = uiModule({
-    /** "Attach material…" in a row's ⋯ menu: with `house.material`. */
-    houseMenuResearchItems(house: TreeHouse): HouseMenuItem[] {
+    /**
+     * The research's rows of a row's ⋯ menu: the house's action (houseActionOf, as in its detail: ask, move to the
+     * top, ask again; any house of the tree) and "Attach material…" with `house.material`. `opener`: the focus back.
+     */
+    houseMenuResearchItems(house: TreeHouse, opener?: HTMLElement | null): HouseMenuItem[] {
         const b = this.houseResearchBridge();
-        if (!b || !houseFeature(b.features, 'house.material')) return [];
-        return [{ key: 'attach', label: strings.houses.attach, run: () => this.showHouseMaterialDialog(house) }];
+        if (!b) return [];
+        const items: HouseMenuItem[] = [];
+        const act = this.houseActionNow(house, 14);
+        if (act) items.push({ key: `act-${act.action}`, label: '', html: act.html, run: () => this.runHouseAction(house, act.action, opener) });
+        if (houseFeature(b.features, 'house.material')) items.push({ key: 'attach', label: strings.houses.attach, run: () => this.showHouseMaterialDialog(house) });
+        return items;
     },
 
     /**

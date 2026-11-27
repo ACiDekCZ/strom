@@ -189,15 +189,30 @@ export const houseRequestMethods = uiModule({
         };
     },
 
-    /** The action of a house as a link ('' none): `data-house-act` and the tree's house id. */
-    houseActionHtml(house: TreeHouse): string {
+    /** A house's action now and its label with its mark (null: none); `size` 12 a link in text, 14 a menu item. */
+    houseActionNow(house: TreeHouse, size: 12 | 14 = 12): { action: HouseAction; html: string } | null {
         const gate = this.houseActionGate();
         const action = gate ? houseActionOf(this.houseResearchRow(house), gate) : null;
-        if (!gate || !action) return '';
+        if (!gate || !action) return null;
         const r = strings.houses.req;
         const label = action === 'top' ? r.top : action === 'again' ? r.again : r.request;
-        return `<button type="button" class="house-req" data-house-act="${action}" data-house="${esc(house.id)}">`
-            + `${researchActionLabel(label, houseActionMark(action, gate.on), { size: 12 })}</button>`;
+        return { action, html: researchActionLabel(label, houseActionMark(action, gate.on), { size }) };
+    },
+
+    /** The action of a house as a link ('' none): `data-house-act` and the tree's house id. */
+    houseActionHtml(house: TreeHouse): string {
+        const now = this.houseActionNow(house);
+        if (!now) return '';
+        return `<button type="button" class="house-req" data-house-act="${now.action}" data-house="${esc(house.id)}">${now.html}</button>`;
+    },
+
+    /**
+     * What a house's action does: move it to the top over the bridge, or the dialog (ask, ask again). `opener`: the
+     * focus back from the dialog; `busyEl`: the button that shows the bridge's wait (a menu's item is gone: a toast).
+     */
+    runHouseAction(house: TreeHouse, action: HouseAction, opener?: HTMLElement | null, busyEl?: HTMLElement): void {
+        if (action === 'top') void this.houseMoveTop(house, busyEl);
+        else this.openHouseRequest(house, action === 'again', opener);
     },
 
     /** The tree's house of an id (or of a number joined into it), now. */
@@ -212,8 +227,8 @@ export const houseRequestMethods = uiModule({
         if (!btn) return false;
         const house = this.treeHouseOf(btn.dataset.house ?? '');
         if (!house) return true;
-        if (btn.dataset.houseAct === 'top') void this.houseMoveTop(house, btn);
-        else this.openHouseRequest(house, btn.dataset.houseAct === 'again', btn);
+        const act = btn.dataset.houseAct;
+        this.runHouseAction(house, act === 'top' || act === 'again' ? act : 'request', btn, btn);
         return true;
     },
 

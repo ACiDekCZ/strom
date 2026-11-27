@@ -239,7 +239,8 @@ test.describe('The house page', () => {
         await more.click();
         const menu = win.locator('.pp-menu');
         await expect(menu).toBeVisible();
-        await expect(menu.locator('.pp-menu-item:visible')).toHaveText(['Open in the book…', 'House name…', 'Attach material…',
+        // A house done: "Request again…" above "Attach material…" (houseActionOf, as beside its state).
+        await expect(menu.locator('.pp-menu-item:visible')).toHaveText(['Open in the book…', 'House name…', /^Request again…/, 'Attach material…',
             /^Take over research from a file…/, 'Merge with another house…']);
         await expect(menu.locator('[data-hp-menu="import"] .research-open-mark')).toHaveCount(1);
         await expect(menu.locator('[data-hp-menu="import"] .research-ai-badge')).toHaveCount(0);

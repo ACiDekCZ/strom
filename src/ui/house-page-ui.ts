@@ -491,6 +491,8 @@ export const housePageMethods = uiModule({
                 canEdit ? item('name', P.nameMenu) : '',
             ].join(''),
             b ? [
+                // The house's action, as beside its state (houseActionOf): ask, move to the top, ask again.
+                ((a) => a ? item(`act-${a.action}`, a.html, false, true) : '')(this.houseActionNow(house, 14)),
                 houseFeature(b.features, 'house.material') ? item('attach', H.attach) : '',
                 houseFeature(b.features, 'house.import') && researchDeviceAllows('house')
                     ? item('import', researchActionLabel(H.import, researchLinkMark('house', { houseDo: 'import' })), false, true) : '',
@@ -530,6 +532,11 @@ export const housePageMethods = uiModule({
             if (!page || DataManager.isReadOnly()) return;
             page.editingName = true;
             this.startHouseNameEdit();
+            return;
+        }
+        if (key === 'act-top' || key === 'act-request' || key === 'act-again') {
+            this.runHouseAction(house, key === 'act-top' ? 'top' : key === 'act-again' ? 'again' : 'request',
+                overlayEl()?.querySelector<HTMLElement>('.pp-more'));
             return;
         }
         if (key === 'attach') { this.showHouseMaterialDialog(house); return; }

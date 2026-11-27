@@ -52,6 +52,8 @@ export interface HouseResearchNumber extends ResearchHouseNumber {
 export interface HouseMenuItem {
     key: string;
     label: string;
+    /** The label as markup (a research action with its mark), in place of `label`. */
+    html?: string;
     run: () => void;
 }
 
@@ -461,12 +463,15 @@ export const housesMethods = uiModule({
         const detailId = `house-detail-${this.housesDomId(h.id)}`;
         const chev = `<button type="button" class="house-chev" aria-expanded="${open}" aria-controls="${detailId}" aria-label="${this.escapeHtml(houseTitle(h))}">${open ? '▾' : '▸'}</button>`;
         const no = `<span class="house-no"><b>${this.escapeHtml(houseLabel(h.text))}</b>${was}${name}</span>`;
+        // ⋯ on every row, a house below the threshold too: any house of the tree may be asked for (Milan 27 Nov 2026).
+        const menu = DataManager.isReadOnly() && !this.houseMenuResearchItems(h).length ? '' :
+            `<button type="button" class="house-more-btn" aria-haspopup="menu" aria-label="${this.escapeHtml(s.rowMenu(houseTitle(h)))}">⋯</button>`;
         if (simple) {
             const first = h.personIds[0] ? data.persons[h.personIds[0]] : undefined;
             const line = [first ? shownName(first) : '', yearsText(h)].filter(Boolean).join(' · ');
             return `
                 <div class="house-row house-simple${open ? ' open' : ''}" data-house="${this.escapeHtml(h.id)}">
-                    ${chev}${no}<span class="house-main"><span class="l1">${this.escapeHtml(line)}</span></span>
+                    ${chev}${no}<span class="house-main"><span class="l1">${this.escapeHtml(line)}</span></span>${menu}
                 </div>${open ? this.renderHouseDetailHtml(h, detailId) : ''}`;
         }
         const query = foldSearch(state.filter.query.trim());
@@ -480,9 +485,6 @@ export const housesMethods = uiModule({
             return `<span class="house-tag">${this.escapeHtml(m.sex === 'f' ? s.marriedInF : s.marriedInM)} <span class="nm">${this.escapeHtml(shownName(p))}</span></span>`;
         }).filter(Boolean);
         const side = this.renderHouseStateSlot(h);
-        const readOnly = DataManager.isReadOnly();
-        const menu = readOnly && !this.houseMenuResearchItems(h).length ? '' :
-            `<button type="button" class="house-more-btn" aria-haspopup="menu" aria-label="${this.escapeHtml(s.rowMenu(houseTitle(h)))}">⋯</button>`;
         return `
             <div class="house-row${open ? ' open' : ''}${side ? ' has-side' : ''}" data-house="${this.escapeHtml(h.id)}">
                 ${chev}${no}
@@ -602,7 +604,7 @@ export const housesMethods = uiModule({
 
     openHouseRowMenu(btn: HTMLElement, h: TreeHouse): void {
         const s = strings.houses;
-        const research = this.houseMenuResearchItems(h);
+        const research = this.houseMenuResearchItems(h, btn);
         const own: HouseMenuItem[] = DataManager.isReadOnly() ? [] : [
             { key: 'merge', label: s.merge, run: () => this.showHouseMergeDialog(h.id) },
             ...(this.houseSplitCandidates(h).length ? [{ key: 'split', label: s.split, run: () => this.showHouseSplitDialog(h.id) }] : []),
@@ -627,7 +629,7 @@ export const housesMethods = uiModule({
             row.setAttribute('role', 'menuitem');
             row.tabIndex = -1;
             row.dataset.action = it.key;
-            row.textContent = it.label;
+            if (it.html) row.innerHTML = it.html; else row.textContent = it.label;
             menu.appendChild(row);
             rows.push(row);
         };
