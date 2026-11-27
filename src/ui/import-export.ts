@@ -94,7 +94,7 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { safeFileName } from '../filenames.js';
-import { isMultiTreeBackup, readEmbeddedHtml, readWindowAssignment, BackupTrees, BackupTreeEntry } from '../backup-formats.js';
+import { isMultiTreeBackup, readEmbeddedHtml, BackupTrees, BackupTreeEntry } from '../backup-formats.js';
 import { viewLinksPayload } from '../view-links.js';
 import type { PersonList } from '../types.js';
 import { listDisplayName, listKind } from '../person-lists.js';
@@ -1697,8 +1697,8 @@ export const importExportMethods = uiModule({
             if (!(await confirmMemoryForImport(file.size, file.name))) return;
             const got = await readPickedFile(origin, file, async () => {
                 const htmlContent = await file.text();
-                const envelope = this.extractEnvelopeFromHtml(htmlContent);
                 const content = readEmbeddedHtml(htmlContent);
+                const envelope = content.envelope as EmbeddedDataEnvelope | null;
                 // Not a Strom file with data in it: said at the element (9a).
                 if (!envelope && !content.envelope?.data && !content.allTrees) throw new FileUnreadableError();
                 return { htmlContent, envelope };
@@ -1720,8 +1720,8 @@ export const importExportMethods = uiModule({
     extractEnvelopeFromHtml(html: string): EmbeddedDataEnvelope | null {
         // Balanced scan, not a lazy regex: an "Export all" file puts a second
         // assignment into the same script tag (review V5).
-        const value = readWindowAssignment(html, 'STROM_EMBEDDED_DATA');
-        return value && typeof value === 'object' ? value as EmbeddedDataEnvelope : null;
+        // With a large file's images put back (embedded-images.ts, 1127).
+        return readEmbeddedHtml(html).envelope as EmbeddedDataEnvelope | null;
     },
 
     /**

@@ -120,6 +120,7 @@ import { startupPerson } from './default-person.js';
 import { expandedData } from './image-expand.js';
 import { jsonFileWithImages } from './image-stream.js';
 import { internImages, onImagesInterned, treeImages } from './image-intern.js';
+import { restoreWindowImages } from './embedded-images.js';
 import { registerMemoryImages } from './pool-memory.js';
 import { sameImageByCatalog } from './image-equal.js';
 
@@ -693,7 +694,8 @@ class DataManagerClass {
         // Initialize TreeManager first
         await TreeManager.init();
 
-        // Check for embedded data (from exported HTML)
+        // Check for embedded data (from exported HTML); a large file's images put back first (1127)
+        restoreWindowImages();
         const embedded = (window as Window & { STROM_EMBEDDED_DATA?: EmbeddedDataEnvelope }).STROM_EMBEDDED_DATA;
         const allTrees = (window as Window & { STROM_ALL_TREES?: Record<string, { name: string; data: StromData; isHidden?: boolean }> }).STROM_ALL_TREES;
 

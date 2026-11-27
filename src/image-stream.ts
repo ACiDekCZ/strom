@@ -19,10 +19,12 @@
  * such a file is made from the expanded copy, as before.
  */
 
-import { poolIdOf } from './image-ref.js';
+import { POOL_REF, poolIdOf } from './image-ref.js';
 import { loadImageUrls } from './media-pool.js';
+import { imageMetaOf, pooledImageByteSize } from './image-meta.js';
 import { expandedData } from './image-expand.js';
 import { blobOut, type BlobOut, type Spool } from './spool.js';
+import { imageScriptChars, IMAGE_SCRIPT_CLOSE, IMAGE_SCRIPT_OPEN, imageRefJson, splitsImages } from './embedded-images.js';
 
 /** Images read per read of the pool: an output holds only these at a time besides its text. */
 export const IMAGES_PER_READ = 8;
@@ -110,6 +112,72 @@ async function fileWithImages(c: CutText, script: boolean, type: string, spool: 
     }
 }
 
+/**
+ * The page with its images outside the data script (embedded-images.ts):
+ * `head`, the script with each image's reference as its place, the image
+ * scripts (each image once, read a few at a time), `tail`.
+ */
+async function splitFileWithImages(c: CutText, type: string, spool: Spool | null | undefined, head: string[], tail: string[]): Promise<DataFile> {
+    const out = await blobOut(spool);
+    try {
+        const place = new Map<string, number>();
+        const order: string[] = [];
+        for (const id of c.ids) {
+            if (!place.has(id)) {
+                place.set(id, order.length);
+                order.push(id);
+            }
+        }
+        for (const h of head) out.write(h);
+        for (let i = 0; i < c.ids.length; i++) {
+            out.write(c.pieces[i]);
+            out.write(imageRefJson(place.get(c.ids[i])!));
+        }
+        out.write(c.pieces[c.pieces.length - 1]);
+        await out.ready();
+        const missing = new Set<string>();
+        const most = imageScriptChars();
+        let open = false;
+        let chars = 0;
+        for (let i = 0; i < order.length; i += IMAGES_PER_READ) {
+            const group = order.slice(i, i + IMAGES_PER_READ);
+            const urls = await loadImageUrls(group);
+            for (const id of group) {
+                const url = urls.get(id);
+                if (url === undefined) missing.add(id);
+                const json = scriptSafeJson(JSON.stringify(url ?? ''));
+                if (open && chars + json.length > most) {
+                    out.write(IMAGE_SCRIPT_CLOSE);
+                    open = false;
+                }
+                if (open) {
+                    out.write(',');
+                } else {
+                    out.write(IMAGE_SCRIPT_OPEN);
+                    open = true;
+                    chars = 0;
+                }
+                out.write(json);
+                chars += json.length;
+            }
+            await out.ready();
+        }
+        if (open) out.write(IMAGE_SCRIPT_CLOSE);
+        for (const t of tail) out.write(t);
+        return { blob: await out.close(type), missing: missing.size };
+    } catch (e) {
+        await out.abort();
+        throw e;
+    }
+}
+
+/** About how many characters these pooled images have as data URLs (the catalog's, else from the stored size; nothing read). */
+function imageChars(ids: readonly string[]): number {
+    let n = 0;
+    for (const id of new Set(ids)) n += imageMetaOf(id)?.len ?? Math.ceil(pooledImageByteSize(POOL_REF + id) * 4 / 3);
+    return n;
+}
+
 /** A file made of tree data: its Blob and the images the pool did not give (empty text in it). */
 export interface DataFile {
     blob: Blob;
@@ -161,5 +229,6 @@ export async function htmlFileWithImages<T>(html: string, values: T, script: (va
     if (c.ids.length !== expected) {
         return { blob: new Blob([head, `${script(await expandedData(values))}\n`, rest], { type }), missing: 0 };
     }
+    if (splitsImages(imageChars(c.ids))) return splitFileWithImages(c, type, spool, [head], [rest]);
     return fileWithImages(c, true, type, spool, [head], [rest]);
 }

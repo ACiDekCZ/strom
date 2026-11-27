@@ -14,6 +14,7 @@
 import { StromData, AuditLog } from './types.js';
 import { EncryptedData, isEncrypted } from './crypto.js';
 import { isShowcaseFile } from './showcase-format.js';
+import { readHtmlImages, restoreImages } from './embedded-images.js';
 
 export interface BackupTreeEntry {
     name: string;
@@ -115,6 +116,12 @@ export interface EmbeddedHtmlContent {
 export function readEmbeddedHtml(html: string): EmbeddedHtmlContent {
     const env = readWindowAssignment(html, 'STROM_EMBEDDED_DATA');
     const all = readWindowAssignment(html, 'STROM_ALL_TREES');
+    // A large file's images, outside its data script (embedded-images.ts), put back.
+    const images = readHtmlImages(html);
+    if (images.length) {
+        restoreImages(env, images);
+        restoreImages(all, images);
+    }
     const envelope = env && typeof env === 'object' && !Array.isArray(env)
         ? env as EmbeddedHtmlContent['envelope']
         : null;

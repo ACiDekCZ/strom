@@ -31,6 +31,8 @@ import { extractSubtree } from '../subtree.js';
 import { importExportMethods } from '../ui/import-export.js';
 import type { StromData, TreeId, PersonId } from '../types.js';
 import { STROM_DATA_VERSION } from '../version.js';
+import { IMAGE_SCRIPT_OPEN, SPLIT_IMAGES_FROM, IMAGE_SCRIPT_CHARS, restoreWindowImages } from '../embedded-images.js';
+import { readEmbeddedHtml } from '../backup-formats.js';
 
 // ---- the pool ----
 
@@ -186,6 +188,41 @@ describe('htmlFileWithImages', () => {
         expectFewPerRead();
         expect(await (await htmlFileWithImages('<p>none</p>', { data }, script)).blob.text()).toBe('<p>none</p>');
         expect(scriptSafeJson('"<\u2028"')).toBe('"\\u003c\\u2028"');
+    });
+
+    it('images past SPLIT_IMAGES_FROM characters (1127): the data script holds their places, the images follow in scripts of their own; the page and an import put them back as the expanded tree', async () => {
+        // A script longer than the browser's longest string (about 512 million characters) never runs: the app opened empty.
+        expect(SPLIT_IMAGES_FROM + 2 * IMAGE_SCRIPT_CHARS).toBeLessThan(2 ** 29 - 24);
+        vi.stubGlobal('__STROM_SPLIT_IMAGES_FROM', 1);
+        vi.stubGlobal('__STROM_IMAGE_SCRIPT_CHARS', 4000);
+        const { data } = treeWithRefs();
+        const html = '<html><head><title>x</title></head><body><script>var s="\\u0000sm:"</script></body></html>';
+        const script = (v: unknown) => `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(v)};<\/script>`;
+        const whole = await expandedData({ data });
+        readSizes = [];
+        const file = await htmlFileWithImages(html, { data }, script);
+        const text = await file.blob.text();
+        expectFewPerRead();
+        expect(file.missing).toBe(1);
+        const at = text.indexOf('<script>window.STROM_EMBEDDED_DATA');
+        const dataScript = text.slice(at, text.indexOf('</script>', at));
+        expect(dataScript).not.toContain('data:image');
+        expect(dataScript).toContain('"\\u0000si:0"');
+        expectNoRef(text);
+        // Several image scripts after the data script, all in the head; the page's own code as it was.
+        expect(text.split(IMAGE_SCRIPT_OPEN).length - 1).toBeGreaterThan(2);
+        expect(text.indexOf(IMAGE_SCRIPT_OPEN)).toBeGreaterThan(at);
+        expect(text.lastIndexOf(IMAGE_SCRIPT_OPEN)).toBeLessThan(text.indexOf('</head>'));
+        expect(text.endsWith('</head><body><script>var s="\\u0000sm:"</script></body></html>')).toBe(true);
+        // An import of the file.
+        expect(readEmbeddedHtml(text).envelope).toEqual(whole);
+        // The page: its scripts run as the browser runs them, then the app puts the images back.
+        const win: Record<string, unknown> = {};
+        vi.stubGlobal('window', win);
+        for (const m of text.matchAll(/<script>(window\.STROM_EMBEDDED_[\s\S]*?)<\/script>/g)) new Function('window', m[1])(win);
+        restoreWindowImages();
+        expect(win.STROM_EMBEDDED_DATA).toEqual(whole);
+        expect('STROM_EMBEDDED_IMAGES' in win).toBe(false);
     });
 });
 
