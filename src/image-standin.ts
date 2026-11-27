@@ -93,6 +93,35 @@ export async function textBlobWithImages(text: string, type = ''): Promise<Blob>
     return new Blob(parts, opts);
 }
 
+/**
+ * A text with stand-ins for a window of the app's own origin (the book's
+ * window, 1127): each image an object URL of its bytes, read
+ * STAND_IN_IMAGES_PER_READ at a time — the page holds the text and the
+ * URLs, the browser the images. `revoke` frees them (the window closed).
+ */
+export async function textWithImageUrls(text: string): Promise<{ text: string; revoke: () => void }> {
+    const made: string[] = [];
+    const revoke = (): void => { for (const u of made.splice(0)) URL.revokeObjectURL(u); };
+    if (!text.includes('STROMPOOL')) return { text, revoke };
+    const keys = new Map<string, { id: string; orient: string | undefined }>();
+    for (const m of text.matchAll(STAND_IN_IN_TEXT)) keys.set(m[0], { id: `${m[1]}:${m[2]}`, orient: m[3] });
+    const ids = [...new Set([...keys.values()].map(k => k.id))];
+    const objectUrl = new Map<string, string>();
+    for (let i = 0; i < ids.length; i += STAND_IN_IMAGES_PER_READ) {
+        const group = ids.slice(i, i + STAND_IN_IMAGES_PER_READ);
+        const urls = await loadImageUrls(group);
+        for (const [standIn, k] of keys) {
+            if (!group.includes(k.id)) continue;
+            const file = dataUrlBytes(shown(urls.get(k.id), k.orient));
+            if (!file) continue;
+            const u = URL.createObjectURL(new Blob([file.bytes as Uint8Array<ArrayBuffer>], { type: file.mime }));
+            made.push(u);
+            objectUrl.set(standIn, u);
+        }
+    }
+    return { text: text.replace(STAND_IN_IN_TEXT, m => objectUrl.get(m) ?? ''), revoke };
+}
+
 /** A stand-in's image as it is shown, read from the pool ('' when it does not give it); any other text as it is. */
 export async function standInImage(src: string): Promise<string> {
     const s = standInOf(src);

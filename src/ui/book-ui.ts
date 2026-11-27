@@ -59,7 +59,7 @@ import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
 import { activatedElement, BUSY_MIN_MS, BUSY_SHOW_MS, busySpinHtml, nextPaint } from './busy.js';
 import { imagesBeforeOutput } from './output-images.js';
-import { expandedData } from '../image-expand.js';
+import { textBlobWithImages, textWithImageUrls, treeWithPoolStandIns } from '../image-standin.js';
 import { showProgressToast, type ProgressToastHandle } from './toast.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 import { imageLoads } from '../image-loads.js';
@@ -75,8 +75,11 @@ type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title' |
  */
 type Phase = 'options' | 'building' | 'progress' | 'result' | 'zipFail';
 
-/** The book's memory check: it holds the open tree's images whole (image-expand.ts expandedData). */
-const BOOK_MEMORY: OutputCheck = { whole: true, what: 'book' };
+/** The book's memory check: its images are read a few at a time and none kept in the page (image-standin.ts, 1127). */
+const BOOK_MEMORY: OutputCheck = { streamed: true, what: 'book' };
+
+/** The book windows' images (object URLs) to free when the window closes or is filled again. */
+const bookWindowImages = new WeakMap<Window, () => void>();
 
 /**
  * Chosen people are a selection of the pages only (1102 §4.1), but for the people of Export's view; a person's family tree:
@@ -1845,8 +1848,9 @@ export const bookUiMethods = uiModule({
             if (go === 'cancelled' || win.closed) throw new BookBuildStopped();
             const k0 = doc.querySelector('.bp-k');
             if (k0) k0.textContent = '';
-            // Its pooled images whole (image-expand.ts): the book's window and its print are a document of their own.
-            const bookData = await expandedData(DataManager.getData());
+            // Its pooled images as stand-ins, shown in the window as object URLs (image-standin.ts, 1127): a tree
+            // with gigabytes of photos is never held whole; the window and its print show every image.
+            const bookData = await treeWithPoolStandIns(DataManager.getData());
             if (cancelled || win.closed) throw new BookBuildStopped();
             await this.loadBookHouses(options, bookData);
             if (cancelled || win.closed) throw new BookBuildStopped();
@@ -1874,9 +1878,15 @@ export const bookUiMethods = uiModule({
                 }
             });
             if (win.closed) throw new BookBuildStopped();
+            const shown = await textWithImageUrls(html);
+            if (win.closed) { shown.revoke(); throw new BookBuildStopped(); }
+            bookWindowImages.get(win)?.();
+            bookWindowImages.set(win, shown.revoke);
             doc.open();
-            doc.write(html);
+            doc.write(shown.text);
             doc.close();
+            // After document.open (it erases the window's listeners): the images freed with the window.
+            try { win.addEventListener('pagehide', shown.revoke, { once: true }); } catch { /* closed */ }
             this.wireBookWindow(win, options);
             if (toast) {
                 const t: ProgressToastHandle = toast;
@@ -1992,17 +2002,17 @@ export const bookUiMethods = uiModule({
                 if (painted) return;
                 painted = true;
                 // The tree's photos still on their way: the file waits for them (spec 116 §8), the button stays "Saving…".
-                // The file carries the pooled images whole (image-expand.ts).
+                // The file gets the pooled images put in a few at a time as it is written (image-standin.ts, 1127).
                 void imagesBeforeOutput(strings.photos.out.book, { el: null })
                     .then(async (go) => {
                         if (go === 'cancelled' || win.closed) return null;
-                        const data = await expandedData(DataManager.getData());
+                        const data = await treeWithPoolStandIns(DataManager.getData());
                         // The research's results of its houses, read again for the file (K7.3).
                         await this.loadBookHouses(options, data);
                         return data;
                     })
-                    .then((data) => {
-                        try { if (data && !win.closed) this.saveOrShareBook(win, options, act, title(), data); } finally { rest(); }
+                    .then(async (data) => {
+                        try { if (data && !win.closed) await this.saveOrShareBook(win, options, act, title(), data); } finally { rest(); }
                     }, rest);
             };
             try { win.requestAnimationFrame(() => win.setTimeout(run, 0)); } catch { /* closed */ }
@@ -2011,10 +2021,12 @@ export const bookUiMethods = uiModule({
     },
 
     /** Save as HTML / Share from the book's window: the book built for a file. */
-    saveOrShareBook(win: Window, options: BookOptions, act: string | null, bookTitle: string, data: StromData = DataManager.getData()): void {
+    async saveOrShareBook(win: Window, options: BookOptions, act: string | null, bookTitle: string, data: StromData = DataManager.getData()): Promise<void> {
         const doc = win.document;
         try {
-            const html = this.familyBookHtml(options, true, data);
+            // A Blob of its pieces with each image put in (stand-ins of the pool's images, 1127).
+            const html = await textBlobWithImages(this.familyBookHtml(options, true, data), 'text/html;charset=utf-8');
+            if (win.closed) return;
             const name = bookFileName(bookTitle);
             if (act === 'save') {
                 const W = win as Window & typeof globalThis;

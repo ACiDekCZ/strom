@@ -27,7 +27,10 @@ import { POOL_REF } from '../image-ref.js';
 import { clearImageMeta, computeImageMeta, setImageMeta } from '../image-meta.js';
 import { defaultGiftParts, defaultGiftPrivacy, type GiftSettings } from '../gift-tree.js';
 import { buildGiftPackage, type GiftPackageEnv } from '../gift-package.js';
-import { STAND_IN_IMAGES_PER_READ } from '../image-standin.js';
+import { STAND_IN_IMAGES_PER_READ, textBlobWithImages, textWithImageUrls, treeWithPoolStandIns } from '../image-standin.js';
+import { buildFamilyBook } from '../book.js';
+import { defaultBookOptions } from '../book-options.js';
+import { resolveObjectURL } from 'node:buffer';
 import { blobBytes, zipFiles } from './helpers/zip-read.js';
 import { buildPagesFile } from '../ui/family-pages-ui.js';
 import type { PersonId, StromData } from '../types.js';
@@ -204,5 +207,29 @@ describe('the gift package of a tree with many photos (1127)', () => {
         } finally {
             vi.unstubAllGlobals();
         }
+    });
+
+    it('the book: its window shows each image by an object URL of its bytes, its saved file has them put in; a few per read, as from the expanded tree', async () => {
+        const { data } = await treeWithPhotos();
+        const options = { ...defaultBookOptions('en'), selection: { kind: 'tree' } } as never;
+        const before = buildFamilyBook(await expandedData(data), options, { forSave: true });
+        counting = true;
+        const book = buildFamilyBook(await treeWithPoolStandIns(data), options, { forSave: true });
+        const saved = await (await textBlobWithImages(book, 'text/html')).text();
+        const shown = await textWithImageUrls(book);
+        counting = false;
+        expect(Math.max(...reads)).toBeLessThanOrEqual(STAND_IN_IMAGES_PER_READ);
+        expect(saved).toBe(before);
+        // Each object URL holds the image the expanded book carries.
+        const urls = [...new Set(shown.text.match(/blob:nodedata:[0-9a-f-]+/g) ?? [])];
+        expect(urls.length).toBeGreaterThan(3);
+        const back = new Map<string, string>();
+        for (const u of urls) {
+            const blob = resolveObjectURL(u)!;
+            back.set(u, `data:${blob.type};base64,${Buffer.from(await blob.arrayBuffer()).toString('base64')}`);
+        }
+        expect(shown.text.replace(/blob:nodedata:[0-9a-f-]+/g, u => back.get(u)!)).toBe(before);
+        shown.revoke();
+        expect(resolveObjectURL(urls[0])).toBeUndefined();
     });
 });
