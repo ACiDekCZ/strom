@@ -17,17 +17,25 @@
 
 import type { PersonId, StromData } from './types.js';
 import type { BookCtx, BookHouseEntry } from './book-blocks.js';
-import type { HouseResearch, HouseSource } from './house-bridge.js';
+import type { HouseResearch, HouseSource, HouseStoryText } from './house-bridge.js';
+import { proseHtml } from './story-text.js';
 import { getStringsForLang } from './strings.js';
 import { formatFlexDate, yearOf } from './dates.js';
 import { shownName } from './person-name.js';
-import { houseInteresting, houseTitle } from './houses.js';
+import { houseInteresting, houseTitle, type TreeHouse } from './houses.js';
 import { houseTreeRows } from './house-page.js';
 import { researchSourceRef } from './research-link.js';
 
 /** One house of the chapter: as the index of houses shows it, with the research's result for its sources and building. */
 export interface BookHouseChapterEntry extends BookHouseEntry {
     research: HouseResearch | null;
+    /** Its approved story as outputs may show it (houseStoryForOutput, spec 145 T4); null none. */
+    story?: HouseStoryText | null;
+}
+
+/** The anchor of a house in the chapter (a person's story links to it). */
+export function bookHouseAnchor(h: Pick<TreeHouse, 'id'>): string {
+    return `kap-dum-${h.id.replace(/[^a-z0-9]+/gi, '-')}`;
 }
 
 function esc(text: string): string {
@@ -107,6 +115,15 @@ export function housesChapterHtml(ctx: BookCtx, entries: readonly BookHouseChapt
         if (out.hidden.events || out.hidden.facts || out.hidden.location || out.persons.some(p => p.recent || p.living)) shielded = true;
         const parts: string[] = [`<h3>${esc(houseTitle(h))}</h3>`];
         if (e.name) parts.push(`<div class="book-house-alias"><em>${esc(e.name)}</em></div>`);
+        // Its story first (spec 145 T4): the approved text only, its sources among the chapter's notes.
+        if (e.story) {
+            const body = proseHtml(e.story.text, { headingLevel: 5, softBreak: 'space', dropStrayMarks: true });
+            if (body) {
+                const title = e.story.title ? `<h4 class="book-house-story-title">${esc(e.story.title)}</h4>` : '';
+                const marks = notes.cite(e.story.sources);
+                parts.push(`<div class="book-story book-house-story">${title}${body}${marks ? `<p class="book-house-story-src">${marks}</p>` : ''}</div>`);
+            }
+        }
         // The research's description of the building.
         const look = e.research?.look?.text?.trim();
         if (look) parts.push(`<p class="book-house-text">${esc(look)}</p>`);
@@ -165,7 +182,7 @@ export function housesChapterHtml(ctx: BookCtx, entries: readonly BookHouseChapt
             .filter(it => it.kind !== 'oldest' || old(it.year))
             .map(it => it.kind === 'family' ? H.family(it.years) : it.kind === 'numbers' ? H.numbers(it.count) : H.oldest(it.year));
         if (items.length) parts.push(`<p class="book-house-note"><em>${esc(B.housesInteresting)}:</em> ${esc(items.join(' · '))}.</p>`);
-        houses.push(`<div class="book-house-ch" id="kap-dum-${esc(h.id.replace(/[^a-z0-9]+/gi, '-'))}">${parts.join('')}</div>`);
+        houses.push(`<div class="book-house-ch" id="${esc(bookHouseAnchor(h))}">${parts.join('')}</div>`);
     }
     if (!houses.length) return '';
     const fns = notes.list.map((t, i) => `<p><span class="book-pn">${i + 1}</span>${esc(t)}</p>`).join('');

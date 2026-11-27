@@ -25,10 +25,10 @@ import { buildLineages, type LineageIndex } from './lineage.js';
 import { PersonPageContext } from './person-page.js';
 import { BookChapter, BookModel, buildBookModel } from './book-model.js';
 import { BookLang, BookOptions, BookParts, autoBookTitle, bookChapterHouses, bookHouseRecent, bookHouses, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
-import { collectHouses, withResearchNumbers, type TreeHouse } from './houses.js';
+import { collectHouses, houseLabel, withResearchNumbers, type TreeHouse } from './houses.js';
 import type { HouseResearch } from './house-bridge.js';
-import { houseOutputFilter, housePrivacyContext } from './house-privacy.js';
-import { housesChapterHtml, type BookHouseChapterEntry } from './book-houses.js';
+import { houseOutputFilter, housePrivacyContext, houseStoryForOutput } from './house-privacy.js';
+import { bookHouseAnchor, housesChapterHtml, type BookHouseChapterEntry } from './book-houses.js';
 import {
     BookCtx, BookHouseEntry, BookLinkTarget, BookSourceNumbers, BookStoryExtras, familyChapterHtml, houseIndexHtml, indexHtml, pairFirstNames, pairName,
     rodHasMaleLine, rodLabelOf, rodLineageHtml, rodOverviewHtml, smallRodsHtml, sourcesHtml,
@@ -348,6 +348,32 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
         },
     };
 
+    // A house as outputs show it (spec 030 §10): judged on the data before protection, named from the protected tree.
+    const hctx = parts.houses || parts.houseIndex ? housePrivacyContext(data, now) : null;
+    const houseEntry = (house: TreeHouse): BookHouseChapterEntry => {
+        const research = env.houseResearch?.(house) ?? null;
+        const out = houseOutputFilter(house, research, data, now, hctx ?? undefined);
+        return {
+            house, research,
+            name: tree.houses?.[house.id]?.name?.trim() ?? '',
+            numbers: research ? withResearchNumbers(house, research.numbers, data.houses?.[house.id]) : house.numbers,
+            out,
+            // Its approved story, as outputs may show it (spec 145 T4).
+            story: hctx ? houseStoryForOutput(research, out, hctx) : null,
+        };
+    };
+    // The Houses chapter's houses, known before the chapters: a person's story links to the story of a house they
+    // lived in (spec 145 T4).
+    const chapterHouses = parts.houses && hctx ? bookChapterHouses(data, model.personIds, treeHouses, env.finishedHouses).map(houseEntry) : [];
+    const storyHouses = new Map<PersonId, { href: string; label: string }[]>();
+    for (const e of chapterHouses) {
+        if (!e.story) continue;
+        for (const id of e.house.personIds) {
+            const list = storyHouses.get(id) ?? storyHouses.set(id, []).get(id)!;
+            list.push({ href: `#${bookHouseAnchor(e.house)}`, label: S.houses.integration.houseLink(houseLabel(e.house.text)) });
+        }
+    }
+
     const ctx: BookCtx = {
         mode: 'book', lang, privacy: opts.privacy, detail: opts.detail, parts, notes: opts.notes, research: opts.research,
         linkTo, tree, living, model, now,
@@ -355,6 +381,7 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
         sources: new BookSourceNumbers(tree.sources ?? {}, parts.sources),
         ...(env.personHistory ? { personHistory: byName ? (id: PersonId) => (recent.has(id) ? undefined : env.personHistory!(id)) : env.personHistory } : {}),
         ...(extras ? { extras } : {}),
+        ...(storyHouses.size ? { storyHouses: (id: PersonId) => storyHouses.get(id) ?? [] } : {}),
         described: new Map(),
         protectedTree: { tree, privacy: opts.privacy, living, drafts: new Set(personDrafts.keys()), lineages: model.index, rodLabels: model.labels },
     };
@@ -395,19 +422,8 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
     if (parts.smallRods && model.smallRods.length) {
         back.push(`<section class="book-sheet book-back" id="book-small-rods">${smallRodsHtml(model.smallRods, ctx)}</section>`);
     }
-    // A house as outputs show it (spec 030 §10): judged on the data before protection, named from the protected tree.
-    const hctx = parts.houses || parts.houseIndex ? housePrivacyContext(data, now) : null;
-    const houseEntry = (house: TreeHouse): BookHouseChapterEntry => {
-        const research = env.houseResearch?.(house) ?? null;
-        return {
-            house, research,
-            name: tree.houses?.[house.id]?.name?.trim() ?? '',
-            numbers: research ? withResearchNumbers(house, research.numbers, data.houses?.[house.id]) : house.numbers,
-            out: houseOutputFilter(house, research, data, now, hctx ?? undefined),
-        };
-    };
     if (parts.houses && hctx) {
-        const chapter = housesChapterHtml(ctx, bookChapterHouses(data, model.personIds, treeHouses, env.finishedHouses).map(houseEntry), hctx.from, data.sources);
+        const chapter = housesChapterHtml(ctx, chapterHouses, hctx.from, data.sources);
         if (chapter) back.push(`<section class="book-sheet book-back book-houses" id="book-houses">${chapter}</section>`);
         else parts.houses = false;
     }

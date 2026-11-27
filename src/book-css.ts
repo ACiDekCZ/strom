@@ -197,6 +197,11 @@ ${PERSON_PAGE_CHART_CSS}
 .book-house-ch h3 { font-size: 15pt; break-after: avoid; overflow-wrap: anywhere; }
 .book-house-alias { color: #4a4438; margin: 1px 0 6px; }
 .book-house-text { text-align: justify; hyphens: auto; }
+.book-house-story { margin: 4px 0 10px; }
+.book-house-story h4.book-house-story-title { font-style: italic; font-weight: 400; color: #4a4438; }
+.book-house-story-src { margin: 2px 0 0; text-align: left; }
+.book-story-houses { font: 12px ${SANS}; margin: 4px 0 0; text-align: left; }
+.book-story-houses a { color: #8a5a2b; margin-right: 10px; }
 .book-house-rows { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 1px 12px; font-size: 10.5pt; }
 .book-house-rows b { font-weight: 600; color: #8a5528; font-variant-numeric: tabular-nums; }
 .book-house-table { width: 100%; border-collapse: collapse; font-size: 10.5pt; break-inside: avoid; }

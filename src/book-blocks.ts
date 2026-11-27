@@ -130,6 +130,11 @@ export interface BookCtx {
     /** A person's history layer (the research's), as the person page gets it. */
     personHistory?: (personId: PersonId) => PersonPageContext['history'];
     extras?: BookStoryExtras;
+    /**
+     * The houses of the book's Houses chapter with a story there that a person lived in (spec 145 T4): links under
+     * the person's story; none without the chapter.
+     */
+    storyHouses?: (personId: PersonId) => readonly { href: string; label: string }[];
     /** People described in full so far: person → the chapter. */
     described: Map<PersonId, number>;
     /** The protected tree as the person page's helpers take it. */
@@ -627,7 +632,11 @@ function storyBlock(ctx: BookCtx, story: Story, who: string, owner: { person: Pe
     const banner = ctx.extras?.banner?.(story, owner) ?? '';
     const title = story.title ? ` <span class="book-story-title">${esc(story.title)}</span>` : '';
     const approve = story.status === 'draft' && 'person' in owner ? ctx.extras?.approve?.(owner.person) ?? '' : '';
-    return `<div class="book-story">${banner}<h4>${who}${title}</h4>${body}${approve}</div>`;
+    // The story of a house the person lived in, in the Houses chapter (spec 145 T4).
+    const houses = 'person' in owner ? ctx.storyHouses?.(owner.person.id) ?? [] : [];
+    const houseLinks = houses.length
+        ? `<p class="book-story-houses">${houses.map(h => `<a href="${esc(h.href)}">${esc(h.label)}</a>`).join(' ')}</p>` : '';
+    return `<div class="book-story">${banner}<h4>${who}${title}</h4>${body}${houseLinks}${approve}</div>`;
 }
 
 /**
