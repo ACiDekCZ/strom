@@ -41,7 +41,7 @@ export const plPart14: Pick<StringsType, 'houses'> = {
         numbers: (k: number) => nPl(k, 'numer domu', 'numery domu', 'numerów domu'),
         oldest: (y: number) => `najstarszy zapis ${y}`,
         ev: {
-            bornM: 'urodzony', bornF: 'urodzona', diedM: 'zmarł', diedF: 'zmarła',
+            bornM: 'urodzony', bornF: 'urodzona', baptizedM: 'ochrzczony', baptizedF: 'ochrzczona', diedM: 'zmarł', diedF: 'zmarła',
             marriage: 'ślub', residence: 'zamieszkanie', census: 'spis ludności', event: 'zapis',
         },
         moreRecords: (n: number) => `i ${nPl(n, 'kolejny zapis', 'kolejne zapisy', 'kolejnych zapisów')}…`,

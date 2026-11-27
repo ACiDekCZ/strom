@@ -5,7 +5,7 @@
  * ~100 years, the living's own name and the sensitive event (K1.4a, K3.3).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { StromData } from '../types.js';
+import type { PersonId, StromData } from '../types.js';
 import type { HouseResearch } from '../house-bridge.js';
 import { collectHouses, type TreeHouse } from '../houses.js';
 import {
@@ -143,6 +143,45 @@ describe('house page — app', () => {
         const wedding = rows.find(r => r.kind === 'marriage' && r.year === 1878)!;
         expect(wedding.persons.sort()).toEqual(['hostivit', 'kunhuta']);
         expect(wedding.marriedIn).toBe('f');
+    });
+
+    it('the timeline says nothing twice: birth and baptism, a person\'s or a couple\'s residences of one year (fictional names)', () => {
+        const data = houseTree();
+        const at = { place: 'Bělokamen', address: 'čp. 16' };
+        const P = data.persons as Record<string, StromData['persons'][PersonId]>;
+        // Svatobor born 1820 and baptized the same year: one row, "born".
+        P.svatobor.events = [{ id: 'e-svat-chr', type: 'baptism', ...at, date: '1820-03-03' },
+            // Three residences of one year (his son's baptisms say "the house of the child"): one row.
+            { id: 'e-svat-r1', type: 'residence', ...at, date: '1855' }, { id: 'e-svat-r2', type: 'residence', ...at, date: '1855-08-01' }];
+        // His wife's residence that year joins it: "residence Svatobor and Radegunda", as a wedding.
+        P.radegunda.events = [{ id: 'e-rade-r', type: 'residence', ...at, date: '1855' }];
+        // Their son's residence of that year is his own row.
+        P.hostivit.events = [{ id: 'e-host-r', type: 'residence', ...at, date: '1855' },
+            // A baptism of another year than the birth stays a row of its own.
+            { id: 'e-host-chr', type: 'baptism', ...at, date: '1851-01-02' }];
+        // A daughter baptized at the house, born elsewhere: "baptized".
+        P.ctiboja = {
+            id: 'ctiboja' as PersonId, firstName: 'Ctiboja', lastName: 'Prouzalová', gender: 'female', isPlaceholder: false,
+            parentIds: ['hostivit', 'kunhuta'] as PersonId[], childIds: [], partnerships: [],
+            events: [{ id: 'e-cti-chr', type: 'baptism', ...at, date: '1881' }],
+        };
+        const house = houseOf(data, HOUSE_ID);
+        const rows = houseTreeRows(house, house.facts, data, 'en');
+        const of = (kind: string, year: number) => rows.filter(r => r.kind === kind && r.year === year).map(r => `${r.label}: ${[...r.persons].sort().join(' ')}`);
+        expect(of('birth', 1820)).toEqual(['born: svatobor']);
+        expect(of('birth', 1850)).toEqual(['born: hostivit']);
+        expect(of('birth', 1851)).toEqual(['baptized: hostivit']);
+        expect(of('birth', 1881)).toEqual(['baptized: ctiboja']);
+        expect(of('residence', 1855).sort()).toEqual(['residence: hostivit', 'residence: radegunda svatobor']);
+        // Deaths and the wedding as before.
+        expect(of('death', 1890)).toEqual(['died: svatobor']);
+        expect(of('marriage', 1878)).toEqual(['marriage: hostivit kunhuta']);
+        // In Czech, the daughter's baptism by her sex.
+        const cs = houseTreeRows(house, house.facts, data, 'cs');
+        expect(cs.find(r => r.persons.includes('ctiboja' as PersonId))!.label).toBe('pokřtěna');
+        // The page shows it so.
+        const html = buildHousePage(data, house, null, 'app', opts);
+        expect(html.match(/Born <[^>]*>[^<]*Svatobor/g) ?? []).toHaveLength(1);
     });
 
     it('all four languages build', () => {

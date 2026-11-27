@@ -13349,7 +13349,7 @@ const stringsEN = {
         numbers: (k: number) => nEn(k, 'house number', 'house numbers'),
         oldest: (y: number) => `oldest record ${y}`,
         ev: {
-            bornM: 'born', bornF: 'born', diedM: 'died', diedF: 'died',
+            bornM: 'born', bornF: 'born', baptizedM: 'baptized', baptizedF: 'baptized', diedM: 'died', diedF: 'died',
             marriage: 'marriage', residence: 'residence', census: 'census', event: 'record',
         },
         moreRecords: (n: number) => `and ${nEn(n, 'more record', 'more records')}…`,
@@ -26346,7 +26346,7 @@ const stringsCZ: StringsType = {
         numbers: (k: number) => nCs(k, 'číslo domu', 'čísla domu', 'čísel domu'),
         oldest: (y: number) => `nejstarší zápis ${y}`,
         ev: {
-            bornM: 'narozen', bornF: 'narozena', diedM: 'zemřel', diedF: 'zemřela',
+            bornM: 'narozen', bornF: 'narozena', baptizedM: 'pokřtěn', baptizedF: 'pokřtěna', diedM: 'zemřel', diedF: 'zemřela',
             marriage: 'sňatek', residence: 'bydliště', census: 'sčítání lidu', event: 'zápis',
         },
         moreRecords: (n: number) => `a ${nCs(n, 'další zápis', 'další zápisy', 'dalších zápisů')}…`,
@@ -39240,7 +39240,7 @@ const stringsDE: StringsType = {
         numbers: (k: number) => `${k} ${plural('de', k, 'Hausnummer', 'Hausnummern')}`,
         oldest: (y: number) => `ältester Eintrag ${y}`,
         ev: {
-            bornM: 'geboren', bornF: 'geboren', diedM: 'gestorben', diedF: 'gestorben',
+            bornM: 'geboren', bornF: 'geboren', baptizedM: 'getauft', baptizedF: 'getauft', diedM: 'gestorben', diedF: 'gestorben',
             marriage: 'Heirat', residence: 'Wohnort', census: 'Volkszählung', event: 'Eintrag',
         },
         moreRecords: (n: number) => `und ${n} ${plural('de', n, 'weiterer Eintrag', 'weitere Einträge')}…`,

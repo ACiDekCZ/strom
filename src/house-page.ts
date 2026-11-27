@@ -236,7 +236,7 @@ export interface HouseTreeRow {
 function factLabel(f: HouseFact, data: StromData, S: ReturnType<typeof getStringsForLang>): string {
     const ev = S.houses.ev;
     const fem = data.persons[f.personId]?.gender === 'female';
-    if (f.kind === 'birth') return fem ? ev.bornF : ev.bornM;
+    if (f.kind === 'birth') return isBaptism(f, data) ? (fem ? ev.baptizedF : ev.baptizedM) : (fem ? ev.bornF : ev.bornM);
     if (f.kind === 'death') return fem ? ev.diedF : ev.diedM;
     if (f.kind === 'marriage') return ev.marriage;
     if (f.kind === 'census') return ev.census;
@@ -256,7 +256,60 @@ function factLabel(f: HouseFact, data: StromData, S: ReturnType<typeof getString
     return ev.event;
 }
 
-/** The house's records of the tree as rows (one per fact, a couple's fact once), by year. */
+/** A baptism the tree keeps as a person's event: the house's records count it as a birth, its row says "baptized". */
+function isBaptism(f: HouseFact, data: StromData): boolean {
+    if (!f.factRef.startsWith('event:')) return false;
+    const id = f.factRef.slice('event:'.length);
+    return data.persons[f.personId]?.events?.some(e => e.id === id && e.type === 'baptism') ?? false;
+}
+
+/** Whether two people are partners in the tree (a couple's residences of one year are one row). */
+function partnersIn(data: StromData, a: PersonId, b: PersonId): boolean {
+    return (data.persons[a]?.partnerships ?? []).some(id => {
+        const u = data.partnerships[id];
+        return !!u && ((u.person1Id === a && u.person2Id === b) || (u.person1Id === b && u.person2Id === a));
+    });
+}
+
+/**
+ * The rows without repeating what one row already says: a person's birth and
+ * baptism of one year are one row (born; a baptism alone says "baptized"),
+ * the residences of a person, or of a couple, in one year are one row with
+ * them all ("residence X and Y", as a wedding). Deaths, weddings and other
+ * records stay one row each.
+ */
+function joinRepeatedRows(rows: HouseTreeRow[], data: StromData): HouseTreeRow[] {
+    const out: HouseTreeRow[] = [];
+    const births = new Map<string, { row: HouseTreeRow; baptism: boolean }>();
+    for (const row of rows) {
+        if (row.kind === 'birth' && row.persons.length === 1) {
+            const key = `${row.persons[0]}\u0000${row.year ?? ''}`;
+            const baptism = isBaptism({ personId: row.persons[0], kind: row.kind, factRef: row.factRef }, data);
+            const had = births.get(key);
+            if (!had) {
+                births.set(key, { row, baptism });
+                out.push(row);
+            } else if (had.baptism && !baptism) {
+                // The birth says more than the baptism: the one row is the birth's.
+                Object.assign(had.row, { factRef: row.factRef, label: row.label });
+                had.baptism = false;
+            }
+            continue;
+        }
+        if (row.kind === 'residence' && row.year !== undefined) {
+            const same = out.find(r => r.kind === 'residence' && r.year === row.year
+                && r.persons.some(p => row.persons.some(q => p === q || partnersIn(data, p, q))));
+            if (same) {
+                for (const p of row.persons) if (!same.persons.includes(p)) same.persons.push(p);
+                continue;
+            }
+        }
+        out.push(row);
+    }
+    return out;
+}
+
+/** The house's records of the tree as rows (one per fact, a couple's fact once, nothing said twice), by year. */
 export function houseTreeRows(house: TreeHouse, facts: readonly HouseFact[], data: StromData, lang: Language): HouseTreeRow[] {
     const S = getStringsForLang(lang);
     const married = new Map(house.marriedIn.map(m => [m.personId, m.sex]));
@@ -274,7 +327,7 @@ export function houseTreeRows(house: TreeHouse, facts: readonly HouseFact[], dat
         const inPerson = row.persons.find(p => married.has(p));
         if (inPerson) row.marriedIn = married.get(inPerson);
     }
-    return [...rows.values()];
+    return joinRepeatedRows([...rows.values()], data);
 }
 
 // ==================== CONTEXT ====================
