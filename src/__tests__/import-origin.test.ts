@@ -266,8 +266,9 @@ describe('a research version keeps the app’s link marks and records', () => {
         expect(kept.imports?.map(r => r.id)).toEqual(['R1', 'I1']);
         expect(kept.persons[remap(K)].importedParents).toEqual({ [remap(Z)]: 'I1', [remap(B)]: 'I1' });
         expect(kept.partnerships[U].importId).toBe('I1');
-        // The research said whose the birth is: the app's stored birth values do not come along.
-        expect(kept.persons[remap(Z)].importedValues?.birthDate).toBeUndefined();
+        // Whatever origin the research gives the birth, the app's stored values come along (1127):
+        // a fact still as the file gave it is marked in the next send (a research that took it as the user's fixes it).
+        expect(kept.persons[remap(Z)].importedValues?.birthDate?.from).toBe('I1');
         expect(kept.persons[remap(Z)].importedValues?.firstName?.from).toBe('I1');
         expect(research.persons[remap(K)].importedParents).toBeUndefined();
     });

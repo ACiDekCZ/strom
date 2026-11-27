@@ -1275,9 +1275,13 @@ export function carryMergedImports(
  * The previous state's import records and the link marks a research version
  * does not carry (the research keeps the origin of facts, the app keeps that
  * of links). People are matched by their research number (REFN), couples by
- * their two people — this runs before stabilizeIds. Facts the research gives
- * no origin of keep the app's own stored value. Returns `next` itself when
- * there is nothing to keep; neither input is changed.
+ * their two people — this runs before stabilizeIds. Every fact keeps the
+ * app's own stored value, whatever origin the research gives it (1127): the
+ * next send names the file under each fact still as it gave it, also one a
+ * research recorded as the user's from a send without marks; a value changed
+ * since no longer equals it (importedValueOf). An event's values go to the
+ * same event of the research's version (matchedEvent). Returns `next` itself
+ * when there is nothing to keep; neither input is changed.
  *
  * The records' ids in the loaded files (originalIds): a research with
  * `origin.ids` keeps and sends them, so its file is what counts. Before that,
@@ -1314,10 +1318,12 @@ export function keepImports(next: StromData, previous: StromData, features?: rea
     }
     const keepFacts = (into: FactHolder, from: FactHolder): void => {
         for (const [key, v] of Object.entries(from.importedValues ?? {})) {
-            if (key.startsWith('event:')) continue;
-            const where = factOfKey(into, key);
-            if (!where || into.researchOrigins?.[where.fact] || into.importedValues?.[key]) continue;
-            (into.importedValues ??= {})[key] = { ...v };
+            const ev = /^event:(.+)\.(date|place|value)$/.exec(key);
+            const at = ev ? matchedEvent(from, into, ev[1]) : undefined;
+            if (ev && !at) continue;
+            const keyHere = ev ? `event:${at}.${ev[2]}` : key;
+            if (!factOfKey(into, keyHere) || into.importedValues?.[keyHere]) continue;
+            (into.importedValues ??= {})[keyHere] = { ...v };
         }
         if (!into.importId && from.importId) into.importId = from.importId;
         if (!researchKeepsIds) {
@@ -1364,6 +1370,27 @@ export function keepImports(next: StromData, previous: StromData, features?: rea
         if (!now.gedcomAuthor && src.gedcomAuthor && now.note === src.note) now.gedcomAuthor = src.gedcomAuthor;
     }
     return out;
+}
+
+/**
+ * The id in `into` of the event `id` of `from` (a research's version reads
+ * every event with a new id): the one event of the same kind on both sides,
+ * else the one that says exactly the same (date, place, value). Undefined
+ * when neither is unique.
+ */
+function matchedEvent(from: FactHolder, into: FactHolder, id: string): string | undefined {
+    const was = eventById(from, id);
+    if (!was) return undefined;
+    const kind = (e: LifeEvent | CoupleEvent): string => `${e.type}\u0000${e.type === 'custom' ? e.customLabel ?? '' : ''}`;
+    const said = (e: LifeEvent | CoupleEvent): string => [kind(e), e.date ?? '', e.place ?? '', e.note ?? ''].join('\u0000');
+    const prev = eventsOf(from).filter(Boolean);
+    const next = eventsOf(into).filter(Boolean);
+    for (const key of [kind, said]) {
+        const own = key(was);
+        const theirs = next.filter(e => key(e) === own);
+        if (prev.filter(e => key(e) === own).length === 1 && theirs.length === 1) return theirs[0].id;
+    }
+    return undefined;
 }
 
 /** A picture's date from the file (photoDate, Attachment.date) back on the same picture of `into`. */

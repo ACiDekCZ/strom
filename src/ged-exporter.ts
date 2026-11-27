@@ -1581,8 +1581,13 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (lines.slice(at + 1).some(l => /^2 (DATE|PLAC)\b/.test(l))) return;
         lines[at] += ' Y';
     };
-    /** The `2 _STROM_IMPORT` lines of a fact: only for parts whose value is still the file's. */
+    /**
+     * The `2 _STROM_IMPORT` lines of a fact: only for parts whose value is
+     * still the file's. A fact a person confirmed (spec 065, here or in the
+     * research) is that person's: none (spec 066, 1127).
+     */
     const pushFactImport = (holder: FactHolder, fact: string): void => {
+        if (factVerifyInfo(holder, fact).confirmed) return;
         for (const tag of factImportTags(holder, fact)) {
             if (knownImports.has(tag.split(' ')[0])) lines.push(`2 ${IMPORT_TAG} ${tag}`);
         }
