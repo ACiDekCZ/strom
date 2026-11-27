@@ -28,7 +28,7 @@ describe('houseSensitiveHtml', () => {
         setLanguage('cs');
         const data = houseTree();
         const html = houseSensitiveHtml(house(data), houseResearch(), data, HOUSE_NOW, { lang: 'cs', readOnly: false });
-        expect(text(html)).toBe(`Ve výstupech (HTML, kniha) se 2 události a poloha domu neukazují. 1948 · ${SENSITIVE_TEXT} skryto ve výstupech Ukázat ve výstupech`);
+        expect(text(html)).toBe(`Ve výstupech (HTML, kniha) se 2 události a poloha domu neukazují (lidé posledních ~100 let). 1948 · ${SENSITIVE_TEXT} skryto ve výstupech Ukázat ve výstupech`);
         expect(html).toContain('data-event="e9" data-reveal="show"');
     });
 
@@ -37,7 +37,7 @@ describe('houseSensitiveHtml', () => {
         const data = houseTree();
         data.houses![HOUSE_ID].revealInOutputs = ['e9'];
         const html = houseSensitiveHtml(house(data), houseResearch(), data, HOUSE_NOW, { lang: 'en', readOnly: false });
-        expect(text(html)).toBe(`In outputs (HTML, book) 1 event and the house location are not shown. 1948 · ${SENSITIVE_TEXT} Hide in outputs`);
+        expect(text(html)).toBe(`In outputs (HTML, book) 1 event and the house location are not shown (people of the last ~100 years). 1948 · ${SENSITIVE_TEXT} Hide in outputs`);
         expect(html).toContain('data-reveal="hide"');
     });
 

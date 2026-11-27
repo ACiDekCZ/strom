@@ -27,7 +27,7 @@ import { bookTitlePage, buildFamilyBook, buildFamilyBookAsync, type BookBuildEnv
 import { bookFileName, bookPreparingHtml } from '../book-window.js';
 import {
     BOOK_HOUSE_PARTS, BOOK_PART_KEYS, BookDetail, BookEnv, BookEstimate, BookLang, BookOptions, BookPartKey, BookSelectionSpec,
-    autoBookTitle, bookHouseDefaults, bookHouseRecent, bookPartAvailability, bookSelectionHouses, bookRodCounts, estimateBook,
+    autoBookTitle, bookChapterHousesFor, bookHouseDefaults, bookHouseMaps, bookHouseMapsState, bookHouseRecent, bookPartAvailability, bookSelectionHouses, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
     BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PAGES_GROUP_KEYS, PagesChoices, PagesGroups, PagesHouses,
@@ -55,7 +55,9 @@ import { openPersonPopover, openSearchPopover, type SearchPopoverRow } from './p
 import { collectHouses, findHouse, hasNumberedHouse, houseLabel, houseTitle, type TreeHouse } from '../houses.js';
 import { loadBookHouseResearch, type BookHouseResearch } from '../book-house-research.js';
 import { protectedHouseIndex } from '../person-page.js';
-import type { HouseResearch } from '../house-bridge.js';
+import { houseStatus, type HouseResearch } from '../house-bridge.js';
+import type { HouseMapShots } from '../house-map-shot.js';
+import { houseShotRequests, prepareHouseShots } from './house-map-shots.js';
 import { houseMatches, houseSearchText } from '../houses-view.js';
 import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
@@ -170,6 +172,8 @@ interface DialogState {
     houses?: TreeHouse[];
     /** The tree's houses whose history the research has done (the Houses chapter, K7.3). */
     finishedHouses: ReadonlySet<HouseId>;
+    /** The research's results of the tree's houses read so far (the locations the book may show, spec 145 T3). */
+    houseResearch?: (house: TreeHouse) => HouseResearch | null;
     /** The scope sentence under the house, kept for its house. */
     houseScope?: { key: string; text: string };
     /** The book took the whole tree for chosen people: said once under the selection, until the next change. */
@@ -258,6 +262,8 @@ function selectionOf(s: DialogState): BookSelectionSpec | null {
 /** The tree's houses (once per opening). */
 /** The research's results of the last book's houses, read before it was built (K7.3): its save uses them too. */
 let bookHouseRead: (BookHouseResearch & { base: string }) | null = null;
+/** The cuts of today's map of the last book's houses (spec 145 T3), made before it was built: its save uses them too. */
+let bookHouseShots: ReadonlyMap<HouseId, HouseMapShots> | null = null;
 
 function housesOf(s: DialogState): TreeHouse[] {
     if (!s.houses) s.houses = collectHouses(s.data);
@@ -267,7 +273,10 @@ function housesOf(s: DialogState): TreeHouse[] {
 /** What the parts' availability takes besides the data and the options. */
 function partsEnvOf(s: DialogState): BookEnv {
     // The tree's houses only for a tree that has some (the Houses chapter and the index of houses, spec 030 §8).
-    return { index: s.index, hasHistory: s.hasHistory, houses: s.hasHouse ? housesOf(s) : [], finishedHouses: s.finishedHouses };
+    return {
+        index: s.index, hasHistory: s.hasHistory, houses: s.hasHouse ? housesOf(s) : [], finishedHouses: s.finishedHouses,
+        ...(s.houseResearch ? { houseResearch: s.houseResearch } : {}),
+    };
 }
 
 /** The house parts the tree cannot have with these options: not remembered, so their default still follows the tree. */
@@ -416,7 +425,7 @@ function optionsHtml(s: DialogState): string {
     const seg = (name: string, items: ReadonlyArray<[string, string]>, label: string): string =>
         `<div class="book-seg sel-seg" role="radiogroup" aria-label="${esc(label)}">`
         + items.map(([v, l]) => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-${name}="${v}">${esc(l)}</button>`).join('') + `</div>`;
-    const sw = (key: 'notes' | 'research' | 'houseRecent', title: string, hintText: string): string =>
+    const sw = (key: 'notes' | 'research' | 'houseRecent' | 'houseMaps', title: string, hintText: string): string =>
         `<div class="book-switch-row"><button type="button" class="book-switch" role="switch" data-switch="${key}" aria-labelledby="book-sw-${key}">`
         + `<span class="book-switch-track" aria-hidden="true"></span></button>`
         + `<div class="book-switch-text"><span class="book-switch-t" id="book-sw-${key}">${esc(title)}</span><span class="book-hint">${esc(hintText)}</span></div></div>`;
@@ -469,7 +478,9 @@ function optionsHtml(s: DialogState): string {
     return head
         + `<div class="book-sum">${sum('parts', D.parts)}${sum('detail', D.detail)}${sum('notes', D.notesRow)}`
         + `${sum('privacy', D.privacy)}${sum('lang', D.lang)}${sum('title', D.title)}</div>`
-        + `<section class="book-sec" data-sec="parts"><h3 class="book-sec-h">${esc(D.parts)}</h3><div class="book-parts">${parts}</div></section>`
+        + `<section class="book-sec" data-sec="parts"><h3 class="book-sec-h">${esc(D.parts)}</h3><div class="book-parts">${parts}</div>`
+        // The Houses chapter's locations (spec 145 T3): shown for a chapter with a house whose location outputs may show.
+        + `<div class="book-house-maps" hidden>${sw('houseMaps', D.houseMaps, D.houseMapsHint)}</div></section>`
         + `<section class="book-sec" data-sec="detail"><h3 class="book-sec-h">${esc(D.detail)}</h3><div class="book-detail-line">`
         + seg('detail', DETAILS.map(d => [d, T.detail[d]] as [string, string]), D.detail)
         + `<p class="book-hint book-detail-hint"></p></div></section>`
@@ -687,9 +698,12 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
     setText(modal, '.book-detail-hint', T.detailHint[s.opts.detail]);
     modal.querySelectorAll<HTMLElement>('[data-switch]').forEach(b => {
         const k = b.dataset.switch;
-        b.setAttribute('aria-checked', String(k === 'notes' ? s.opts.notes : k === 'research' ? s.opts.research : s.opts.houseRecent !== false));
+        b.setAttribute('aria-checked', String(k === 'notes' ? s.opts.notes : k === 'research' ? s.opts.research
+            : k === 'houseMaps' ? bookHouseMaps(s.opts) : s.opts.houseRecent !== false));
     });
     modal.querySelectorAll<HTMLElement>('.book-house-recent').forEach(el => { el.hidden = s.kind !== 'house'; });
+    const mapsShown = avail.houses.available && !!s.opts.parts.houses && bookHouseMapsState(s.data, opts, env).shown;
+    modal.querySelectorAll<HTMLElement>('.book-house-maps').forEach(el => { el.hidden = !mapsShown; });
     modal.querySelectorAll<HTMLElement>('[data-lang]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.lang === s.opts.lang)));
 
     // Title: automatic by the selection and the book's language, until edited
@@ -1239,6 +1253,7 @@ export const bookUiMethods = uiModule({
             hasHouse,
             ...(treeHouses ? { houses: treeHouses } : {}),
             finishedHouses,
+            ...(treeHouses?.length ? { houseResearch: (house: TreeHouse) => this.houseResearchRead(house) } : {}),
             moved: movedToTree,
             opts,
             presets: initialPresetState(opts, memory),
@@ -1422,6 +1437,11 @@ export const bookUiMethods = uiModule({
                     update(s => { s.opts = { ...s.opts, houseRecent: s.opts.houseRecent === false }; });
                     return;
                 }
+                // Not a preset's value either: the Houses chapter's locations (spec 145 T3).
+                if (sw.dataset.switch === 'houseMaps') {
+                    update(s => { s.opts = { ...s.opts, houseMaps: !bookHouseMaps(s.opts) }; });
+                    return;
+                }
                 updateValues(s => {
                     s.opts = sw.dataset.switch === 'notes' ? { ...s.opts, notes: !s.opts.notes } : { ...s.opts, research: !s.opts.research };
                 });
@@ -1603,9 +1623,14 @@ export const bookUiMethods = uiModule({
         saveBookMemory(storage(), s.treeId, currentOptions(s), memoryExtra(s));
         // The research's results of the set's houses (spec 145 T6), read before it is built as the book's.
         const houseResearch = await this.pagesHouseResearch(s.est.set);
+        // The cuts of the map of its houses (spec 145 T3): pictures in the file, made once and kept.
+        const houseMapShots = await this.pagesHouseShots(s.est.set, houseResearch);
         if (st !== s || s.phase !== 'options' || (running && running !== s)) return;
         // A copy of the tree as it is now: it may be browsed and edited meanwhile (7b).
-        s.started = { sel, opts: { ...pageSetOptionsOf(s), ...(houseResearch ? { houseResearch } : {}) }, data: snapshotData(s.data) };
+        s.started = {
+            sel, opts: { ...pageSetOptionsOf(s), ...(houseResearch ? { houseResearch } : {}), ...(houseMapShots ? { houseMapShots } : {}) },
+            data: snapshotData(s.data),
+        };
         await this.runPagesBuild(s, s.started.sel, s.started.opts, zip);
     },
 
@@ -1796,6 +1821,22 @@ export const bookUiMethods = uiModule({
         } catch { return null; }
     },
 
+    /**
+     * The cuts of the map of a set's house pages (spec 145 T3): today's map and the research's historical layers of
+     * each house whose location the pages show; null none (offline without them kept, no consent to the map: the
+     * location in words, no error).
+     */
+    async pagesHouseShots(set: PageSet, research: ReadonlyMap<HouseId, HouseResearch> | null): Promise<ReadonlyMap<HouseId, HouseMapShots> | null> {
+        const ids = set.houseSlug;
+        if (!ids?.size) return null;
+        const b = this.houseResearchBridge();
+        const layers = b ? houseStatus(this.researchStatusOf(b.researchId))?.layers ?? [] : [];
+        const houses = protectedHouseIndex(set.protectedTree).houses.filter(h => ids.has(h.id));
+        const reqs = houseShotRequests(DataManager.getData(), houses, h => research?.get(h.id) ?? this.houseResearchRead(h), set.options.now, layers);
+        const got = await prepareHouseShots(reqs, set.options.lang);
+        return got.size ? got : null;
+    },
+
     /** The book's HTML for these options: for the window, or for a saved file. */
     familyBookHtml(options: BookOptions, forSave: boolean, data: StromData = DataManager.getData()): string {
         return buildFamilyBook(data, options, this.familyBookEnv(options, forSave));
@@ -1815,13 +1856,24 @@ export const bookUiMethods = uiModule({
      */
     async loadBookHouses(options: BookOptions, data: StromData): Promise<void> {
         bookHouseRead = null;
+        bookHouseShots = null;
         const b = this.houseResearchBridge();
-        if (!b || !(options.parts.houses || options.parts.houseIndex || options.selection.kind === 'house')) return;
-        try {
-            if (!hasNumberedHouse(data)) return;
-            const got = await loadBookHouseResearch(b.base, bookSelectionHouses(data, options));
-            bookHouseRead = { base: b.base, ...got };
-        } catch { /* built from the tree */ }
+        if (!(options.parts.houses || options.parts.houseIndex || options.selection.kind === 'house') || !hasNumberedHouse(data)) return;
+        if (b) {
+            try {
+                const got = await loadBookHouseResearch(b.base, bookSelectionHouses(data, options));
+                bookHouseRead = { base: b.base, ...got };
+            } catch { /* built from the tree */ }
+        }
+        // The Houses chapter's locations (spec 145 T3): a cut of today's map of each house whose location outputs may
+        // show, made once and kept; none (offline, no consent to the map, an error): its coordinates only.
+        if (!options.parts.houses || !bookHouseMaps(options)) return;
+        const read = bookHouseRead;
+        const houses = bookChapterHousesFor(data, options, {
+            finishedHouses: new Set([...this.bookFinishedHouses(collectHouses(data)), ...(read?.finished ?? [])]),
+        });
+        const reqs = houseShotRequests(data, houses, h => read?.research.get(h.id) ?? this.houseResearchRead(h), new Date());
+        bookHouseShots = await prepareHouseShots(reqs, options.lang);
     },
 
     /** What the book is built with besides the data and the options (window or saved file). */
@@ -1839,6 +1891,7 @@ export const bookUiMethods = uiModule({
             personHistory: (id) => this.personPageHistory(id),
             // The research's results of the book's houses (read before it), else those read so far (the Houses window).
             houseResearch: (house) => read?.research.get(house.id) ?? this.houseResearchRead(house),
+            houseMapShot: (house) => bookHouseShots?.get(house.id)?.today ?? null,
             finishedHouses: new Set([
                 ...this.bookFinishedHouses(options.parts.houses && hasNumberedHouse(data) ? collectHouses(data) : []),
                 ...(read?.finished ?? []),

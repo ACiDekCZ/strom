@@ -197,6 +197,12 @@ ${PERSON_PAGE_CHART_CSS}
 .book-house-ch h3 { font-size: 15pt; break-after: avoid; overflow-wrap: anywhere; }
 .book-house-alias { color: #4a4438; margin: 1px 0 6px; }
 .book-house-text { text-align: justify; hyphens: auto; }
+/* A house's location (spec 145 T3): the cut of today's map, never split across pages, its coordinates and the attribution */
+.book-house-map { margin: 6px 0 10px; break-inside: avoid; page-break-inside: avoid; max-width: 100%; }
+.book-house-map-img { display: block; width: 100%; max-width: 100%; height: auto; border: 1px solid #e3dccd; }
+.book-house-map figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1px 12px; margin-top: 3px; font: 9pt ${SANS}; color: #5c5546; }
+.book-house-map--words figcaption { margin-top: 0; }
+.book-house-map-pos, .book-house-map-attr { overflow-wrap: anywhere; min-width: 0; }
 .book-house-story { margin: 4px 0 10px; }
 .book-house-story h4.book-house-story-title { font-style: italic; font-weight: 400; color: #4a4438; }
 .book-house-story-src { margin: 2px 0 0; text-align: left; }

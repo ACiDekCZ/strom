@@ -211,6 +211,7 @@ function housePageHtml(r: Render, page: SetPage): string {
     const privacy = setHousePrivacy(set);
     const body = buildHousePage(prot.tree, shown.house, set.houseResearch?.get(shown.house.id) ?? null, 'file', {
         lang: set.options.lang, now: set.options.now, names: prot.tree, privacy,
+        mapShots: set.houseMapShots?.get(shown.house.id) ?? null,
         personLink: (id, html) => {
             const slug = isProtectedPerson(prot, id) ? undefined : set.personSlug.get(id);
             return slug ? pageLink(r, slug, html) : null;

@@ -246,6 +246,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         },
         houseIndexNote: (houses: number) => `${nPl(houses, 'dom', 'domy', 'domów')} → osoby, lata`,
         houseIndexProtected: (year: number) => `Wydarzenia po ${year} r. i położenie domu nie są podawane w książce.`,
+        // The Houses chapter with house locations (spec 145 T3): only a house with people of those years without one.
+        houseChapterProtected: (year: number) => `Wydarzenia po ${year} r. i położenie domu z ludźmi tych lat nie są podawane w książce.`,
         houseIndexHistory: 'Z historii domu',
         housesNote: (houses: number, pages: number) => `${nPl(houses, 'dom', 'domy', 'domów')} · około ${nPl(pages, 'strona', 'strony', 'stron')}`,
         housesIntro: 'Domy, w których rodzina mieszkała co najmniej dwa pokolenia lub trzydzieści lat. Numery domów zmieniały się w przeszłości; przy każdym domu podano, pod jakimi numerami znają go zapisy.',
@@ -349,6 +351,9 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             researchHint: 'Stan udokumentowania danych, sprzeczności, sekcja „Dla badaczy” ze strony osoby.',
             houseRecent: 'Ostatnie 100 lat tylko z nazwiska',
             houseRecentHint: 'Osoby z mniej więcej ostatnich 100 lat tylko z imienia, nazwiska i roli, bez dat; ich wydarzenia, wydarzenia wrażliwe i położenie domu są pomijane.',
+            // The book's house locations (spec 145 T3).
+            houseMaps: 'Położenie domów',
+            houseMapsHint: 'Wycinek dzisiejszej mapy z punktem domu bez ludzi ostatnich ~100 lat; wyłączone: tylko miejscowość.',
             privacy: 'Ochrona osób żyjących',
             privacyHint: 'Dotyczy tekstu, drzewa rodu, spisu treści i indeksu.',
             lang: 'Język księgi',

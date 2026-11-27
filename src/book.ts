@@ -24,11 +24,12 @@ import { shownName } from './person-name.js';
 import { buildLineages, type LineageIndex } from './lineage.js';
 import { PersonPageContext } from './person-page.js';
 import { BookChapter, BookModel, buildBookModel } from './book-model.js';
-import { BookLang, BookOptions, BookParts, autoBookTitle, bookChapterHouses, bookHouseRecent, bookHouses, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
+import { BookLang, BookOptions, BookParts, autoBookTitle, bookChapterHouses, bookHouseMaps, bookHouseRecent, bookHouses, defaultBookOptions, effectiveBookParts, estimateBook } from './book-options.js';
 import { collectHouses, houseLabel, withResearchNumbers, type TreeHouse } from './houses.js';
 import type { HouseResearch } from './house-bridge.js';
 import { houseOutputFilter, housePrivacyContext, houseStoryForOutput } from './house-privacy.js';
 import { bookHouseAnchor, housesChapterHtml, type BookHouseChapterEntry } from './book-houses.js';
+import type { HouseMapShot } from './house-map-shot.js';
 import {
     BookCtx, BookHouseEntry, BookLinkTarget, BookSourceNumbers, BookStoryExtras, familyChapterHtml, houseIndexHtml, indexHtml, pairFirstNames, pairName,
     rodHasMaleLine, rodLabelOf, rodLineageHtml, rodOverviewHtml, smallRodsHtml, sourcesHtml,
@@ -79,6 +80,11 @@ export interface BookBuildEnv {
     houseResearch?: (house: TreeHouse) => HouseResearch | null;
     /** The tree's houses whose history the research has done: in the Houses chapter even below the threshold (K7.3). */
     finishedHouses?: ReadonlySet<HouseId>;
+    /**
+     * The cut of today's map around a house of the Houses chapter, made before the book (spec 145 T3,
+     * src/house-map-shot.ts); none: its coordinates and how sure the location is, without a picture.
+     */
+    houseMapShot?: (house: TreeHouse) => HouseMapShot | null;
 }
 
 function esc(text: string): string {
@@ -360,6 +366,9 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
             out,
             // Its approved story, as outputs may show it (spec 145 T4).
             story: hctx ? houseStoryForOutput(research, out, hctx) : null,
+            // Its location with the cut of today's map (spec 145 T3): only where outputs may show it and the book does.
+            ...(out.location && bookHouseMaps(opts)
+                ? { map: { point: out.location, sure: out.locationSure ?? 'assumed', shot: env.houseMapShot?.(house) ?? null } } : {}),
         };
     };
     // The Houses chapter's houses, known before the chapters: a person's story links to the story of a house they

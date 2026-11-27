@@ -2054,6 +2054,11 @@ export interface HouseUserData {
     location?: { lat: number; lng: number; how: 'manual' | 'confirmed' };
     /** Events of the 20th century revealed for outputs (§10), by the research's item ids. */
     revealInOutputs?: string[];
+    /**
+     * The location left out of outputs by hand (spec 145 T3): the book and the HTML give the town only, even for a
+     * house whose location they would show. Wins over the rule of the last ~100 years.
+     */
+    hideLocation?: true;
 }
 
 /**

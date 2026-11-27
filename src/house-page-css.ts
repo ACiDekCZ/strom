@@ -151,6 +151,17 @@ export const HOUSE_PAGE_CSS = `
 .hp .hmap-else-sep { color: var(--text-light); }
 .hp .hmap-else-note { color: var(--text-light); font-size: 12px; font-style: italic; }
 .hp .hmap-man a, .hp .hmap-coords a, .hp .hmap-else a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+/* The cuts of the map in a file (spec 145 T3): pictures made for the output, today's map first, a historical layer beside it. */
+.hp .hmap-shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; margin-bottom: 10px; }
+.hp .hmap-shot { margin: 0; min-width: 0; break-inside: avoid; page-break-inside: avoid; }
+.hp .hmap-shot-img { display: block; width: 100%; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); background: var(--surface-2); }
+.hp .hmap-shot figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; margin-top: 4px; font-size: 11.5px; color: var(--text-light); }
+.hp .hmap-shot-l { font-weight: 600; }
+.hp .hmap-shot-attr { overflow-wrap: anywhere; min-width: 0; }
+.hp .hmap-shot-attr a { color: inherit; }
+/* The app: what outputs do with the location, with Hide / Show location in outputs (spec 145 T3). */
+.hp .hmap-out { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin: 0; font-size: 13px; color: var(--text-light); }
+.hp .hmap-out-t { min-width: 0; overflow-wrap: anywhere; }
 @media (hover: hover) {
     .hp .hp-name-edit:hover, .hp .hp-reveal:hover { color: var(--text); }
     .hp .hp-mini:hover { background: var(--hover-bg); }
@@ -187,6 +198,7 @@ export const HOUSE_PAGE_CSS = `
     .hp .hmap-wrap .hmap-top { order: 2; }
     .hp .hmap-wrap .hmap { order: 1; }
     .hp .hmap-wrap .hmap-u { order: 3; }
+    .hp .hmap-wrap .hmap-out { order: 4; }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
     .hp .hp-num { grid-template-columns: 96px 80px minmax(0, 1fr); }
@@ -194,7 +206,7 @@ export const HOUSE_PAGE_CSS = `
     .hp .hmap { height: 200px; }
 }
 @media print {
-    .hp .hp-name-edit, .hp .hp-reveal, .hp .hp-mini, .hp .hp-acts, .hp .hp-out, .hp .hmap-zoom, .hp .hmap-acts, .hp .hmap-top { display: none !important; }
+    .hp .hp-name-edit, .hp .hp-reveal, .hp .hp-mini, .hp .hp-acts, .hp .hp-out, .hp .hmap-zoom, .hp .hmap-acts, .hp .hmap-top, .hp .hmap-out { display: none !important; }
     .hp .hp-num, .hp .hp-tl-r, .hp .hp-table tr, .hp .hp-sr, .hp .hp-mat { break-inside: avoid; }
     .hp .hp-story-nv { display: none !important; }
 }

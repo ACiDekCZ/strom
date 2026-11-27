@@ -42,6 +42,7 @@ import { asciiSlug } from './filenames.js';
 import { createdWithStromHtml, personPageDocumentShell } from './person-page.js';
 import { HOUSE_PAGE_CSS, HOUSE_PAGE_FILE_TOKENS } from './house-page-css.js';
 import { houseMapHtml, type HouseMapInput } from './house-map.js';
+import type { HouseMapShots } from './house-map-shot.js';
 
 export type HousePageMode = 'app' | 'file';
 
@@ -92,6 +93,11 @@ export interface HousePageOptions {
      * refs they are judged by); default judged on `data`.
      */
     privacy?: HousePrivacyContext;
+    /**
+     * The file (spec 145 T3): the cuts of the map made for the output (src/house-map-shot.ts), shown only where the
+     * file shows the location; none: the location in words.
+     */
+    mapShots?: HouseMapShots | null;
 }
 
 export type { HouseMapInput } from './house-map.js';
@@ -425,8 +431,8 @@ function heroHtml(c: Ctx): string {
     const state = c.app ? c.opts.app?.stateHtml ?? '' : '';
     if (state) facts.push([P.factResearch, `<span class="hp-state">${state}</span>`]);
     const hidden = c.app && c.research ? houseOutputFilter(house, c.research, c.data, c.opts.now).hidden : null;
-    const outLine = hidden && (hidden.events || hidden.location)
-        ? `<p class="hp-out">${esc(c.H.hiddenSummary(hidden.events, hidden.location))}</p>` : '';
+    const outLine = hidden && (hidden.events || hidden.locationBy)
+        ? `<p class="hp-out">${esc(c.H.hiddenSummary(hidden.events, hidden.locationBy))}</p>` : '';
     return `<header class="pp-sec hp-hero" id="hp-sec-facts">`
         + `<p class="pp-kicker">${esc(P.kicker)}</p>`
         + `<h1 class="pp-name">${esc(houseTitle(house))}</h1>${nameLine}`
@@ -911,11 +917,15 @@ export function buildHousePage(data: StromData, house: TreeHouse, research: Hous
         : data.houses?.[house.id]?.location ? { lat: data.houses[house.id]!.location!.lat, lng: data.houses[house.id]!.location!.lng }
             : research?.location ? { lat: research.location.lat, lng: research.location.lon } : null;
     const townGeo = data.places?.[house.townKey];
+    // The app: what outputs do with the location, for a house whose location they would show (spec 145 T3).
+    const forOutputs = c.app && location ? houseOutputFilter(house, research, data, opts.now, c.privacy).hidden.locationBy : null;
     const map = mapHtml({
         mode, lang: opts.lang, house, research, location, layers: opts.layers ?? [],
         town: townGeo ? { lat: townGeo.lat, lng: townGeo.lon } : null,
         how: c.out ? undefined : data.houses?.[house.id]?.location?.how,
         canEdit: !!opts.app?.canEdit, hasResearch: !!opts.research,
+        ...(c.out ? { shots: opts.mapShots ?? null, sure: c.out.locationSure } : {}),
+        ...(c.app && location && forOutputs !== 'recent' ? { outputs: { hidden: forOutputs === 'manual', canEdit: !!opts.app?.canEdit } } : {}),
     });
     const parts = result
         ? [heroHtml(c), summaryHtml(c), story, numbersHtml(c), timelineHtml(c), peopleHtml(c), lookHtml(c),

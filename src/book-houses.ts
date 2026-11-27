@@ -11,7 +11,9 @@
  * As outputs show a house (§10, src/house-privacy.ts): the living as the
  * book's privacy names them, people of the last ~100 years by name and role
  * only, the research's events of those years and its sensitive events left
- * out, never the location (K3.3: the book gives the town); a note at the end
+ * out, the location only of a house without people of those years and not
+ * hidden by hand (spec 145 T3: a cut of today's map, its coordinates, how sure
+ * it is; the book option off: the town only); a note at the end
  * says what is left out. Pure and DOM-free.
  */
 
@@ -25,12 +27,19 @@ import { shownName } from './person-name.js';
 import { houseInteresting, houseTitle, type TreeHouse } from './houses.js';
 import { houseTreeRows } from './house-page.js';
 import { researchSourceRef } from './research-link.js';
+import { houseCoordsText, houseSureText, type HouseMapPoint } from './house-map.js';
+import type { HouseMapShot } from './house-map-shot.js';
 
 /** One house of the chapter: as the index of houses shows it, with the research's result for its sources and building. */
 export interface BookHouseChapterEntry extends BookHouseEntry {
     research: HouseResearch | null;
     /** Its approved story as outputs may show it (houseStoryForOutput, spec 145 T4); null none. */
     story?: HouseStoryText | null;
+    /**
+     * Its location, where outputs may show it and the book does (spec 145 T3): the point, how sure it is, the cut of
+     * today's map made before the book (null: the coordinates only).
+     */
+    map?: { point: HouseMapPoint; sure: 'confirmed' | 'assumed'; shot: HouseMapShot | null } | null;
 }
 
 /** The anchor of a house in the chapter (a person's story links to it). */
@@ -127,6 +136,16 @@ export function housesChapterHtml(ctx: BookCtx, entries: readonly BookHouseChapt
         // The research's description of the building.
         const look = e.research?.look?.text?.trim();
         if (look) parts.push(`<p class="book-house-text">${esc(look)}</p>`);
+        // Its location (spec 145 T3): the cut of today's map with the house's point, its coordinates, how sure it is.
+        if (e.map) {
+            const shot = e.map.shot;
+            const img = shot ? `<img class="book-house-map-img" src="${esc(shot.src)}" alt="${esc(P.map.shotAlt(h.text))}"`
+                + ` width="${shot.width}" height="${shot.height}">` : '';
+            const attr = shot ? `<span class="book-house-map-attr">${esc(shot.attribution)}</span>` : '';
+            parts.push(`<figure class="book-house-map${shot ? '' : ' book-house-map--words'}">${img}<figcaption>`
+                + `<span class="book-house-map-pos">${esc(houseCoordsText(e.map.point))} · ${esc(houseSureText(ctx.lang, e.map.sure))}</span>`
+                + `${attr}</figcaption></figure>`);
+        }
 
         // Numbers over time: a number's years before the last ~100 years ("1838–" when the span reaches them).
         const numbers = e.numbers.map(n => {
@@ -186,7 +205,9 @@ export function housesChapterHtml(ctx: BookCtx, entries: readonly BookHouseChapt
     }
     if (!houses.length) return '';
     const fns = notes.list.map((t, i) => `<p><span class="book-pn">${i + 1}</span>${esc(t)}</p>`).join('');
-    const note = shielded ? `<p class="book-house-protected">${esc(B.houseIndexProtected(from - 1))}</p>` : '';
+    // With the locations on (spec 145 T3) the book gives the location of a house without people of those years.
+    const note = shielded
+        ? `<p class="book-house-protected">${esc((entries.some(e => e.map) ? B.houseChapterProtected : B.houseIndexProtected)(from - 1))}</p>` : '';
     const foot = fns || note ? `<div class="book-house-fns">${fns}${note}</div>` : '';
     return `<h2 class="book-houses-h">${esc(B.parts.houses)}</h2>`
         + `<p class="book-houses-intro">${esc(B.housesIntro)}</p>${houses.join('')}${foot}`;

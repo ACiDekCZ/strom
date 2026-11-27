@@ -172,10 +172,14 @@ export const plPart14: Pick<StringsType, 'houses'> = {
         hiddenOut: 'ukryte w wynikach',
         reveal: 'Pokaż w wynikach',
         hide: 'Ukryj w wynikach',
-        hiddenSummary: (e: number, loc: boolean) => e && loc
-            ? `W wynikach (HTML, książka) ${nPl(e, 'wydarzenie', 'wydarzenia', 'wydarzeń')} i położenie domu nie są pokazywane.`
-            : e ? `W wynikach (HTML, książka) ${nPl(e, 'wydarzenie nie jest pokazywane', 'wydarzenia nie są pokazywane', 'wydarzeń nie jest pokazywanych')}.`
-                : 'W wynikach (HTML, książka) położenie domu nie jest pokazywane.',
+        // What outputs leave out (spec 145 T3): the location for people of the last ~100 years or hidden by hand.
+        hiddenSummary: (e: number, loc: 'recent' | 'manual' | null) => e && loc === 'recent'
+            ? `W wynikach (HTML, książka) ${nPl(e, 'wydarzenie', 'wydarzenia', 'wydarzeń')} i położenie domu nie są pokazywane (ludzie ostatnich ~100 lat).`
+            : e && loc === 'manual'
+                ? `W wynikach (HTML, książka) ${nPl(e, 'wydarzenie nie jest pokazywane', 'wydarzenia nie są pokazywane', 'wydarzeń nie jest pokazywanych')}; położenie domu jest ukryte ręcznie.`
+                : e ? `W wynikach (HTML, książka) ${nPl(e, 'wydarzenie nie jest pokazywane', 'wydarzenia nie są pokazywane', 'wydarzeń nie jest pokazywanych')}.`
+                    : loc === 'manual' ? 'W wynikach (HTML, książka) położenie domu jest ukryte ręcznie.'
+                        : 'W wynikach (HTML, książka) położenie domu nie jest pokazywane: w domu mieszkali ludzie ostatnich ~100 lat.',
         // The house page (spec 030 §3, K3.1, K7.1): a sibling of the person page.
         page: {
             title: 'Strona domu',
@@ -219,6 +223,15 @@ export const plPart14: Pick<StringsType, 'houses'> = {
                 kinds: { cadastre: 'Mapa katastralna', military: 'Mapa wojskowa', ortho: 'Ortofotomapa', 'ortho-1950': 'Zdjęcia lotnicze lat 50.' },
                 point: (house: string) => `Dom ${house}`,
                 aerialAlt: 'Zdjęcie lotnicze z lat 50. wokół domu',
+                // The location in outputs (spec 145 T3): the hand's word and the cut of today's map.
+                outShown: 'Wyniki (HTML, książka) pokazują położenie domu.',
+                outHidden: 'W wynikach (HTML, książka) położenie domu jest ukryte ręcznie.',
+                hideOut: 'Ukryj położenie w wynikach', showOut: 'Pokaż położenie w wynikach',
+                sureConfirmed: 'Dzisiejsze położenie · zgodność numeru potwierdzona',
+                sureAssumed: 'Dzisiejsze położenie · zgodność numeru zakładana',
+                shotAlt: (house: string) => `Dzisiejsza mapa wokół domu ${house}`,
+                layerShotAlt: (layer: string, house: string) => `${layer} wokół domu ${house}`,
+                osmAttribution: '© współtwórcy OpenStreetMap, licencja ODbL',
             },
             origin: { research: 'z badań', own: 'z własnej kwerendy', tree: 'z drzewa', guess: 'przypuszczenie', probable: 'prawdopodobne' },
             how: {

@@ -239,6 +239,23 @@ export function loadMapTile(img: HTMLImageElement, url: string): void {
         .finally(() => { if (pending.get(img) === ctrl) pending.delete(img); });
 }
 
+/**
+ * One tile read as a picture for an output (spec 145 T3: the cut of the map around a house), the way the map asks
+ * for tiles (the page's Referer, or the app id where none is sent). Throws when it does not come or is refused
+ * (a refusal ends tile loading for the page's life, as on the map).
+ */
+export async function fetchMapTileBlob(url: string, signal: AbortSignal): Promise<Blob> {
+    if (blocked) throw new Error('tiles refused');
+    const tagged = currentAccess() === 'tagged';
+    const res = await fetch(url, { ...REQUEST_INIT, signal, ...(tagged ? { headers: { 'X-Requested-With': TILE_REQUESTED_WITH } } : {}) });
+    if (overloaded(res.status)) throw new Error(`tile ${res.status}`);
+    if (isBlockedTileResponse(res.status, res.headers.get('cache-control'))) {
+        if (tagged) refuse();
+        throw new Error('tile refused');
+    }
+    return res.blob();
+}
+
 /** A tile leaves the view (or is asked for anew): stop a request still on its way, its limit and its failure. */
 export function releaseMapTile(img: HTMLImageElement): void {
     settled(img, null);

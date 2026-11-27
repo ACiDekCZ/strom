@@ -38,7 +38,7 @@ function text(html: string): string {
     return html
         .replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<script[\s\S]*?<\/script>/g, ' ')
         .replace(/<[^>]+>/g, ' ')
-        .replace(/Události po roce 1925 a poloha domu se v knize neuvádějí\./g, ' ');
+        .replace(/Události po roce 1925 a poloha domu (s lidmi těchto let )?se v knize neuvádějí\./g, ' ');
 }
 
 /** The part of a book with this id, up to its section's end. */

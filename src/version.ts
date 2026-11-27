@@ -201,7 +201,13 @@
  *   houses themselves are worked out from the facts and never stored.
  *   Additive and optional: absent = nothing said, an older app keeps the
  *   tree and drops the field on a re-save (no backup needed, the generic
- *   pre-migration backup applies).
+ *   pre-migration backup applies). A location hidden from outputs by hand
+ *   (HouseUserData.hideLocation, spec 145 T3) is an additive field of v27,
+ *   out in the same release (3.33.0): only the betas 3.33.0-beta.2 to
+ *   beta.4 read v27 without knowing it and drop it on a re-save (the book
+ *   and the HTML then show the location again where the rule of the last
+ *   ~100 years allows it). Were they released later than v27, it would
+ *   need a bump of its own.
  */
 export const STROM_DATA_VERSION = 27;
 

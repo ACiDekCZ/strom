@@ -30,6 +30,8 @@ import { houseMaterialError } from './house-material-ui.js';
 import { researchActionLabel, researchBridgeActionLabel } from './research-open-mark.js';
 import { runBusy } from './busy.js';
 import { mountHouseMap, resetHouseMapState } from './house-map-ui.js';
+import { houseShotRequests, prepareHouseShots } from './house-map-shots.js';
+import { HOUSE_SHOT_TIMEOUT_MS, type HouseMapShots } from '../house-map-shot.js';
 import { uiModule } from './module.js';
 
 export const HOUSE_PAGE_ID = 'house-page-modal';
@@ -324,7 +326,7 @@ export const housePageMethods = uiModule({
         // The header.
         if (target.closest('.pp-close')) { this.closeHousePage(); return; }
         if (target.closest('.hp-back')) { this.housePageBack(house); return; }
-        if (target.closest('.pp-save')) { this.saveHousePage(house); return; }
+        if (target.closest('.pp-save')) { void this.saveHousePage(house, target.closest<HTMLElement>('.pp-save')); return; }
         if (target.closest('.pp-more')) { this.toggleHousePageMenu(house); return; }
         const menuItem = target.closest<HTMLElement>('[data-hp-menu]');
         if (menuItem) { this.runHousePageMenu(house, menuItem.dataset.hpMenu ?? '', menuItem); return; }
@@ -422,6 +424,19 @@ export const housePageMethods = uiModule({
             }
             return;
         }
+        if (act === 'hide-location') {
+            // Hide / Show location in outputs (spec 145 T3): one undo step, as every word on a house.
+            if (DataManager.housesReadOnly()) return;
+            const user = DataManager.getData().houses?.[house.id];
+            const next: HouseUserData = { ...(user ?? {}) };
+            if (el.dataset.hide === 'hide') next.hideLocation = true;
+            else delete next.hideLocation;
+            if (DataManager.setHousesUserData({ [house.id]: Object.keys(next).length ? next : undefined }, houseTitle(house))) {
+                this.renderHousePage();
+                overlayEl()?.querySelector<HTMLElement>('.hmap-out-act')?.focus({ preventScroll: true });
+            }
+            return;
+        }
         if (act === 'renumber' || act === 'not-same') {
             const b = this.houseResearchBridge();
             const id = el.dataset.number;
@@ -506,16 +521,32 @@ export const housePageMethods = uiModule({
         input.select();
     },
 
-    /** Save HTML (K7.1): the page for outputs, one self-contained file. */
-    saveHousePage(house: TreeHouse): void {
+    /**
+     * Save HTML (K7.1): the page for outputs, one self-contained file. A house whose location the file shows gets
+     * the cuts of the map as pictures in it (spec 145 T3: today's map and the research's historical layers, made
+     * once or taken from what is kept; without them the location in words).
+     */
+    async saveHousePage(house: TreeHouse, btn: HTMLElement | null = null): Promise<void> {
         const P = strings.houses.page;
         try {
             const b = this.houseResearchBridge();
-            const html = buildHousePageDocument(DataManager.getData(), house, this.housePageResearch(house), {
-                lang: getCurrentLanguage(), now: new Date(), research: !!b, state: b ? this.houseResearchRow(house)?.state ?? null : null,
+            const data = DataManager.getData();
+            const research = this.housePageResearch(house);
+            const layers = b ? houseStatus(this.researchStatusOf(b.researchId))?.layers ?? [] : [];
+            const now = new Date();
+            const lang = getCurrentLanguage();
+            const reqs = houseShotRequests(data, [house], () => research, now, layers);
+            const limit = HOUSE_SHOT_TIMEOUT_MS * (1 + layers.length) + 2000;
+            const make = (): Promise<Map<HouseId, HouseMapShots>> => prepareHouseShots(reqs, lang, limit);
+            const shots = !reqs.length ? new Map<HouseId, HouseMapShots>()
+                : btn ? await runBusy(btn, make, { label: strings.busy.saving, timeoutMs: limit + 3000 }) ?? new Map<HouseId, HouseMapShots>()
+                    : await make();
+            const html = buildHousePageDocument(data, house, research, {
+                lang, now, research: !!b, state: b ? this.houseResearchRow(house)?.state ?? null : null,
                 look: !!b && houseFeature(b.features, 'house.look'),
-                layers: b ? houseStatus(this.researchStatusOf(b.researchId))?.layers ?? [] : [],
+                layers,
                 fontCss: appFontFaceCss([...POSTER_SERIF_FACES]),
+                mapShots: shots.get(house.id) ?? null,
             });
             const name = housePageFileName(house);
             const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -633,7 +664,7 @@ export const housePageMethods = uiModule({
 
     runHousePageMenu(house: TreeHouse, key: string, el: HTMLElement): void {
         this.closeHousePageMenu(false);
-        if (key === 'save') { this.saveHousePage(house); return; }
+        if (key === 'save') { void this.saveHousePage(house); return; }
         if (key === 'book') {
             // The book's dialog opens over the page, on this house (spec 030 §8).
             this.openBookDialog({ kind: 'menu' }, undefined, { output: 'book', selection: { kind: 'house', place: house.ref.town, house: house.text } });

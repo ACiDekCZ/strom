@@ -14,6 +14,8 @@ import { shownNameOrEmpty } from './person-name.js';
 import { LineageIndex, buildLineages, otherFamilyRods, rodLabels, selection } from './lineage.js';
 import { BookSelectionSpec, buildBookModel, chapterRods, lineageSpec } from './book-model.js';
 import { collectHouses, findHouse, houseNamedTitle, type TreeHouse } from './houses.js';
+import type { HouseResearch } from './house-bridge.js';
+import { houseOutputFilter, housePrivacyContext, type HousePrivacyContext } from './house-privacy.js';
 
 export type { BookSelectionSpec } from './book-model.js';
 
@@ -72,6 +74,12 @@ export interface BookOptions {
      * K1.4a); on unless false. Off: their data as in any book, the living still by the privacy.
      */
     houseRecent?: boolean;
+    /**
+     * The Houses chapter's locations (spec 145 T3): a house whose location outputs may show (no people of the
+     * last ~100 years, not hidden by hand) with a cut of today's map, its coordinates and how sure it is; on unless
+     * false. Off: the town only, as before.
+     */
+    houseMaps?: boolean;
 }
 
 /** Does the book keep people of the last ~100 years to their name and role (a book of a house, K1.4a)? */
@@ -121,6 +129,10 @@ export interface BookEnv {
     houses?: readonly TreeHouse[];
     /** The tree's houses whose history the research has done (the research's list, state `done`). */
     finishedHouses?: ReadonlySet<HouseId>;
+    /** The research's result of a house, when read (the location outputs may show, spec 145 T3). */
+    houseResearch?: (house: TreeHouse) => HouseResearch | null;
+    /** "Now" for the last ~100 years (fixed in tests). */
+    now?: Date;
 }
 
 function indexOf(data: StromData, env: BookEnv): LineageIndex {
@@ -147,10 +159,57 @@ export function bookChapterHouses(data: StromData, personIds: Iterable<PersonId>
     return bookHouses(data, personIds, houses).filter(h => h.overThreshold || finished.has(h.id));
 }
 
-/** The Houses chapter's pages: the introduction, then a house's head, its numbers and records (35 rows a page). */
-export function housesChapterPages(houses: readonly TreeHouse[]): number {
+/** The page a cut of the map with its coordinates takes in the Houses chapter (spec 145 T3). */
+export const HOUSE_MAP_PAGES = 0.35;
+
+/** The Houses chapter's pages: the introduction, then a house's head, its numbers and records (35 rows a page), its map. */
+export function housesChapterPages(houses: readonly TreeHouse[], withMap: ReadonlySet<HouseId> = new Set()): number {
     if (!houses.length) return 0;
-    return 0.5 + houses.reduce((n, h) => n + 0.4 + (h.numbers.length + new Set(h.facts.map(f => f.factRef)).size) / 35, 0);
+    return 0.5 + houses.reduce((n, h) => n + 0.4 + (h.numbers.length + new Set(h.facts.map(f => f.factRef)).size) / 35
+        + (withMap.has(h.id) ? HOUSE_MAP_PAGES : 0), 0);
+}
+
+const locationCtx = new WeakMap<StromData, { year: number; ctx: HousePrivacyContext }>();
+
+/**
+ * The houses of these whose location outputs may show (spec 145 T3, houseOutputFilter: no people of the last ~100
+ * years, not hidden by hand), by the research's results read so far.
+ */
+export function housesWithLocation(data: StromData, houses: readonly TreeHouse[], env: Pick<BookEnv, 'houseResearch' | 'now'> = {}): Set<HouseId> {
+    const out = new Set<HouseId>();
+    if (!houses.length) return out;
+    const now = env.now ?? new Date();
+    // The dialog asks at every change: the judge of the living once per state of the data and year.
+    let kept = locationCtx.get(data);
+    if (!kept || kept.year !== now.getFullYear()) locationCtx.set(data, kept = { year: now.getFullYear(), ctx: housePrivacyContext(data, now) });
+    const ctx = kept.ctx;
+    for (const h of houses) {
+        if (houseOutputFilter(h, env.houseResearch?.(h) ?? null, data, now, ctx).location) out.add(h.id);
+    }
+    return out;
+}
+
+/** Does the book show the Houses chapter's locations (spec 145 T3)? On unless switched off. */
+export function bookHouseMaps(options: Pick<BookOptions, 'houseMaps'>): boolean {
+    return options.houseMaps !== false;
+}
+
+/**
+ * The switch "House locations" (spec 145 T3): shown only for a book whose Houses chapter is in and has a house
+ * whose location outputs may show; the houses it applies to.
+ */
+export function bookHouseMapsState(data: StromData, options: BookOptions, env: BookEnv = {}): { shown: boolean; houses: Set<HouseId> } {
+    const parts = effectiveBookParts(data, options, env);
+    if (!parts.houses) return { shown: false, houses: new Set() };
+    const houses = housesWithLocation(data, bookChapterHousesFor(data, options, env), env);
+    return { shown: houses.size > 0, houses };
+}
+
+/** The Houses chapter's houses of a book with these options (the chapter itself switched on or not). */
+export function bookChapterHousesFor(data: StromData, options: BookOptions, env: BookEnv = {}): TreeHouse[] {
+    const selIndex = indexOf(data, env);
+    const sel = selection(selIndex, lineageSpec(options.selection, selIndex));
+    return bookChapterHouses(data, sel.personIds, env.houses ?? collectHouses(data), env.finishedHouses);
 }
 
 /** The houses of the people the book's selection takes (its houses before any part is chosen). */
@@ -180,7 +239,8 @@ export function bookPartAvailability(data: StromData, options: BookOptions, env:
     const treeHouses = env.houses ?? collectHouses(data);
     const chapterHouses = bookChapterHouses(data, sel.personIds, treeHouses, env.finishedHouses);
     const houses: BookPartState = chapterHouses.length
-        ? { available: true, reason: '', note: B.housesNote(chapterHouses.length, Math.max(1, Math.round(housesChapterPages(chapterHouses)))) }
+        ? { available: true, reason: '', note: B.housesNote(chapterHouses.length, Math.max(1, Math.round(housesChapterPages(chapterHouses,
+            bookHouseMaps(options) ? housesWithLocation(data, chapterHouses, env) : undefined)))) }
         : state(false, 'houses');
     // The index of houses: with a house with a number among the book's people, and with the Houses chapter
     // ticked (§8); a book of a house has it on its own (K1.3: the index goes with the house selection).
@@ -306,9 +366,9 @@ export function estimateBook(data: StromData, options: BookOptions, env: BookEnv
     if (parts.smallRods && model.smallRods.length) pages += 0.5 + model.smallRods.length / 14;
     if (parts.sources) pages += cited.size / 28;
     if (parts.index) pages += 0.5 + persons / 90;
-    // The Houses chapter (K7.3).
+    // The Houses chapter (K7.3), with its maps (spec 145 T3).
     const chapterHouses = parts.houses ? bookChapterHouses(data, model.personIds, env.houses, env.finishedHouses) : [];
-    pages += housesChapterPages(chapterHouses);
+    pages += housesChapterPages(chapterHouses, chapterHouses.length && bookHouseMaps(options) ? housesWithLocation(data, chapterHouses, env) : undefined);
     // The index of houses: a house's head and its people, 40 rows a page.
     const houses = parts.houseIndex ? bookHouses(data, model.personIds, env.houses) : [];
     if (houses.length) pages += 0.5 + houses.reduce((n, h) => n + 1 + h.personIds.length, 0) / 40;

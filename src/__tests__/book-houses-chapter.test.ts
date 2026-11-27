@@ -151,8 +151,8 @@ describe('the Houses chapter in the book: as outputs show a house', () => {
             expect(ch).toContain('Jedna rodina 100 let');
             expect(ch).not.toContain('49.5');
             expect(ch).not.toContain('15.2');
-            // The note says what is left out.
-            expect(ch).toContain('Události po roce 1925 a poloha domu se v knize neuvádějí.');
+            // The note says what is left out: with the locations on (spec 145 T3), that of a house with people of those years.
+            expect(ch).toContain('Události po roce 1925 a poloha domu s lidmi těchto let se v knize neuvádějí.');
             // Lubor (1890–1950) is of the last ~100 years: a holder by name only.
             expect(ch).toMatch(/Lubor Prouzal(<sup[^>]*>\d+<\/sup>)?<\/td><td><\/td>/);
         }

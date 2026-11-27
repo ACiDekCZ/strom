@@ -13,7 +13,9 @@
  * - the research's events of the last ~100 years and its sensitive events
  *   (confiscation, expulsion, collectivisation, auctions, allotments) left
  *   out, a sensitive one until a person reveals it (HouseUserData.revealInOutputs);
- * - the house's location only for a house without people of the last ~100 years.
+ * - the house's location only for a house without people of the last ~100 years
+ *   and not hidden by hand (HouseUserData.hideLocation, spec 145 T3: the hand wins),
+ *   with how sure its number's match with today's place is.
  *
  * In the app everything shows (the living by today's rules); this is for
  * outputs only. `now` comes from the caller (fixed in tests).
@@ -111,10 +113,19 @@ export interface HouseOutput {
     residents: HouseOutputHolder<HouseResident>[];
     /** The location an output may show, or null. */
     location: { lat: number; lng: number } | null;
+    /**
+     * How sure the location's match with the house's number is (spec 145 T3): confirmed by a person (placed or
+     * confirmed in the app, or confirmed in the research), otherwise assumed. Null without a location shown.
+     */
+    locationSure: 'confirmed' | 'assumed' | null;
     /** The research's sensitive events still hidden (not revealed), by id. */
     sensitiveHidden: string[];
-    /** What outputs leave out: the research's events (sensitive and of the last ~100 years), the tree's facts, the location. */
-    hidden: { events: number; facts: number; location: boolean };
+    /**
+     * What outputs leave out: the research's events (sensitive and of the last ~100 years), the tree's facts, the
+     * location; `locationBy` why the location is left out: people of the last ~100 years (whatever the hand said),
+     * else hidden by hand.
+     */
+    hidden: { events: number; facts: number; location: boolean; locationBy: 'manual' | 'recent' | null };
 }
 
 const yearsOf = (...dates: (string | undefined)[]): number[] =>
@@ -171,11 +182,15 @@ export function houseOutputFilter(house: TreeHouse, research: HouseResearch | nu
     const loc = user?.location
         ? { lat: user.location.lat, lng: user.location.lng }
         : research?.location ? { lat: research.location.lat, lng: research.location.lon } : null;
-    const location = loc && !recentPeople ? loc : null;
+    // Hidden by hand stays out whoever lived there (spec 145 T3); the reason given is the rule's when it applies too.
+    const locationBy: 'manual' | 'recent' | null = !loc ? null : recentPeople ? 'recent' : user?.hideLocation ? 'manual' : null;
+    const location = loc && !locationBy ? loc : null;
+    const locationSure = !location ? null
+        : user?.location || research?.location?.confirmed ? 'confirmed' : 'assumed';
 
     return {
-        persons, facts, timeline, holders, residents, location, sensitiveHidden,
-        hidden: { events: hiddenEvents, facts: hiddenFacts, location: !!loc && !location },
+        persons, facts, timeline, holders, residents, location, locationSure, sensitiveHidden,
+        hidden: { events: hiddenEvents, facts: hiddenFacts, location: !!loc && !location, locationBy },
     };
 }
 

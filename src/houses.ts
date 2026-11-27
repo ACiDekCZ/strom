@@ -609,6 +609,7 @@ export function sanitizeHouseUserData(id: HouseId, value: unknown): HouseUserDat
         const reveal = [...new Set(v.revealInOutputs.filter((x): x is string => typeof x === 'string' && REVEAL_ID_RE.test(x)))].slice(0, 1000);
         if (reveal.length) out.revealInOutputs = reveal;
     }
+    if (v.hideLocation === true) out.hideLocation = true;
     return Object.keys(out).length ? out : null;
 }
 
@@ -688,6 +689,8 @@ export function mergeIncomingHouses(ours: Readonly<Record<HouseId, HouseUserData
         if (r.length) mine.revealInOutputs = r;
         if (!mine.name && theirs.name) mine.name = theirs.name;
         if (!mine.location && theirs.location) mine.location = theirs.location;
+        // A location hidden by hand on either side stays hidden (spec 145 T3).
+        if (theirs.hideLocation) mine.hideLocation = true;
     }
     return Object.keys(out).length ? out : undefined;
 }

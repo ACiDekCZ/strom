@@ -518,6 +518,8 @@ const stringsEN = {
         // ── The index of houses (spec 030 §8, §10) ──
         houseIndexNote: (houses: number) => `${nEn(houses, 'house', 'houses')} → people, years`,
         houseIndexProtected: (year: number) => `Events after ${year} and the house location are not given in the book.`,
+        // The Houses chapter with house locations (spec 145 T3): only a house with people of those years without one.
+        houseChapterProtected: (year: number) => `Events after ${year} and the location of a house with people of these years are not given in the book.`,
         houseIndexHistory: 'From the house’s history',
         // ── The Houses chapter (spec 030 §8, K7.3) ──
         housesNote: (houses: number, pages: number) => `${nEn(houses, 'house', 'houses')} · about ${nEn(pages, 'page', 'pages')}`,
@@ -625,6 +627,9 @@ const stringsEN = {
             // A book of a house (spec 030 K1.4a): people of the last ~100 years by name and role only.
             houseRecent: 'Last 100 years by name only',
             houseRecentHint: 'People from roughly the last 100 years appear by name and role only, without dates; their events, sensitive events and the house location are left out.',
+            // The book's house locations (spec 145 T3).
+            houseMaps: 'House locations',
+            houseMapsHint: 'A cut of today’s map with the point of a house without people of the last ~100 years; off: the town only.',
             privacy: 'Privacy of living people',
             privacyHint: 'Applies to the text, the line tree, the contents and the index.',
             lang: 'Book language',
@@ -13487,10 +13492,14 @@ const stringsEN = {
         hiddenOut: 'hidden in outputs',
         reveal: 'Show in outputs',
         hide: 'Hide in outputs',
-        hiddenSummary: (e: number, loc: boolean) => e && loc
-            ? `In outputs (HTML, book) ${nEn(e, 'event', 'events')} and the house location are not shown.`
-            : e ? `In outputs (HTML, book) ${nEn(e, 'event is', 'events are')} not shown.`
-                : 'In outputs (HTML, book) the house location is not shown.',
+        // What outputs leave out (spec 145 T3): the location for people of the last ~100 years or hidden by hand.
+        hiddenSummary: (e: number, loc: 'recent' | 'manual' | null) => e && loc === 'recent'
+            ? `In outputs (HTML, book) ${nEn(e, 'event', 'events')} and the house location are not shown (people of the last ~100 years).`
+            : e && loc === 'manual'
+                ? `In outputs (HTML, book) ${nEn(e, 'event is', 'events are')} not shown; the house location is hidden by hand.`
+                : e ? `In outputs (HTML, book) ${nEn(e, 'event is', 'events are')} not shown.`
+                    : loc === 'manual' ? 'In outputs (HTML, book) the house location is hidden by hand.'
+                        : 'In outputs (HTML, book) the house location is not shown: people of the last ~100 years lived there.',
         // The house page (spec 030 §3, K3.1, K7.1): a sibling of the person page.
         page: {
             title: 'House page',
@@ -13534,6 +13543,15 @@ const stringsEN = {
                 kinds: { cadastre: 'Cadastral map', military: 'Military survey map', ortho: 'Orthophoto', 'ortho-1950': 'Aerial photos of the 1950s' },
                 point: (house: string) => `House ${house}`,
                 aerialAlt: 'Aerial photo of the 1950s around the house',
+                // The location in outputs (spec 145 T3): the hand's word and the cut of today's map.
+                outShown: 'Outputs (HTML, book) show the house location.',
+                outHidden: 'The house location is hidden by hand in outputs (HTML, book).',
+                hideOut: 'Hide location in outputs', showOut: 'Show location in outputs',
+                sureConfirmed: 'Today’s location · number match confirmed',
+                sureAssumed: 'Today’s location · number match assumed',
+                shotAlt: (house: string) => `Today’s map around house ${house}`,
+                layerShotAlt: (layer: string, house: string) => `${layer} around house ${house}`,
+                osmAttribution: '© OpenStreetMap contributors, licence ODbL',
             },
             origin: { research: 'from research', own: 'from own research', tree: 'from the tree', guess: 'conjecture', probable: 'probable' },
             how: {
@@ -13869,6 +13887,8 @@ const stringsCZ: StringsType = {
         },
         houseIndexNote: (houses: number) => `${nCs(houses, 'dům', 'domy', 'domů')} → osoby, roky`,
         houseIndexProtected: (year: number) => `Události po roce ${year} a poloha domu se v knize neuvádějí.`,
+        // The Houses chapter with house locations (spec 145 T3): only a house with people of those years without one.
+        houseChapterProtected: (year: number) => `Události po roce ${year} a poloha domu s lidmi těchto let se v knize neuvádějí.`,
         houseIndexHistory: 'Z dějin domu',
         housesNote: (houses: number, pages: number) => `${nCs(houses, 'dům', 'domy', 'domů')} · asi ${nCs(pages, 'strana', 'strany', 'stran')}`,
         housesIntro: 'Domy, ve kterých rod žil aspoň dvě generace nebo třicet let. Čísla domů se v minulosti měnila; u každého domu je uvedeno, pod jakými čísly ho zápisy znají.',
@@ -13972,6 +13992,9 @@ const stringsCZ: StringsType = {
             researchHint: 'Stav doložení u údajů, rozpory, oddíl „Pro badatele“ ze stránky osoby.',
             houseRecent: 'Posledních 100 let jen jménem',
             houseRecentHint: 'Lidé z posledních zhruba 100 let jen jménem a rolí, bez dat; jejich události, citlivé události a poloha domu se neuvádějí.',
+            // The book's house locations (spec 145 T3).
+            houseMaps: 'Poloha domů',
+            houseMapsHint: 'Výřez dnešní mapy s bodem domu bez lidí posledních ~100 let; vypnuto: jen obec.',
             privacy: 'Ochrana žijících',
             privacyHint: 'Platí pro text, rodokmen, obsah i rejstřík.',
             lang: 'Jazyk knihy',
@@ -26491,10 +26514,14 @@ const stringsCZ: StringsType = {
         hiddenOut: 'skryto ve výstupech',
         reveal: 'Ukázat ve výstupech',
         hide: 'Skrýt ve výstupech',
-        hiddenSummary: (e: number, loc: boolean) => e && loc
-            ? `Ve výstupech (HTML, kniha) se ${nCs(e, 'událost', 'události', 'událostí')} a poloha domu neukazují.`
-            : e ? `Ve výstupech (HTML, kniha) se ${nCs(e, 'událost neukazuje', 'události neukazují', 'událostí neukazuje')}.`
-                : 'Ve výstupech (HTML, kniha) se poloha domu neukazuje.',
+        // What outputs leave out (spec 145 T3): the location for people of the last ~100 years or hidden by hand.
+        hiddenSummary: (e: number, loc: 'recent' | 'manual' | null) => e && loc === 'recent'
+            ? `Ve výstupech (HTML, kniha) se ${nCs(e, 'událost', 'události', 'událostí')} a poloha domu neukazují (lidé posledních ~100 let).`
+            : e && loc === 'manual'
+                ? `Ve výstupech (HTML, kniha) se ${nCs(e, 'událost neukazuje', 'události neukazují', 'událostí neukazuje')}; poloha domu je skrytá ručně.`
+                : e ? `Ve výstupech (HTML, kniha) se ${nCs(e, 'událost neukazuje', 'události neukazují', 'událostí neukazuje')}.`
+                    : loc === 'manual' ? 'Ve výstupech (HTML, kniha) je poloha domu skrytá ručně.'
+                        : 'Ve výstupech (HTML, kniha) se poloha domu neukazuje: v domě žili lidé posledních ~100 let.',
         // The house page (spec 030 §3, K3.1, K7.1): a sibling of the person page.
         page: {
             title: 'Stránka domu',
@@ -26538,6 +26565,15 @@ const stringsCZ: StringsType = {
                 kinds: { cadastre: 'Katastrální mapa', military: 'Vojenské mapování', ortho: 'Ortofoto', 'ortho-1950': 'Letecké snímky 50. let' },
                 point: (house: string) => `Dům ${house}`,
                 aerialAlt: 'Letecký snímek z 50. let v okolí domu',
+                // The location in outputs (spec 145 T3): the hand's word and the cut of today's map.
+                outShown: 'Ve výstupech (HTML, kniha) se ukazuje poloha domu.',
+                outHidden: 'Ve výstupech (HTML, kniha) je poloha domu skrytá ručně.',
+                hideOut: 'Skrýt polohu ve výstupech', showOut: 'Ukázat polohu ve výstupech',
+                sureConfirmed: 'Dnešní poloha · shoda čísla ověřená',
+                sureAssumed: 'Dnešní poloha · shoda čísla předpokládaná',
+                shotAlt: (house: string) => `Dnešní mapa v okolí domu ${house}`,
+                layerShotAlt: (layer: string, house: string) => `${layer} v okolí domu ${house}`,
+                osmAttribution: '© přispěvatelé OpenStreetMap, licence ODbL',
             },
             origin: { research: 'z výzkumu', own: 'z vlastní rešerše', tree: 'ze stromu', guess: 'domněnka', probable: 'pravděpodobné' },
             how: {
@@ -26866,6 +26902,8 @@ const stringsDE: StringsType = {
         },
         houseIndexNote: (houses: number) => `${nDe(houses, 'Haus', 'Häuser')} → Personen, Jahre`,
         houseIndexProtected: (year: number) => `Ereignisse nach ${year} und die Lage des Hauses werden im Buch nicht angegeben.`,
+        // The Houses chapter with house locations (spec 145 T3): only a house with people of those years without one.
+        houseChapterProtected: (year: number) => `Ereignisse nach ${year} und die Lage eines Hauses mit Menschen dieser Jahre werden im Buch nicht angegeben.`,
         houseIndexHistory: 'Aus der Geschichte des Hauses',
         housesNote: (houses: number, pages: number) => `${nDe(houses, 'Haus', 'Häuser')} · etwa ${nDe(pages, 'Seite', 'Seiten')}`,
         housesIntro: 'Häuser, in denen die Familie mindestens zwei Generationen oder dreißig Jahre lebte. Hausnummern änderten sich in der Vergangenheit; bei jedem Haus steht, unter welchen Nummern die Einträge es kennen.',
@@ -26969,6 +27007,9 @@ const stringsDE: StringsType = {
             researchHint: 'Belegstatus der Angaben, Widersprüche, der Abschnitt „Für Forschende“ der Personenseite.',
             houseRecent: 'Letzte 100 Jahre nur mit Namen',
             houseRecentHint: 'Personen aus etwa den letzten 100 Jahren nur mit Namen und Rolle, ohne Daten; ihre Ereignisse, sensible Ereignisse und die Lage des Hauses entfallen.',
+            // The book's house locations (spec 145 T3).
+            houseMaps: 'Lage der Häuser',
+            houseMapsHint: 'Ein Ausschnitt der heutigen Karte mit dem Punkt eines Hauses ohne Menschen der letzten ~100 Jahre; aus: nur der Ort.',
             privacy: 'Schutz lebender Personen',
             privacyHint: 'Gilt für Text, Stammbaum der Linie, Inhalt und Register.',
             lang: 'Sprache des Buchs',
@@ -39401,10 +39442,14 @@ const stringsDE: StringsType = {
         hiddenOut: 'in Ausgaben verborgen',
         reveal: 'In Ausgaben zeigen',
         hide: 'In Ausgaben verbergen',
-        hiddenSummary: (e: number, loc: boolean) => e && loc
-            ? `In Ausgaben (HTML, Buch) werden ${nDe(e, 'Ereignis', 'Ereignisse')} und die Lage des Hauses nicht gezeigt.`
-            : e ? `In Ausgaben (HTML, Buch) ${e === 1 ? 'wird 1 Ereignis' : `werden ${e} Ereignisse`} nicht gezeigt.`
-                : 'In Ausgaben (HTML, Buch) wird die Lage des Hauses nicht gezeigt.',
+        // What outputs leave out (spec 145 T3): the location for people of the last ~100 years or hidden by hand.
+        hiddenSummary: (e: number, loc: 'recent' | 'manual' | null) => e && loc === 'recent'
+            ? `In Ausgaben (HTML, Buch) werden ${nDe(e, 'Ereignis', 'Ereignisse')} und die Lage des Hauses nicht gezeigt (Menschen der letzten ~100 Jahre).`
+            : e && loc === 'manual'
+                ? `In Ausgaben (HTML, Buch) ${e === 1 ? 'wird 1 Ereignis' : `werden ${e} Ereignisse`} nicht gezeigt; die Lage des Hauses ist von Hand ausgeblendet.`
+                : e ? `In Ausgaben (HTML, Buch) ${e === 1 ? 'wird 1 Ereignis' : `werden ${e} Ereignisse`} nicht gezeigt.`
+                    : loc === 'manual' ? 'In Ausgaben (HTML, Buch) ist die Lage des Hauses von Hand ausgeblendet.'
+                        : 'In Ausgaben (HTML, Buch) wird die Lage des Hauses nicht gezeigt: Im Haus lebten Menschen der letzten ~100 Jahre.',
         // The house page (spec 030 §3, K3.1, K7.1): a sibling of the person page.
         page: {
             title: 'Hausseite',
@@ -39448,6 +39493,15 @@ const stringsDE: StringsType = {
                 kinds: { cadastre: 'Katasterkarte', military: 'Militärische Landesaufnahme', ortho: 'Orthofoto', 'ortho-1950': 'Luftbilder der 1950er' },
                 point: (house: string) => `Haus ${house}`,
                 aerialAlt: 'Luftbild der 1950er Jahre rund um das Haus',
+                // The location in outputs (spec 145 T3): the hand's word and the cut of today's map.
+                outShown: 'Ausgaben (HTML, Buch) zeigen die Lage des Hauses.',
+                outHidden: 'In Ausgaben (HTML, Buch) ist die Lage des Hauses von Hand ausgeblendet.',
+                hideOut: 'Lage in Ausgaben ausblenden', showOut: 'Lage in Ausgaben zeigen',
+                sureConfirmed: 'Heutige Lage · Übereinstimmung der Nummer bestätigt',
+                sureAssumed: 'Heutige Lage · Übereinstimmung der Nummer angenommen',
+                shotAlt: (house: string) => `Heutige Karte rund um das Haus ${house}`,
+                layerShotAlt: (layer: string, house: string) => `${layer} rund um das Haus ${house}`,
+                osmAttribution: '© OpenStreetMap-Mitwirkende, Lizenz ODbL',
             },
             origin: { research: 'aus der Forschung', own: 'aus eigener Recherche', tree: 'aus dem Stammbaum', guess: 'Vermutung', probable: 'wahrscheinlich' },
             how: {

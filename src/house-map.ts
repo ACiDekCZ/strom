@@ -21,6 +21,7 @@ import { getStringsForLang, type Language } from './strings.js';
 import { safeHttpUrl } from './validation.js';
 import { MAX_ZOOM, TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL, TILE_SIZE, type TileRef } from './map.js';
 import { sjtskBox } from './sjtsk.js';
+import type { HouseMapShot, HouseMapShots } from './house-map-shot.js';
 
 /** The zoom a house is shown at (a street: the house and its neighbours). */
 export const HOUSE_MAP_ZOOM = 17;
@@ -60,6 +61,18 @@ export interface HouseMapInput {
     canEdit?: boolean;
     /** The tree has a research that knows houses (the sentence of a map without its layers). */
     hasResearch?: boolean;
+    /**
+     * The file (spec 145 T3): the cuts of the map made for the output (today's map, the research's historical
+     * layers), as pictures in the file; none: the location in words only.
+     */
+    shots?: HouseMapShots | null;
+    /** The file: how sure the location's match with the number is (houseOutputFilter `locationSure`). */
+    sure?: 'confirmed' | 'assumed' | null;
+    /**
+     * The app (spec 145 T3): what outputs do with the location, for a house whose location they would show by the
+     * rule of the last ~100 years: shown, or hidden by hand; `canEdit` the button that changes it. Null: no line.
+     */
+    outputs?: { hidden: boolean; canEdit: boolean } | null;
 }
 
 /**
@@ -239,6 +252,35 @@ function coordsText(p: HouseMapPoint): string {
     return `${f(p.lat)}° ${p.lat >= 0 ? 'N' : 'S'}, ${f(p.lng)}° ${p.lng >= 0 ? 'E' : 'W'}`;
 }
 
+/** One cut of the map in a file or a book: the picture, its name and its attribution with the licence (spec 145 T3). */
+export function houseMapShotHtml(shot: HouseMapShot, alt: string): string {
+    const attr = shot.attributionUrl
+        ? `<a href="${esc(shot.attributionUrl)}" target="_blank" rel="noopener noreferrer">${esc(shot.attribution)}</a>` : esc(shot.attribution);
+    return `<figure class="hmap-shot" data-shot="${esc(shot.view)}">`
+        + `<img class="hmap-shot-img" src="${esc(shot.src)}" alt="${esc(alt)}" width="${shot.width}" height="${shot.height}">`
+        + `<figcaption><span class="hmap-shot-l">${esc(shot.label)}</span><span class="hmap-shot-attr">${attr}</span></figcaption></figure>`;
+}
+
+/** The pictures of a file's map section: today's map first, the historical layers beside it ('' none). */
+function shotsHtml(input: HouseMapInput): string {
+    const shots = [input.shots?.today, ...(input.shots?.layers ?? [])].filter((x): x is HouseMapShot => !!x);
+    if (!shots.length) return '';
+    const M = getStringsForLang(input.lang).houses.page.map;
+    return `<div class="hmap-shots">${shots.map(s => houseMapShotHtml(s,
+        s.view === 'today' ? M.shotAlt(input.house.text) : M.layerShotAlt(s.label, input.house.text))).join('')}</div>`;
+}
+
+/** "Today's location · number match confirmed / assumed" (spec 145 T3). */
+export function houseSureText(lang: Language, sure: 'confirmed' | 'assumed'): string {
+    const M = getStringsForLang(lang).houses.page.map;
+    return sure === 'confirmed' ? M.sureConfirmed : M.sureAssumed;
+}
+
+/** "49.6118° N, 15.2251° E". */
+export function houseCoordsText(p: HouseMapPoint): string {
+    return coordsText(p);
+}
+
 /**
  * The section's body: '' = no section. The app's frame (`.hmap`, drawn by
  * src/ui/house-map-ui.ts) carries the point, the town's point and the
@@ -249,9 +291,11 @@ export function houseMapHtml(input: HouseMapInput): string {
     const manual = manualMapsHtml(input.research, input.lang);
     if (input.mode === 'file') {
         // No map server in the file: the location in words, links to open by hand (K3.3: only with the location).
+        // The cuts of the map made for the file (spec 145 T3) are pictures in it, never live tiles.
         const p = input.location;
         if (!p) return '';
-        return `<div class="hmap-u hmap-u--file"><span class="hmap-pos"><span>${esc(housePositionText(input))}</span>`
+        const pos = input.sure ? houseSureText(input.lang, input.sure) : housePositionText(input);
+        return `${shotsHtml(input)}<div class="hmap-u hmap-u--file"><span class="hmap-pos"><span>${esc(pos)}</span>`
             + `<span class="hmap-coords">${esc(coordsText(p))}</span></span>`
             + `${houseElsewhereHtml(p, input.lang)}${manual}</div>`;
     }
@@ -283,5 +327,16 @@ export function houseMapHtml(input: HouseMapInput): string {
         + '</div>'
         + `<div class="hmap-u"><span class="hmap-pos"><span class="hmap-pos-t">${esc(housePositionText(input))}</span>`
         + (acts ? `<span class="hmap-acts">${acts}</span>` : '') + '</span>'
-        + houseElsewhereHtml(input.location, input.lang) + manual + '</div></div>';
+        + houseElsewhereHtml(input.location, input.lang) + manual + '</div>' + outputsHtml(input) + '</div>';
+}
+
+/** The app's line of what outputs do with the location, with Hide / Show location in outputs (spec 145 T3). */
+function outputsHtml(input: HouseMapInput): string {
+    const o = input.outputs;
+    if (!o || !input.location) return '';
+    const M = getStringsForLang(input.lang).houses.page.map;
+    const btn = o.canEdit
+        ? `<button type="button" class="hmap-act hmap-out-act" data-hp-act="hide-location" data-hide="${o.hidden ? 'show' : 'hide'}">${esc(o.hidden ? M.showOut : M.hideOut)}</button>`
+        : '';
+    return `<p class="hmap-out${o.hidden ? ' hmap-out--hidden' : ''}"><span class="hmap-out-t">${esc(o.hidden ? M.outHidden : M.outShown)}</span>${btn}</p>`;
 }

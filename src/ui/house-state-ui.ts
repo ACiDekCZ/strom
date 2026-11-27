@@ -42,8 +42,8 @@ export function houseSensitiveHtml(house: TreeHouse, research: HouseResearch | n
     });
     if (!rows.length) return '';
     const hidden = houseOutputFilter(house, research, data, now).hidden;
-    const summary = hidden.events || hidden.location
-        ? `<p class="house-research-note house-hidden-summary">${esc(s.hiddenSummary(hidden.events, hidden.location))}</p>` : '';
+    const summary = hidden.events || hidden.locationBy
+        ? `<p class="house-research-note house-hidden-summary">${esc(s.hiddenSummary(hidden.events, hidden.locationBy))}</p>` : '';
     return `<div class="house-sensitive">${summary}<div class="house-sens-list">${rows.join('')}</div></div>`;
 }
 

@@ -38,6 +38,7 @@ import { poolIdOf, standInOf } from './image-ref.js';
 import { imageMetaOf } from './image-meta.js';
 import type { HistoryPayload, PersonHistoryEnv } from './history.js';
 import type { HouseResearch } from './house-bridge.js';
+import type { HouseMapShots } from './house-map-shot.js';
 
 export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other' | 'persons' | 'ancestors' | 'rodTimeline' | 'house';
 
@@ -130,6 +131,8 @@ export interface PageSetOptions {
     houses?: PageSetHouses;
     /** The research's results of the houses, read before the set is built (the house pages show them as a saved file does). */
     houseResearch?: ReadonlyMap<HouseId, HouseResearch>;
+    /** The cuts of the map of the houses, made before the set is built (spec 145 T3): pictures in the pages, never live tiles. */
+    houseMapShots?: ReadonlyMap<HouseId, HouseMapShots>;
 }
 
 /** The option Houses of a set (spec 145 T6). */
@@ -185,6 +188,8 @@ export interface PageSet {
     houseIds?: ReadonlySet<HouseId>;
     /** The research's results of the houses (spec 145 T6): read at each house page's drawing (the window adds them as they come). */
     houseResearch?: ReadonlyMap<HouseId, HouseResearch>;
+    /** The cuts of the map of the houses (spec 145 T3), made before the set. */
+    houseMapShots?: ReadonlyMap<HouseId, HouseMapShots>;
     /** Slugs of the indexes and of the map ('' for a page the set does not have). */
     indexSlug: Record<PageSetIndexKind, string>;
     /** The indexes split by letters (1102 §7.4), their letters in order; [] for an index on one page. */
@@ -764,7 +769,8 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const out: PageSet = {
         spec, options, history: opts.history ?? null, selection: sel, protectedTree: prot, rodIds, rodLabels: labels,
         pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, rodTimelineSlug, houseSlug, houseIds,
-        ...(opts.houseResearch ? { houseResearch: opts.houseResearch } : {}), indexSlug, indexLetters, minimalIds, mapSlug,
+        ...(opts.houseResearch ? { houseResearch: opts.houseResearch } : {}),
+        ...(opts.houseMapShots ? { houseMapShots: opts.houseMapShots } : {}), indexSlug, indexLetters, minimalIds, mapSlug,
         introSlug: intro.slug, otherSlug, otherRodIds: small.map(r => r.id), otherAnchor, otherPersonIds, images, searchIndex: [], treeName: ctx.treeName?.trim() ?? '',
     };
     out.searchIndex = buildSearchIndex(out, rods);
