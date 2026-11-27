@@ -192,6 +192,33 @@ export const housePageMethods = uiModule({
         return got?.house ?? houseCache(b.base).get(row.key) ?? this.houseResearchRead(house);
     },
 
+    /**
+     * Whether a house of the tree has an approved story (spec 145 T4, `house.story`): the detail the bridge read,
+     * else read once per list rev (`then` when it came); false without the bridge or the feature.
+     */
+    houseHasStory(id: string, then?: () => void): boolean {
+        const b = this.houseResearchBridge();
+        if (!b || !houseFeature(b.features, 'house.story')) return false;
+        const house = this.treeHouseOf(id);
+        const row = house ? this.houseResearchRow(house) : null;
+        if (!house || !row) return false;
+        const rev = this.houseStatesRev();
+        const got = read.get(row.key);
+        if (got && got.rev === rev) return got.house.story?.status === 'final';
+        if (!loading.has(row.key)) {
+            loading.add(row.key);
+            void fetchHouse(b.base, row.key).then(r => {
+                loading.delete(row.key);
+                if (!r.ok) return;
+                read.set(row.key, { rev, house: r.house });
+                if (page?.id === house.id) this.refreshHousePage();
+                if (r.house.story?.status === 'final') then?.();
+            });
+        }
+        const known = got?.house ?? houseCache(b.base).get(row.key) ?? this.houseResearchRead(house);
+        return known?.story?.status === 'final';
+    },
+
     /** Draw the page of the open house, its scroll kept. */
     renderHousePage(): void {
         const overlay = overlayEl();

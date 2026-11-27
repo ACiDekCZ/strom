@@ -150,6 +150,11 @@ export interface PersonPageOptions {
      */
     noHouses?: boolean;
     /**
+     * The houses with an approved story (spec 145 T4): under the person's story a link to each house the person
+     * lived in that has one (the window: the bridge's detail of the house; a set: the house's page there shows it).
+     */
+    houseStory?: (id: HouseId) => boolean;
+    /**
      * Initial state of the switches (the page's default: all on): the timeline's
      * History / Children's events (they apply to the life chart too) and the
      * places map's Children's places (missing = on).
@@ -1011,9 +1016,12 @@ function placeLink(c: Ctx, place: string | undefined): string {
  * house page by (`data-pp-house`), an anchor to the house's page in a set
  * that has it (a button `data-sp-open` in the set's window), else null.
  */
-function houseLinkHtml(c: Ctx, id: HouseId, inner: string, title: string): string | null {
+function houseLinkHtml(c: Ctx, id: HouseId, inner: string, title: string, section?: 'story'): string | null {
     const attrs = ` title="${esc(title)}"`;
-    if (c.app && c.opts.links === 'app') return `<button type="button" class="pp-link pp-house-link" data-pp-house="${esc(id)}"${attrs}>${inner}</button>`;
+    if (c.app && c.opts.links === 'app') {
+        const sec = section ? ` data-pp-house-sec="${section}"` : '';
+        return `<button type="button" class="pp-link pp-house-link" data-pp-house="${esc(id)}"${sec}${attrs}>${inner}</button>`;
+    }
     const slug = setLinksOf(c.opts)?.houseSlug?.get(id);
     if (!slug) return null;
     if (c.app) return `<button type="button" class="pp-link pp-house-link" data-sp-open="page:${esc(slug)}"${attrs}>${inner}</button>`;
@@ -2094,6 +2102,27 @@ function coupleChapterLinkHtml(c: Ctx, u: Partnership): string {
     return storyJumpHtml(c, u.id, label, 'pp-ft-story', coupleChapterLinkTip(ch, c.page.lang), inner);
 }
 
+/**
+ * Under the person's story (spec 145 T4): "House No. N ›" for each house the person lived in that has an approved
+ * story, leading to the house's story (its text is not repeated here); '' without one, or in a file without the
+ * house's page.
+ */
+function storyHousesHtml(c: Ctx): string {
+    const has = c.opts.houseStory;
+    if (!has) return '';
+    const I = c.S.houses.integration;
+    const seen = new Set<HouseId>();
+    const links: string[] = [];
+    for (const h of c.page.houses?.list ?? []) {
+        if (seen.has(h.id)) continue;
+        seen.add(h.id);
+        if (!has(h.id)) continue;
+        const link = houseLinkHtml(c, h.id, esc(I.houseLink(houseLabel(h.text))), I.houseTip(h.text), 'story');
+        if (link) links.push(link);
+    }
+    return links.length ? `<p class="pp-story-houses">${links.join(' ')}</p>` : '';
+}
+
 function storyHtml(c: Ctx): string {
     const { P, S, person } = c;
     const own = person.story?.text?.trim() ? person.story : undefined;
@@ -2134,6 +2163,7 @@ function storyHtml(c: Ctx): string {
             basisHtml: storyBasisHtml(c, u.story!, `basis-${uid}`, `pp-basis-${uid}`),
         });
     }
+    body += storyHousesHtml(c);
     return section('story', P.sec.story, body, head);
 }
 

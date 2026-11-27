@@ -25,6 +25,7 @@ import {
 import { houseIsStreet, houseKey, placeKey } from '../places.js';
 import { foldSearch } from '../history-manage.js';
 import { confirmHouse, houseFeature } from '../house-bridge.js';
+import type { HousePageSectionKey } from '../house-page.js';
 import { districtText } from '../places-dialog.js';
 import { shownName } from '../person-name.js';
 import { coupleEventLabel } from '../events.js';
@@ -996,7 +997,7 @@ export const housesMethods = uiModule({
      * timeline, the place menu, the Houses window's "House page ›"): the one place that opens a house — its page
      * (spec 030 §3). A satellite as "Houses in this town ›" (the main window opens the page).
      */
-    openHouse(id: string, parent?: string): void {
+    openHouse(id: string, parent?: string, opts: { section?: HousePageSectionKey } = {}): void {
         const h = this.treeHouseOf(id);
         if (!h) return;
         const main = this.houseOpenMain();
@@ -1005,7 +1006,7 @@ export const housesMethods = uiModule({
             main.run(HOUSES_OPEN_ACTION, args, true);
             return;
         }
-        this.openHousePage(h.id, parent);
+        this.openHousePage(h.id, parent, opts);
     },
 
     /** The main window a satellite opens a house in (the Houses window there), or null: the house page here (openHouse). */

@@ -39,7 +39,7 @@ import {
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
 import { HOUSE_PAGE_CSS, HOUSE_PAGE_FILE_TOKENS } from './house-page-css.js';
 import { buildHousePage } from './house-page.js';
-import { housePrivacyContext, type HousePrivacyContext } from './house-privacy.js';
+import { houseOutputFilter, housePrivacyContext, houseStoryForOutput, type HousePrivacyContext } from './house-privacy.js';
 import { houseOfAddress } from './person-houses.js';
 import { houseLabel, houseTitle } from './houses.js';
 import { FamilyTogetherEvent, familyTogetherEvents, familyTogetherLineHtml, sharedIndexOf } from './shared-with-line.js';
@@ -170,6 +170,33 @@ function setHouseOf(r: Render, place: string | undefined, address: string | unde
 /** A set's judge of the living and of the research's people on the whole tree (spec 145 T6), once per set. */
 const housePrivacyOfSet = new WeakMap<PageSet, HousePrivacyContext>();
 
+function setHousePrivacy(set: PageSet): HousePrivacyContext {
+    let privacy = housePrivacyOfSet.get(set);
+    if (!privacy) housePrivacyOfSet.set(set, privacy = housePrivacyContext(set.protectedTree.lineages.data, set.options.now));
+    return privacy;
+}
+
+/** The houses whose page in the set shows their approved story (spec 145 T4), once per set. */
+const storyHousesOfSet = new WeakMap<PageSet, ReadonlySet<string>>();
+
+function setStoryHouses(set: PageSet): ReadonlySet<string> {
+    const got = storyHousesOfSet.get(set);
+    if (got) return got;
+    const ids = new Set<string>();
+    if (set.houseSlug?.size && set.houseResearch?.size) {
+        const prot = set.protectedTree;
+        const privacy = setHousePrivacy(set);
+        for (const { house } of protectedHouseOutputs(prot, set.options.now).houses) {
+            const research = set.houseResearch.get(house.id) ?? null;
+            if (!set.houseSlug.has(house.id) || research?.story?.status !== 'final') continue;
+            const out = houseOutputFilter(house, research, prot.tree, set.options.now, privacy);
+            if (houseStoryForOutput(research, out, privacy)) ids.add(house.id);
+        }
+    }
+    storyHousesOfSet.set(set, ids);
+    return ids;
+}
+
 /**
  * A house's page in the set (spec 030 §13): the house page of a saved file
  * (houseOutputFilter) with the research's result read before the set (spec
@@ -181,8 +208,7 @@ function housePageHtml(r: Render, page: SetPage): string {
     const prot = set.protectedTree;
     const shown = protectedHouseOutputs(prot, set.options.now).houses.find(h => h.house.id === page.id);
     if (!shown) return '';
-    let privacy = housePrivacyOfSet.get(set);
-    if (!privacy) housePrivacyOfSet.set(set, privacy = housePrivacyContext(prot.lineages.data, set.options.now));
+    const privacy = setHousePrivacy(set);
     const body = buildHousePage(prot.tree, shown.house, set.houseResearch?.get(shown.house.id) ?? null, 'file', {
         lang: set.options.lang, now: set.options.now, names: prot.tree, privacy,
         personLink: (id, html) => {
@@ -1871,6 +1897,8 @@ function personPageOpts(r: Render, page: SetPage): PersonPageOptions {
         },
         privacy: set.options.privacy, toggles: { history: true, childEvents: true }, research: false,
         ...(set.options.houses === 'none' ? { noHouses: true } : {}),
+        // Under a person's story, the houses whose page here shows their story (spec 145 T4).
+        ...(setStoryHouses(set).size ? { houseStory: (id: string) => setStoryHouses(set).has(id) } : {}),
         now: set.options.now, toc: false,
         links: {
             mode: 'set', personSlug: set.personSlug, familySlug: set.familySlug, rodSlug: set.rodSlug,

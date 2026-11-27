@@ -463,6 +463,8 @@ export const personPageMethods = uiModule({
             pdfPages: (ref: string) => pooledPdfPages(ref, redraw),
             // Photos at a person without a portrait: the initials and "Portrait from a photo…" open the picker (spec 107 §2).
             portraitPick: this.personPagePortraitPick(entry.personId),
+            // The houses with an approved story (spec 145 T4): the page draws again when one is read.
+            houseStory: (id) => this.houseHasStory(id, redraw),
         });
         // The images still on their way are the page's too: their places wait for them (spec 116 §5).
         imagesFailedShown = imageLoads.snapshot().failed;
@@ -811,7 +813,12 @@ export const personPageMethods = uiModule({
         if (personBtn) { this.navigatePersonPage(personBtn.dataset.ppPerson as PersonId); return; }
         // A house of the tree (spec 030 §12): its page, over this window.
         const houseBtn = target.closest<HTMLElement>('[data-pp-house]');
-        if (houseBtn) { this.openHouse(houseBtn.dataset.ppHouse ?? '', PERSON_PAGE_ID); return; }
+        if (houseBtn) {
+            // Under the person's story: the house's story (spec 145 T4).
+            const section = houseBtn.dataset.ppHouseSec === 'story' ? 'story' as const : undefined;
+            this.openHouse(houseBtn.dataset.ppHouse ?? '', PERSON_PAGE_ID, section ? { section } : {});
+            return;
+        }
         const placeBtn = target.closest<HTMLElement>('[data-pp-place]');
         if (placeBtn) { this.showPersonPagePlace(placeBtn.dataset.ppPlace ?? ''); return; }
         // A family line (spec 026 §3.3): the lineage's page in this window (Back returns to the person).

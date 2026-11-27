@@ -519,11 +519,14 @@ html.js .pp-ch-fold[open] > summary { display: none; }
 .pp-story-cont > span { margin-right: 4px; }
 .pp-story-jump { margin-right: 10px; color: var(--primary); }
 a.pp-story-jump { text-decoration: underline; text-underline-offset: 3px; }
+/* The houses the person lived in with their story (spec 145 T4). */
+.pp .pp-story-houses { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 14px 0 0; font-family: var(--font-sans); font-size: 14px; }
+.pp-story-houses .pp-house-link { min-width: 0; overflow-wrap: anywhere; }
 @media (hover: hover) {
   .pp .pp-ch-more:hover { text-decoration-thickness: 2px; }
 }
 @media (pointer: coarse) {
-  .pp .pp-ch-more, .pp-story-jump { display: inline-flex; align-items: center; min-height: 44px; }
+  .pp .pp-ch-more, .pp-story-jump, .pp-story-houses .pp-house-link { display: inline-flex; align-items: center; min-height: 44px; }
 }
 @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
   .pp .pp-couple-story--tint { padding: 16px; }
