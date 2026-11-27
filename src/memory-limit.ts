@@ -36,7 +36,7 @@ import type { StromData } from './types.js';
 import type { ContentOptions } from './privacy.js';
 import { estimateJsonBytes } from './clone.js';
 import { forEachImagePlace } from './image-intern.js';
-import { poolIdOf } from './image-ref.js';
+import { poolIdOf, standInOf } from './image-ref.js';
 import { imageMetaOf } from './image-meta.js';
 
 export const MB = 1024 * 1024;
@@ -143,7 +143,9 @@ export type ImageContent = Pick<ContentOptions, 'photos' | 'attachments' | 'sour
 /** The characters of one image value: a data URL its length, a pool reference its catalog entry's. */
 function imageValueChars(v: unknown): number {
     if (typeof v !== 'string' || v.length === 0) return 0;
-    const id = poolIdOf(v);
+    // A pooled image as its reference or as its stand-in (image-standin.ts): its volume from the catalog,
+    // not the stand-in's few characters (1127: a book of gigabytes of photos taken for a small one).
+    const id = poolIdOf(v) ?? standInOf(v)?.id;
     if (id) return imageMetaOf(id)?.len ?? 0;
     return v.startsWith('data:') ? v.length : 0;
 }

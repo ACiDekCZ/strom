@@ -13,7 +13,7 @@ import {
 } from '../memory-limit.js';
 import { estimateJsonBytes } from '../clone.js';
 import { setImageMeta, clearImageMeta } from '../image-meta.js';
-import { POOL_REF } from '../image-ref.js';
+import { POOL_REF, poolStandIn } from '../image-ref.js';
 import type { StromData } from '../types.js';
 
 const L2 = 2048 * MB;
@@ -175,6 +175,16 @@ describe('memory limit: the tree\'s sizes', () => {
         expect(poolImagesChars([idA, idB, idA])).toBe(30_000);
         expect(poolImagesChars([idA, 'p:' + 'c'.repeat(40)])).toBe(10_000);
         expect(poolImagesChars([])).toBe(0);
+    });
+
+    it('a pooled image as its stand-in counts as the image, from the catalog (1127)', () => {
+        setImageMeta(idA, { len: 10_000, head: 'data:image/jpeg;base64,', bytes: 7000, token: 't', mtok: 'm' } as never);
+        const d = tree();
+        const plain = treeImageChars(d, { photos: true, attachments: false, sources: false });
+        const p1 = (d.persons as Record<string, { photo?: string }>).p1;
+        expect(p1.photo).toBe(POOL_REF + idA);
+        p1.photo = poolStandIn(idA, 'image/jpeg', 6);
+        expect(treeImageChars(d, { photos: true, attachments: false, sources: false })).toBe(plain);
     });
 
     it('a pooled image the catalog does not know counts 0', () => {
