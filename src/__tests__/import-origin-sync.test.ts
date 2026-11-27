@@ -30,7 +30,7 @@ const FOREIGN = `0 HEAD
 1 DATE 12 MAR 2024
 1 CHAR UTF-8
 0 @I1@ INDI
-1 NAME Kvirin /Mlýnek/
+1 NAME Kvido /Mlýnek/
 1 SEX M
 1 BIRT
 2 DATE 1850
@@ -42,7 +42,7 @@ const FOREIGN = `0 HEAD
 1 SEX F
 1 FAMS @F1@
 0 @I3@ INDI
-1 NAME Bonifác /Mlýnek/
+1 NAME Hostivít /Mlýnek/
 1 SEX M
 1 BIRT
 2 DATE 1880
@@ -158,7 +158,7 @@ afterAll(() => vi.useRealTimers());
 describe('a GEDCOM of another program as a new tree, then sent', () => {
     it('names the file in the HEAD and marks the person, its name, sex, birth, occupation and the marriage', () => {
         const ged = send(fromFile());
-        expectMarked(ged, 'Kvirin', 'I1', ['NAME', 'SEX', 'BIRT', 'OCCU']);
+        expectMarked(ged, 'Kvido', 'I1', ['NAME', 'SEX', 'BIRT', 'OCCU']);
         expectMarked(ged, 'Ludmila', 'I1', ['NAME', 'SEX']);
         const fam = ged.split(/\r?\n(?=0 )/).find(r => / FAM\r?\n/.test(r.split('\n')[0] + '\n'))!.split(/\r?\n/);
         expect(factBlock(fam, 'MARR')).toContain('2 _STROM_IMPORT I1');
@@ -166,27 +166,27 @@ describe('a GEDCOM of another program as a new tree, then sent', () => {
 
     it('a fact written or changed by hand, and a person added by hand, carry no mark', () => {
         const data = fromFile();
-        const k = byName(data, 'Kvirin');
+        const k = byName(data, 'Kvido');
         k.birthPlace = 'Hrachovec u Mlýna';
-        const b = byName(data, 'Bonifác');
+        const b = byName(data, 'Hostivít');
         b.deathDate = '1950';
         data.persons['hand' as PersonId] = {
             id: 'hand' as PersonId, firstName: 'Radovan', lastName: 'Mlýnek', gender: 'male', isPlaceholder: false,
             partnerships: [], parentIds: [], childIds: [], birthDate: '1990',
         };
         const ged = send(data);
-        expect(factBlock(personRecord(ged, 'Kvirin'), 'BIRT')).toContain('2 _STROM_IMPORT I1 DATE');
-        expect(factBlock(personRecord(ged, 'Bonifác'), 'DEAT').join('\n')).not.toContain('_STROM_IMPORT');
+        expect(factBlock(personRecord(ged, 'Kvido'), 'BIRT')).toContain('2 _STROM_IMPORT I1 DATE');
+        expect(factBlock(personRecord(ged, 'Hostivít'), 'DEAT').join('\n')).not.toContain('_STROM_IMPORT');
         expect(personRecord(ged, 'Radovan').join('\n')).not.toContain('_STROM_IMPORT');
     });
 
     it('a fact confirmed by hand (065) carries no mark, the others of the person keep theirs', () => {
         const data = fromFile();
-        const k = byName(data, 'Kvirin');
+        const k = byName(data, 'Kvido');
         // A confirmation without a stored value holds while the fact has any value.
         k.confirmed = { birth: { at: '2026-11-26' } };
         const ged = send(data);
-        const rec = personRecord(ged, 'Kvirin');
+        const rec = personRecord(ged, 'Kvido');
         expect(factBlock(rec, 'BIRT')).toContain('2 _STROM_CONFIRMED 2026-11-26');
         expect(factBlock(rec, 'BIRT').join('\n')).not.toContain('_STROM_IMPORT');
         expect(factBlock(rec, 'NAME')).toContain('2 _STROM_IMPORT I1');
@@ -196,7 +196,7 @@ describe('a GEDCOM of another program as a new tree, then sent', () => {
 describe('a tree carried in a JSON or HTML file (the same data), then sent', () => {
     it('keeps the import record and the marks', () => {
         const data = migrateData(JSON.parse(JSON.stringify(fromFile())));
-        expectMarked(send(data), 'Kvirin', 'I1', ['NAME', 'SEX', 'BIRT', 'OCCU']);
+        expectMarked(send(data), 'Kvido', 'I1', ['NAME', 'SEX', 'BIRT', 'OCCU']);
     });
 });
 
@@ -227,7 +227,7 @@ describe('a GEDCOM merged into the research\'s tree, then sent', () => {
         const ged = send(result.data);
         const id = [...headImports(ged).keys()][0];
         expect(id).toBeDefined();
-        expectMarked(ged, 'Kvirin', id, ['NAME', 'SEX', 'BIRT', 'OCCU']);
+        expectMarked(ged, 'Kvido', id, ['NAME', 'SEX', 'BIRT', 'OCCU']);
         expect(personRecord(ged, 'Radovan').join('\n')).not.toContain('_STROM_IMPORT');
     });
 });
@@ -236,23 +236,23 @@ describe('after the research\'s version is loaded back from the bridge', () => {
     it('a research that recorded the facts as the user\'s (a send without marks): the next send still marks them', () => {
         const sent = numbered(fromFile());
         const back = loadBack(researchVersion(sent, 'user'), sent);
-        expectMarked(send(back), 'Kvirin', 'I1', ['NAME', 'SEX', 'BIRT', 'OCCU']);
-        expectMarked(send(back), 'Bonifác', 'I1', ['NAME', 'SEX', 'BIRT']);
+        expectMarked(send(back), 'Kvido', 'I1', ['NAME', 'SEX', 'BIRT', 'OCCU']);
+        expectMarked(send(back), 'Hostivít', 'I1', ['NAME', 'SEX', 'BIRT']);
     });
 
     it('a research that recorded them from its own import record (R1): the next send still marks them with the app\'s', () => {
         const sent = numbered(fromFile());
         const head = ['1 _STROM_IMPORT R1', '2 SOUR Rodokmenář', '2 _AT 2026-11-25', '2 FILE rodokmen-mlynaru.ged'];
         const back = loadBack(researchVersion(sent, 'import R1', head), sent);
-        expectMarked(send(back), 'Kvirin', 'I1', ['NAME', 'SEX', 'BIRT', 'OCCU']);
+        expectMarked(send(back), 'Kvido', 'I1', ['NAME', 'SEX', 'BIRT', 'OCCU']);
     });
 
     it('a value the research changed carries no mark', () => {
         const sent = numbered(fromFile());
         const research = researchVersion(sent, 'research');
-        byName(research, 'Kvirin').birthDate = '1851';
+        byName(research, 'Kvido').birthDate = '1851';
         const ged = send(loadBack(research, sent));
-        const birth = factBlock(personRecord(ged, 'Kvirin'), 'BIRT');
+        const birth = factBlock(personRecord(ged, 'Kvido'), 'BIRT');
         expect(birth).toContain('2 _STROM_IMPORT I1 PLAC');
         expect(birth).not.toContain('2 _STROM_IMPORT I1');
     });
