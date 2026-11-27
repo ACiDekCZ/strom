@@ -36,19 +36,19 @@ function person(id: string, firstName: string, gender: 'male' | 'female', over: 
 
 /** An older tree of the app without any import record: a couple with a son, made by hand or loaded before data version 15. */
 function oldTree(): StromData {
-    const k = person('s1', 'Kvirin', 'male', { birthDate: '1850', birthPlace: 'Hrachovec', deathDate: '1921', partnerships: ['su1' as PartnershipId], childIds: ['s3' as PersonId] });
-    const l = person('s2', 'Ludmila', 'female', { lastName: 'Šťovíková', partnerships: ['su1' as PartnershipId], childIds: ['s3' as PersonId] });
-    const b = person('s3', 'Bonifác', 'male', { birthDate: '1880', parentIds: ['s1' as PersonId, 's2' as PersonId] });
+    const k = person('s1', 'Teobald', 'male', { birthDate: '1850', birthPlace: 'Hrachovec', deathDate: '1921', partnerships: ['su1' as PartnershipId], childIds: ['s3' as PersonId] });
+    const l = person('s2', 'Zbyhoňa', 'female', { lastName: 'Šťovíková', partnerships: ['su1' as PartnershipId], childIds: ['s3' as PersonId] });
+    const b = person('s3', 'Hostivít', 'male', { birthDate: '1880', parentIds: ['s1' as PersonId, 's2' as PersonId] });
     const u: Partnership = {
         id: 'su1' as PartnershipId, person1Id: k.id, person2Id: l.id, childIds: [b.id], status: 'married', startDate: '1875',
     } as Partnership;
     return migrateData({ persons: { [k.id]: k, [l.id]: l, [b.id]: b }, partnerships: { [u.id]: u } } as StromData);
 }
 
-/** The research's tree: a person of its own and Kvirin without his place of birth (numbered by the research). */
+/** The research's tree: a person of its own and Teobald without his place of birth (numbered by the research). */
 function researchTree(): StromData {
     const r = person('t1', 'Radovan', 'male', { refn: 'P0001', birthDate: '1990' });
-    const k = person('t2', 'Kvirin', 'male', { refn: 'P0002', birthDate: '1850', deathDate: '1920' });
+    const k = person('t2', 'Teobald', 'male', { refn: 'P0002', birthDate: '1850', deathDate: '1920' });
     return migrateData({ persons: { [r.id]: r, [k.id]: k }, partnerships: {} } as StromData);
 }
 
@@ -58,7 +58,7 @@ const FOREIGN = `0 HEAD
 1 DATE 12 MAR 2024
 1 CHAR UTF-8
 0 @I1@ INDI
-1 NAME Kvirin /Mlýnek/
+1 NAME Teobald /Mlýnek/
 1 SEX M
 1 BIRT
 2 DATE 1850
@@ -70,7 +70,7 @@ const ORIGIN: GedcomImportOrigin = { at: '2026-11-20', file: 'rodokmen-mlynaru.g
 /** A tree of the app loaded from a GEDCOM of another program (its own import I1), with a person added by hand since. */
 function importedTree(): StromData {
     const data = migrateData(convertToStrom(parseGedcom(FOREIGN), { importOrigin: ORIGIN }).data);
-    data.persons['hand' as PersonId] = person('hand', 'Radmila', 'female', { birthDate: '1910' });
+    data.persons['hand' as PersonId] = person('hand', 'Dobromila', 'female', { birthDate: '1910' });
     return data;
 }
 
@@ -169,7 +169,7 @@ describe('an older tree without an import record merged into the research\'s tre
         const id = mergedTreeImport(ged);
         expect(id).toBeDefined();
         expect(headImports(ged).get(id!)).toEqual(['2 SOUR Strom', `2 _AT ${DAY}`, `2 FILE ${TREE_NAME}`]);
-        for (const [first, facts] of [['Ludmila', ['NAME', 'SEX']], ['Bonifác', ['NAME', 'SEX']]] as const) {
+        for (const [first, facts] of [['Zbyhoňa', ['NAME', 'SEX']], ['Hostivít', ['NAME', 'SEX']]] as const) {
             const rec = personRecord(ged, first);
             expect(rec, first).toContain(`1 _STROM_IMPORT ${id}`);
             for (const f of facts) expect(factBlock(rec, f), `${first} ${f}`).toContain(`2 _STROM_IMPORT ${id}`);
@@ -184,7 +184,7 @@ describe('an older tree without an import record merged into the research\'s tre
         const ged = send(after);
         const id = mergedTreeImport(ged)!;
         expect(personRecord(ged, 'Radovan').join('\n')).not.toContain('_STROM_IMPORT');
-        const k = personRecord(ged, 'Kvirin');
+        const k = personRecord(ged, 'Teobald');
         // The record is the research's own; the place of birth came from the merged tree, the dates were the tree's (the death date kept against the merged tree's).
         expect(k).not.toContain(`1 _STROM_IMPORT ${id}`);
         expect(factBlock(k, 'BIRT')).toContain(`2 _STROM_IMPORT ${id} PLAC`);
@@ -196,15 +196,15 @@ describe('an older tree without an import record merged into the research\'s tre
 
     it('a fact a person confirmed in the merged tree carries no mark, the others of the person keep theirs', async () => {
         const source = oldTree();
-        byName(source, 'Bonifác').confirmed = { birth: { at: '2026-11-21' } };
+        byName(source, 'Hostivít').confirmed = { birth: { at: '2026-11-21' } };
         const { after } = await merge(researchTree(), source);
         const ged = send(after);
         const id = mergedTreeImport(ged)!;
-        const b = personRecord(ged, 'Bonifác');
+        const b = personRecord(ged, 'Hostivít');
         expect(factBlock(b, 'BIRT')).toContain('2 _STROM_CONFIRMED 2026-11-21');
         expect(factBlock(b, 'BIRT').join('\n')).not.toContain('_STROM_IMPORT');
         expect(factBlock(b, 'NAME')).toContain(`2 _STROM_IMPORT ${id}`);
-        expect(byName(after, 'Bonifác').importedValues?.birthDate).toBeUndefined();
+        expect(byName(after, 'Hostivít').importedValues?.birthDate).toBeUndefined();
     });
 
     it('the tree\'s row names no file it was loaded from, and "Back to" offers no program', async () => {
@@ -218,8 +218,8 @@ describe('an older tree without an import record merged into the research\'s tre
         const target = researchTree();
         const { after } = await merge(target, oldTree());
         const opts = { researchTree: false, originFeature: false };
-        expect(factReliability(after, byName(after, 'Ludmila'), 'name', opts)?.step).toBe('import');
-        expect(factReliability(after, byName(after, 'Ludmila'), 'name', opts)?.importRecord?.file).toBe(TREE_NAME);
+        expect(factReliability(after, byName(after, 'Zbyhoňa'), 'name', opts)?.step).toBe('import');
+        expect(factReliability(after, byName(after, 'Zbyhoňa'), 'name', opts)?.importRecord?.file).toBe(TREE_NAME);
         expect(factReliability(after, after.persons['t1' as PersonId], 'name', opts)?.step).not.toBe('import');
     });
 
@@ -232,9 +232,9 @@ describe('an older tree without an import record merged into the research\'s tre
         const id = mergedTreeImport(ged);
         expect(id).toBeDefined();
         expect(headImports(ged).get(id!)).toEqual(['2 SOUR Strom', `2 _AT ${DAY}`, `2 FILE ${TREE_NAME}`]);
-        const l = personRecord(ged, 'Ludmila');
+        const l = personRecord(ged, 'Zbyhoňa');
         expect(factBlock(l, 'NAME')).toContain(`2 _STROM_IMPORT ${id}`);
-        expect(factBlock(personRecord(ged, 'Bonifác'), 'BIRT')).toContain(`2 _STROM_IMPORT ${id}`);
+        expect(factBlock(personRecord(ged, 'Hostivít'), 'BIRT')).toContain(`2 _STROM_IMPORT ${id}`);
         expect(personRecord(ged, 'Radovan').join('\n')).not.toContain('_STROM_IMPORT');
     });
 
@@ -257,7 +257,7 @@ describe('a tree with its own import merged', () => {
     it('keeps the file\'s import; only what the tree does not know the origin of is the merged tree\'s', async () => {
         const source = importedTree();
         // Changed by hand since the import: a person's.
-        byName(source, 'Kvirin').birthPlace = 'Hrachovec u Mlýna';
+        byName(source, 'Teobald').birthPlace = 'Hrachovec u Mlýna';
         const target = researchTree();
         delete target.persons['t2' as PersonId];
         const { after } = await merge(target, source);
@@ -267,12 +267,12 @@ describe('a tree with its own import merged', () => {
         const treeId = mergedTreeImport(ged);
         expect(fileId).toBeDefined();
         expect(treeId).toBeDefined();
-        const k = personRecord(ged, 'Kvirin');
+        const k = personRecord(ged, 'Teobald');
         expect(k).toContain(`1 _STROM_IMPORT ${fileId}`);
         expect(factBlock(k, 'NAME')).toContain(`2 _STROM_IMPORT ${fileId}`);
         expect(factBlock(k, 'BIRT')).toContain(`2 _STROM_IMPORT ${fileId} DATE`);
         expect(k.join('\n')).not.toContain(`_STROM_IMPORT ${treeId}`);
-        const r = personRecord(ged, 'Radmila');
+        const r = personRecord(ged, 'Dobromila');
         expect(r).toContain(`1 _STROM_IMPORT ${treeId}`);
         expect(factBlock(r, 'BIRT')).toContain(`2 _STROM_IMPORT ${treeId}`);
         // The tree's row still names the file it was loaded from.
