@@ -345,6 +345,23 @@ test.describe('a story\'s new version', () => {
         expect(await launched(page)).toEqual([`strom-research://story?tree=${UUID}&person=P0001&partner=P0002&do=final`]);
     });
 
+    test('the research overview: the row says it once, the open detail only the names as links and Compare (1128)', async ({ page }) => {
+        await setup(page, ALL, [COUPLE_ITEM]);
+        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        const entry = page.locator('#research-overview li.research-overview__waiting-item', { hasText: 'New version of the story' });
+        await expect(entry).toHaveCount(1);
+        const row = entry.locator('.research-overview__waiting-row');
+        await expect(row).toContainText('Jan Vlk, Marie Vlková');
+        if (await row.getAttribute('aria-expanded') !== 'true') await row.click();
+        await expect(row).toHaveAttribute('aria-expanded', 'true');
+        const detail = entry.locator('.research-overview__waiting-detail');
+        await expect(detail).not.toContainText('New version of the story');
+        await expect(detail.locator('.live-kind-story')).toHaveCount(0);
+        await expect(detail.locator('.live-person-link')).toHaveText(['Jan Vlk', 'Marie Vlková']);
+        await detail.getByRole('button', { name: 'Compare' }).click();
+        await expect(page.locator('#story-compare-modal .audit-log-subtitle')).toHaveText('Jan Vlk and Marie Vlková');
+    });
+
     test('the card: tooltip, aria-label, and the badge opens the comparison', async ({ page }) => {
         await setup(page, ALL, [STORY_ITEM]);
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-story')).toHaveText('Story · new version waiting');

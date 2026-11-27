@@ -159,9 +159,10 @@ test.describe('the import question in Awaiting action', () => {
         await expect(sec(page).locator('.research-overview__waiting-filters .research-overview__filter')).toContainText([/Decisions\s*1/]);
         expect(imp.gets).toBe(0);
         await openItem(page);
-        await expect(item.locator('.research-overview__import-sent')).toHaveText('Sent from the app on 11/25/2026: 142 people added.');
-        // The three people once: in the row.
+        // The day, the count and the three people once (1128): in the row, not again in the detail.
         await expect(item.locator('.research-overview__import-ask')).not.toContainText('Ludmila Kapradinová');
+        await expect(item.locator('.research-overview__waiting-detail')).not.toContainText('11/25/2026');
+        await expect(item.locator('.research-overview__waiting-detail')).not.toContainText('142 people');
         await expect(item.locator('.research-overview__import-change')).toHaveText('512 facts go from ✓ to ○○ (138 people).');
         await expect(item.locator('.research-overview__import-stay'))
             .toHaveText('21 facts stay ✓: 15 edited since the send, 4 confirmed, 2 an earlier value (an accepted proposal, an undo).');

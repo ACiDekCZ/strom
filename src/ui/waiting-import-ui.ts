@@ -1,7 +1,7 @@
 /**
  * "Did this come from a family tree (import, merge)?" in Awaiting action
  * (1127, `waiting.import`): the send it asks about (its day, how many people,
- * three of them), what the answer would change (the research's preview, read
+ * three of them — in the row only), what the answer would change (the research's preview, read
  * when the item opens), the marks' meaning with "What the marks mean", and
  * the two answers through the bridge. The pure half is research-import-ask.ts.
  *
@@ -65,18 +65,16 @@ export const waitingImportMethods = {
     },
 
     /**
-     * The detail of the question: the send (its day, how many people, three of them), what "Yes" would change
-     * (read when it opens), the marks' meaning with "What the marks mean", the answers, a refused answer's sentence.
+     * The detail of the question (the send's day, how many people and three of them stand in its row, not again):
+     * what "Yes" would change (read when it opens), the marks' meaning with "What the marks mean", the answers, a refused answer's sentence.
      * A bridge that does not answer holds the answers (they say why); a device that may not answer says where.
      */
     appendImportAskDetail(this: UIClass, host: HTMLElement, w: LiveWaiting, s: LiveSession): void {
-        const a = w.importAsk;
-        if (!a) return;
+        if (!w.importAsk) return;
         const T = strings.live.importAsk;
         const L = strings.live;
         const key = itemKey(s, w.id);
         const box = el('div', 'research-overview__import-ask');
-        box.appendChild(el('p', 'research-overview__import-sent', `${T.sent(importAskDayText(a.day), a.persons)}.`));
         // What would change: read once the item opens (not in the showcase, which writes nothing).
         const showcase = inShowcase();
         const down = s.ended || s.lostSince !== null;

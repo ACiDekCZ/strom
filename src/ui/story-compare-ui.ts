@@ -127,6 +127,27 @@ export function storyWaitingPeople(w: LiveWaiting): { id: PersonId; name: string
     return [w.person, w.partner].map(byRefn).filter((id): id is PersonId => !!id).map(id => ({ id, name: personName(id) }));
 }
 
+/** "A and B" of a story item, each name a link that shows the person in the tree (null without them). */
+export function storyPeopleLinks(w: LiveWaiting, show: (id: PersonId) => void): HTMLElement | null {
+    const people = storyWaitingPeople(w);
+    if (people.length === 0) return null;
+    const who = document.createElement('span');
+    who.className = 'live-waiting-who';
+    // "A and B" with each name a link: the words between come from the string.
+    const joiner = strings.story.couple('\u0000', '\u0000').split('\u0000')[1];
+    people.forEach((p, i) => {
+        if (i > 0) who.append(joiner);
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'live-person-link';
+        link.textContent = p.name;
+        link.title = strings.research.showInTree;
+        link.onclick = (e) => { e.stopPropagation(); show(p.id); };
+        who.appendChild(link);
+    });
+    return who;
+}
+
 export const storyCompareMethods = uiModule({
     /**
      * A house's story waiting for approval (kind 'houseStory', spec 145 T4): "The story of house čp. N waits for
@@ -153,6 +174,11 @@ export const storyCompareMethods = uiModule({
         kind.textContent = strings.live.kindStory;
         what.append(kind, this.houseStoryWaitingText(w));
         text.appendChild(what);
+        return this.houseStoryOpenButton(w);
+    },
+
+    /** "House čp. N ›" to the house page at its story (the research's terminal without the house). */
+    houseStoryOpenButton(w: LiveWaiting): HTMLButtonElement {
         const house = w.house ? this.treeHouseOf(w.house) : null;
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -190,24 +216,14 @@ export const storyCompareMethods = uiModule({
         kind.textContent = strings.live.kindStory;
         what.append(kind, L.nvWaitingItem);
         text.appendChild(what);
-        const people = storyWaitingPeople(w);
-        if (people.length > 0) {
-            const who = document.createElement('span');
-            who.className = 'live-waiting-who';
-            // "A and B" with each name a link: the words between come from the string.
-            const joiner = L.couple('\u0000', '\u0000').split('\u0000')[1];
-            people.forEach((p, i) => {
-                if (i > 0) who.append(joiner);
-                const link = document.createElement('button');
-                link.type = 'button';
-                link.className = 'live-person-link';
-                link.textContent = p.name;
-                link.title = strings.research.showInTree;
-                link.onclick = (e) => { e.stopPropagation(); show(p.id); };
-                who.appendChild(link);
-            });
-            text.appendChild(who);
-        }
+        const who = storyPeopleLinks(w, show);
+        if (who) text.appendChild(who);
+        return this.storyCompareButton(w);
+    },
+
+    /** "Compare": the comparison here in the app; without the story in the tree, the research's own way. */
+    storyCompareButton(w: LiveWaiting): HTMLButtonElement {
+        const L = strings.story;
         const compare = document.createElement('button');
         compare.type = 'button';
         compare.className = 'live-waiting-answer';

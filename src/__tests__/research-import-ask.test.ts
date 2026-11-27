@@ -212,7 +212,7 @@ describe('the texts of the import question', () => {
         it(`${lang}: every text there, impersonal`, () => {
             const T = getStringsForLang(lang).live.importAsk;
             const texts = [
-                T.question, T.count(142), T.sent('25. 11. 2026', 142), T.previewLoading, T.change(512, 138), T.change(1, 1), T.changeNone,
+                T.question, T.count(142), T.previewLoading, T.change(512, 138), T.change(1, 1), T.changeNone,
                 T.stay(21, 'x'), T.stay(1, ''), T.stayPart.changed(15), T.stayPart.confirmed(4), T.stayPart.was(2), T.stayPart.other(1), T.meaning, T.yes, T.no,
                 T.doneImport(512, 138), T.doneImport(null, null), T.doneOwn, T.gone, T.previewFailed, T.busy(7), T.busy(null), T.notSaved, T.notSavedSaid('x'),
             ];

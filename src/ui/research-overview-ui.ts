@@ -55,7 +55,7 @@ import {
 import { browserGroupNote, browserNote } from '../research-browser.js';
 import { uiModule } from './module.js';
 import { LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection, liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip, liveState, pausedText, appendWorkingHold, workingHoldEl, workingSavingEl, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn, markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, lightsGroup, markOverviewLit, researchSession, researchTableLive, researchHere } from './research-ui.js';
-import { storyWaitingPeople } from './story-compare-ui.js';
+import { storyPeopleLinks, storyWaitingPeople } from './story-compare-ui.js';
 import {
     WorkingLine, directionDragActive, directionGlyph, directionPersonIds, directionRedrawHeld, keepLineFocus, setQueueDirectionFilter, taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
@@ -2471,21 +2471,23 @@ export const researchOverviewMethods = uiModule({
         const L = strings.live;
         const detail = el('div', 'research-overview__waiting-detail');
         if (w.kind === 'story') {
-            // A story's new version: the comparison opens here (no (research)).
-            const text = el('div', 'research-overview__waiting-text');
-            const compare = this.appendStoryWaiting(text, w, (id) => this.overviewShowPerson(id, mode));
+            // A story's new version (its label and whose it is stand in the row): the names as links, the comparison here.
+            const who = storyPeopleLinks(w, (id) => this.overviewShowPerson(id, mode));
+            if (who) {
+                const meta = el('div', 'research-overview__waiting-meta');
+                meta.appendChild(who);
+                detail.appendChild(meta);
+            }
             const actions = el('div', 'research-overview__waiting-actions');
-            actions.appendChild(compare);
-            detail.append(text, actions);
+            actions.appendChild(this.storyCompareButton(w));
+            detail.appendChild(actions);
             return detail;
         }
         if (w.kind === 'houseStory') {
-            // A house's story (spec 145 T4): "House čp. N ›" to its page at the story, approved or compared there.
-            const text = el('div', 'research-overview__waiting-text');
-            const open = this.appendHouseStoryWaiting(text, w);
+            // A house's story (spec 145 T4; its text stands in the row): "House čp. N ›" to its page at the story.
             const actions = el('div', 'research-overview__waiting-actions');
-            actions.appendChild(open);
-            detail.append(text, actions);
+            actions.appendChild(this.houseStoryOpenButton(w));
+            detail.appendChild(actions);
             return detail;
         }
         if (w.kind === 'branch') {

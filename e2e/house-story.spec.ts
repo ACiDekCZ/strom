@@ -261,6 +261,10 @@ test.describe('The story of a house elsewhere', () => {
         const wrow = entry.locator('.research-overview__waiting-row');
         if (await wrow.getAttribute('aria-expanded') !== 'true') await wrow.click();
         await expect(wrow).toHaveAttribute('aria-expanded', 'true');
+        // The row's text once (1128): the detail holds only the way to the page.
+        const detail = entry.locator('.research-overview__waiting-detail');
+        await expect(detail).not.toContainText('waits for approval');
+        await expect(detail.locator('.live-kind-story')).toHaveCount(0);
         const link = entry.locator('.research-overview__waiting-actions button', { hasText: 'House čp. 16 ›' });
         await expect(link).toBeVisible();
         await link.click();

@@ -8577,7 +8577,6 @@ const stringsEN = {
         importAsk: {
             question: 'Did this come from a family tree (import, merge)?',
             count: (n: number) => cntEn(n, 'person', 'people'),
-            sent: (day: string, n: number) => `Sent from the app on ${day}: ${cntEn(n, 'person', 'people')} added`,
             previewLoading: 'Working out what would change…',
             change: (values: number, persons: number) => `${cntEn(values, 'fact goes', 'facts go')} from ✓ to ○○ (${cntEn(persons, 'person', 'people')}).`,
             changeNone: 'No fact would go from ✓ to ○○.',
@@ -21773,7 +21772,6 @@ const stringsCZ: StringsType = {
         importAsk: {
             question: 'Přišlo to z rodokmenu (import, sloučení)?',
             count: (n: number) => cntCs(n, 'člověk', 'lidé', 'lidí'),
-            sent: (day: string, n: number) => `Odeslání z aplikace ${day} přidalo ${cntCs(n, 'člověka', 'lidi', 'lidí')}`,
             previewLoading: 'Zjišťuje se, co se změní…',
             change: (values: number, persons: number) =>
                 `${cntCs(values, 'údaj', 'údaje', 'údajů')} u ${cntCs(persons, 'člověka', 'lidí', 'lidí')} ${plural('cs', values, 'přejde', 'přejdou', 'přejde')} z ✓ na ○○.`,
@@ -34744,7 +34742,6 @@ const stringsDE: StringsType = {
         importAsk: {
             question: 'Stammt das aus einem Stammbaum (Import, Zusammenführung)?',
             count: (n: number) => cntDe(n, 'Person', 'Personen'),
-            sent: (day: string, n: number) => `Aus der App gesendet am ${day}: ${cntDe(n, 'Person', 'Personen')} hinzugefügt`,
             previewLoading: 'Was sich ändern würde, wird ermittelt …',
             change: (values: number, persons: number) => `${cntDe(values, 'Angabe wechselt', 'Angaben wechseln')} von ✓ zu ○○ (${cntDe(persons, 'Person', 'Personen')}).`,
             changeNone: 'Keine Angabe wechselt von ✓ zu ○○.',

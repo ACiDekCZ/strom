@@ -2075,7 +2075,6 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         importAsk: {
             question: 'Czy to pochodzi z drzewa genealogicznego (import, scalenie)?',
             count: (n: number) => `${numPl(n)} ${plPl(n, 'osoba', 'osoby', 'osób')}`,
-            sent: (day: string, n: number) => `Wysłane z aplikacji ${day}: dodano ${numPl(n)} ${plPl(n, 'osobę', 'osoby', 'osób')}`,
             previewLoading: 'Ustalanie, co się zmieni…',
             change: (values: number, persons: number) =>
                 `${numPl(values)} ${plPl(values, 'informacja przejdzie', 'informacje przejdą', 'informacji przejdzie')} z ✓ na ○○ (${numPl(persons)} ${plPl(persons, 'osoba', 'osoby', 'osób')}).`,
