@@ -4,6 +4,8 @@
 //
 // For each language:
 //   1. the sample research (build-demo.ts with SHOWCASE_SAMPLE=1 SHOWCASE_LINES=1), checked by check-sample.ts;
+//      its tree the whole family of the shots (build-family.ts, synced in by build-demo.ts), checked here: every
+//      person of it and each one's portrait, else the build fails;
 //   2. its bridge started at the sample's moment (STROM_SAMPLE_CLOCK): status, log, material, the whole queue (pages
 //      of 100) and tree.ged?media=app taken, the bridge stopped; the research must not have changed (HEAD, git status);
 //   3. the bridge's answers cleaned for a public file (no address or secret of the bridge, no amounts, nobody at work,
@@ -18,7 +20,7 @@
 // <outdir>/<lang>/VERSION                          the sample's version (one line)
 // <outdir>/<lang>/strom-ukazka-<lang>-<version>.strom (+ .sha256)  the research packed (strom pack, a ZIP) for strom demo
 // <outdir>/work/<lang>/                            the sample research the files were made of (build-demo.ts)
-// <outdir>/sizes.json                              the sizes of the files
+// <outdir>/sizes.json                              the sizes of the files, the people and portraits of the tree
 //
 // STROM_CLI names strom-research's sources (as for build-demo.ts); their package.json gives `researchVersion`, this
 // repository's package.json `appVersion` and `sampleVersion`. Run it isolated: the demo has its own HOME and strom
@@ -239,7 +241,35 @@ function machinePaths(pack: string, folders: string[]): string[] {
 }
 
 /** The sizes of everything built (sizes.json). */
-const sizes: Record<string, { file: number; pack: number }> = {};
+const sizes: Record<string, { file: number; pack: number; persons: number; portraits: number }> = {};
+
+/**
+ * The tree is the whole family of the shots (spec 143 K1.1): every person of build-family.ts (build-demo.ts synced
+ * its family-photos.json into the sample) by name in the tree, and a portrait (a photo of the person) for each one
+ * drawn there. A person short or a portrait missing fails the build.
+ */
+function familyCheck(ged: string, work: string): { failed: string[]; persons: number; family: number; portraits: number } {
+  const famFile = path.join(work, "family", "family-photos.json");
+  if (!fs.existsSync(famFile)) return { failed: [`no ${famFile}: the sample was built without the family of the shots`], persons: 0, family: 0, portraits: 0 };
+  const fam = JSON.parse(fs.readFileSync(famFile, "utf8")) as { persons: Record<string, { firstName?: string; lastName?: string; photo?: string }> };
+  const nameOf = (s: string) => s.replace(/\//g, " ").replace(/\s+/g, " ").trim();
+  const people = ged.split(/\n(?=0 )/).filter((r) => /^0 @[^@]+@ INDI/.test(r));
+  const inTree = new Map<string, number>();
+  const withPortrait = new Map<string, number>();
+  for (const r of people) {
+    const name = nameOf(/^1 NAME (.*)$/m.exec(r)?.[1] ?? "");
+    inTree.set(name, (inTree.get(name) ?? 0) + 1);
+    if (/^1 OBJE\n(?:[2-9] .*\n)*?2 _STROM_KIND photo$/m.test(r)) withPortrait.set(name, (withPortrait.get(name) ?? 0) + 1);
+  }
+  const failed: string[] = [];
+  const want = Object.values(fam.persons).map((p) => ({ name: nameOf(`${p.firstName ?? ""} ${p.lastName ?? ""}`), photo: !!p.photo }));
+  const count = new Map<string, number>();
+  for (const w of want) count.set(w.name, (count.get(w.name) ?? 0) + 1);
+  for (const [name, n] of count) if ((inTree.get(name) ?? 0) < n) failed.push(`the tree lacks ${name} of the family of the shots`);
+  for (const w of want) if (w.photo && !withPortrait.get(w.name)) failed.push(`${w.name}: no portrait in the tree`);
+  if (people.length < want.length) failed.push(`the tree has ${people.length} people, the family of the shots ${want.length}`);
+  return { failed, persons: people.length, family: want.length, portraits: [...withPortrait.values()].reduce((a, b) => a + b, 0) };
+}
 
 async function build(lang: SampleLang): Promise<void> {
   const t0 = Date.now();
@@ -331,7 +361,10 @@ async function build(lang: SampleLang): Promise<void> {
     header.sizeBytes = n;
   }
   // 4. the checks
+  const family = familyCheck(ged, work);
   const { failed, notes } = check(lang, text, [token, `:${port}/`], meta.asOf);
+  failed.push(...family.failed);
+  notes.push(`the tree: ${family.persons} people (the family of the shots ${family.family}), ${family.portraits} portraits`);
   for (const n of notes) console.log(`${lang}: ${n}`);
   if (failed.length) {
     fs.writeFileSync(path.join(dest, `strom-ukazka-${lang}.json.failed`), text);
@@ -355,7 +388,7 @@ async function build(lang: SampleLang): Promise<void> {
   const named = machinePaths(pack, [work, os.homedir()]);
   if (named.length) throw new Error(`${lang}: the package names the computer that built it:\n  ${named.slice(0, 20).join("\n  ")}`);
   fs.writeFileSync(`${pack}.sha256`, `${sha256(packBytes)}\n`);
-  sizes[lang] = { file: Buffer.byteLength(text), pack: packBytes.length };
+  sizes[lang] = { file: Buffer.byteLength(text), pack: packBytes.length, persons: family.persons, portraits: family.portraits };
   console.log(`${lang}: ${path.relative(out, file)} ${(Buffer.byteLength(text) / 1e6).toFixed(2)} MB, ${path.relative(out, pack)} ${(packBytes.length / 1e6).toFixed(2)} MB, research ${treeId} (${Math.round((Date.now() - t0) / 1000)} s)`);
 }
 

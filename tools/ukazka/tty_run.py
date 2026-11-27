@@ -3,6 +3,8 @@ import os, sys, json, pty, time, select, struct, fcntl, termios
 d, inputs, args = sys.argv[1], sys.argv[2], sys.argv[3:]
 env = json.load(open(os.path.join(d, "env.json")))
 env.update(COLUMNS="92", LINES="40", TERM="xterm-256color")
+# TTY_ENV: a JSON object of more variables for this one command (build-demo.ts: its moment, GIT_*_DATE, STROM_SAMPLE_CLOCK)
+env.update(json.loads(os.environ.get("TTY_ENV") or "{}"))
 cwd = open(os.path.join(d, "tree.txt")).read().strip()
 cli = os.environ.get("STROM_CLI") or os.path.expanduser("~/Projects/strom-research/src/cli.ts")
 pid, fd = pty.fork()

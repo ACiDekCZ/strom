@@ -25,6 +25,18 @@ and drawn by these scripts (no real records, no photographs, no generated images
   in it, `tree.txt` the research's folder.
 - `gen-scans.mjs` draws the register pages (Chromium), `gen-portraits.mjs` the portraits (`portraits/`, kept in
   git so a build does not need to draw them).
+- The houses (`demo-houses.ts`, called by `build-demo.ts`): the mill no. 12 of the home village with its history
+  (numbers over time, holders, residents, a fire, its look with its check, the village's pictures and field names, what
+  is not known) and no. 5 of the other village; the people off the tree and the texts are invented, the point is the
+  village's own point of the demo. `gen-houses.mjs` draws the pictures (`houses/`, in git; published at
+  `https://stromapp.info/ukazka/domy/`, the shots serve them from the folder). What the research writes of a house
+  needs no consent; the person's request (`strom house request … --yes`, the mill researched and no. 5 queued) and
+  the tree's `strom config set houses on --for-tree` run only in a person's build (`SHOWCASE_NO_ACCEPT=0`), never in
+  an agent's. Test: `node --test tools/ukazka/demo-houses.test.ts`.
+- In a sample, the family of the shots (`build-family.ts`, all 57 people with their portraits, register pages and
+  sources) comes into the research as the app sends it: `family-ged.ts` writes it as a GEDCOM with the research's IDs
+  (the people it already has), `strom sync … --apply` takes the rest; `build-ukazka.ts` fails when a person of the
+  family or a portrait is missing from the packed tree.
 
 ## Two modes of `build-demo.ts`
 

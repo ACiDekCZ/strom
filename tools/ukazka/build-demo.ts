@@ -110,6 +110,22 @@ function stromExit(exit: number, ...args: string[]): J {
     return {};
   }
 }
+/**
+ * strom in the person's own terminal (a pseudo-terminal, tty_run.py; no agent's mark, interactive): what only the
+ * person may say there (a consent). At the research's clock like any command. Its output as the terminal showed it.
+ */
+function personTerminal(...args: string[]): string {
+  const moment = sampleClock ? sampleClock.next(clock) : NOW - clock * 60_000;
+  const when = new Date(moment).toISOString();
+  const started = Date.now();
+  const r = spawnSync("python3", [path.join(here, "tty_run.py"), dir, "", ...args], {
+    env: { ...process.env, STROM_CLI: cli, TTY_ENV: JSON.stringify({ GIT_AUTHOR_DATE: when, GIT_COMMITTER_DATE: when, ...(AS_OF ? { STROM_SAMPLE_CLOCK: when } : {}) }) },
+    encoding: "utf8",
+  });
+  sampleClock?.ran(moment, Date.now() - started);
+  clock = Math.max(clock - 1.5, 0);
+  return `${r.stdout}${r.stderr}`;
+}
 /** The first ID of a kind (P, E, S, M, T, G, F, H, X…) in a command's JSON answer. */
 function id(j: J, prefix: string): string {
   const seen = JSON.stringify(j).match(new RegExp(`"id":"(${prefix}\\d{4,})"`));
@@ -410,6 +426,25 @@ strom("session", "close", "--continue", "--summary", d.archive.summary, "--next"
 // The places: facts in other forms, identified places, a question with candidates, a queue (demo-places.ts)
 await addPlaces({ lang, strom, at, P, d, env, from: 25, to: 15.5 });
 
+// The houses (Strom 3.33, research 1.38): the mill no. 12 with its history as the research found it, the house no. 5
+// of the other village (demo-houses.ts). The person's word for them — the mill asked for and researched, no. 5 queued,
+// the history of the houses on for this tree — only in a person's run (SHOWCASE_NO_ACCEPT=0, as the archives below).
+{
+  const { addHouses } = await import("./demo-houses.ts");
+  const { TEXT } = await import("./family-data.ts");
+  const homePlace = TEXT[lang].places.home;
+  const consent = process.env.SHOWCASE_NO_ACCEPT === "0";
+  const agent = (...a: string[]) => { once = { ...once, STROM_IN_AGENT: "1" }; return strom(...a); };
+  addHouses({ lang, strom, agent, at, P, n, d, home: [homePlace.lat, homePlace.lon], consent, from: 15.48 });
+  if (consent) {
+    // Research for this tree → History of the houses: the person's yes, typed in their own terminal
+    at(15.42);
+    const said = personTerminal("config", "set", "houses", "on", "--for-tree");
+    const set = (JSON.parse(fs.readFileSync(path.join(cwd, "strom.json"), "utf8")) as { houses?: unknown }).houses;
+    if (set !== "on") throw new Error(`config set houses on --for-tree: ${said}`);
+  }
+}
+
 // The lines (Strom 3.22, research 1.26): a branch off the lines that grows, the person's order of the lines, a task
 // put next (demo-lines.ts) — in the whole set since 3 Nov 2026 (make-showcase.sh: SHOWCASE_LINES, default 1)
 if (process.env.SHOWCASE_LINES === "1") {
@@ -513,6 +548,25 @@ if (!SEALED) {
 for (const name of process.env.SHOWCASE_NO_ACCEPT !== "0" ? [] : [d.waits.twoHosts.name, d.waits.noCap.name]) {
   const r = spawnSync("python3", [path.join(here, "tty_run.py"), dir, "", "allow", "archive", name, "--accept"], { env: { ...process.env, STROM_CLI: cli }, encoding: "utf8" });
   if (!/accepted|přijat|akzeptiert|allowed|dovoleno|erlaubt|dozwolon|obowiązuje/u.test(r.stdout)) throw new Error(`allow archive ${name} --accept: ${r.stdout}\n${r.stderr}`);
+}
+// The sample (the showcase file and package, spec 143 K1.1): the tree is the whole family of the shots — every person
+// of build-family.ts with its portraits, register pages, sources and citations — as the person sent it from the app:
+// the people the research has by their research ID, the rest, the portraits and the sources taken as additions (what
+// differs stays the research's). build-ukazka.ts checks that the tree it gives has them all.
+if (SAMPLE) {
+  const famDir = path.join(dir, "family");
+  const fam = spawnSync(process.execPath, [path.join(here, "build-family.ts"), lang, famDir], { env: { ...process.env }, encoding: "utf8" });
+  if (fam.status !== 0) throw new Error(`build-family ${lang}: ${fam.stderr}`);
+  const people = path.join(famDir, "research-people.json");
+  fs.writeFileSync(people, JSON.stringify(strom("person", "list")));
+  // where the person saved it (the input names it as in the person's home: ~/Downloads/…)
+  const ged = path.join(home, "Downloads", "family.ged");
+  fs.mkdirSync(path.dirname(ged), { recursive: true });
+  const tsx = path.join(here, "..", "..", "node_modules", ".bin", "tsx");
+  const conv = spawnSync(tsx, [path.join(here, "family-ged.ts"), path.join(famDir, "family-photos.json"), people, TREE_ID, ged], { encoding: "utf8" });
+  if (conv.status !== 0) throw new Error(`family-ged ${lang}: ${conv.stderr}`);
+  at(1.2);
+  strom("sync", ged, "--apply");
 }
 strom("export", "gedcom");
 // At a fixed moment the shared inbox's times too: strom reads them (a folder or file changed lately is still being
