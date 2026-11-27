@@ -443,7 +443,7 @@ export const houseRequestMethods = uiModule({
     placeMenuHouseLineHtml(h: TreeHouse): string {
         const f = strings.houses.familyHouses;
         const row = this.houseResearchRow(h);
-        const state = row ? `${houseStateHtml(row, { lang: getCurrentLanguage() })} · ` : '';
+        const state = row ? `${houseStateHtml(row, { lang: getCurrentLanguage(), plain: true })} · ` : '';
         return `${state}${esc(this.houseOpenMain() ? f.windowLine : f.pageLine)}`;
     },
 

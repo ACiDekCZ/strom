@@ -39,12 +39,18 @@ describe('houseStateHtml', () => {
         expect(text(held)).toBe('odloženo');
     });
 
-    it('done with its date in the app\'s language', () => {
+    it('done: a tag with ✓ (aria-hidden) and its date in the app\'s language; plain in a line of words', () => {
         setLanguage('cs');
-        expect(text(houseStateHtml({ state: 'done', at: '2027-03-12T10:20:00Z' }, { lang: 'cs' }))).toBe('hotovo 12. 3. 2027');
+        const cs = houseStateHtml({ state: 'done', at: '2027-03-12T10:20:00Z' }, { lang: 'cs' });
+        expect(cs).toContain('class="hs is-done"');
+        expect(cs).toContain('<span class="hs-ok" aria-hidden="true">✓</span>');
+        expect(text(cs)).toBe('✓ hotovo 12. 3. 2027');
         setLanguage('en');
-        expect(text(houseStateHtml({ state: 'done', at: '2027-03-12' }, { lang: 'en' }))).toBe('done 12 Mar 2027');
-        expect(text(houseStateHtml({ state: 'done' }, { lang: 'en' }))).toBe('done');
+        expect(text(houseStateHtml({ state: 'done', at: '2027-03-12' }, { lang: 'en' }))).toBe('✓ done 12 Mar 2027');
+        expect(text(houseStateHtml({ state: 'done' }, { lang: 'en' }))).toBe('✓ done');
+        const plain = houseStateHtml({ state: 'done', at: '2027-03-12' }, { lang: 'en', plain: true });
+        expect(plain).not.toContain('✓');
+        expect(text(plain)).toBe('done 12 Mar 2027');
     });
 
     it('queued with work "takeover": waiting to be taken over, with its note', () => {

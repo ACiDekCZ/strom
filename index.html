@@ -7602,6 +7602,8 @@
         }
         .hs.is-wait { border-color: var(--read-amber-line); background: var(--warning-soft); color: var(--warning-text); }
         .hs.is-text { padding: 0; border: 0; background: none; font-size: 12.5px; font-weight: 400; color: var(--text-light); }
+        /* Researched: the state's tag with ✓ before its day (Milan 27 Nov 2026), the research's colours. */
+        .hs-ok { font-weight: 700; }
         .hs-pulse { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .7; animation: hs-pulse 1.8s ease-in-out infinite; }
         @keyframes hs-pulse { 0%, 100% { opacity: .7; } 50% { opacity: .25; } }
         @media (prefers-reduced-motion: reduce) { .hs-pulse { animation: none; } }
@@ -14612,9 +14614,29 @@
             pointer-events: auto;
             cursor: pointer;
         }
-        .map-house-pt.is-open { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
-        @media (hover: hover) { .map-house-pt:hover { transform: translate(-50%, -50%) scale(1.1); } }
+        /* Researched (Milan 27 Nov 2026): the ✓ of the Houses window's row, in the research's colour. */
+        .map-house-pt { gap: 3px; }
+        .map-house-pt .map-house-ok { color: var(--research); font-weight: 700; }
+        .map-house-pt.is-done { border-color: var(--research-line); background: var(--research-soft); }
+        /* The open house: filled, bigger and ringed like a place selected (spec 079 §2), above its neighbours. */
+        .map-house-pt.is-open {
+            z-index: 2;
+            border-color: var(--primary); background: var(--primary); color: var(--on-primary);
+            transform: translate(-50%, -50%) scale(1.2);
+            box-shadow: 0 0 0 2px var(--surface), 0 0 0 4.5px var(--primary), var(--shadow-sm);
+        }
+        .map-house-pt.is-open .map-house-ok { color: inherit; }
+        @media (hover: hover) {
+            .map-house-pt:hover { transform: translate(-50%, -50%) scale(1.1); }
+            .map-house-pt.is-open:hover { transform: translate(-50%, -50%) scale(1.25); }
+        }
         @media (pointer: coarse) { .map-house-pt::after { content: ''; position: absolute; inset: -10px; } }
+        /* A house's point elsewhere (Milan 27 Nov 2026): a compact line of links above the bubble's foot. */
+        .map-popup-else { flex: none; padding: 6px 14px; border-top: 1px solid var(--divider); font-size: 12px; }
+        .map-popup-else .hmap-else { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+        .map-popup-else .hmap-mu, .map-popup-else .hmap-else-sep, .map-popup-else .hmap-else-note { color: var(--text-light); }
+        .map-popup-else .hmap-else-note { font-style: italic; }
+        .map-popup-else a { color: var(--primary-dark); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
         .map-popup-house-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
         .map-popup-house-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; }
         .map-popup-house-meta .map-popup-house-page {

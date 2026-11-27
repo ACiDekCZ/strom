@@ -11,7 +11,7 @@ import type { LiveHouseLayer } from '../research-link.js';
 import type { TreeHouse } from '../houses.js';
 import {
     houseMapAttribution, houseMapHtml, houseMapViews, housePointLabel, housePositionText, houseLocationUnsure,
-    houseImageUrl, tileBox3857, wmsGetMapUrl, wmsTileUrl, type HouseMapInput, HOUSE_MAP_MAX_ZOOM,
+    houseImageUrl, houseElsewhereLinks, tileBox3857, wmsGetMapUrl, wmsTileUrl, type HouseMapInput, HOUSE_MAP_MAX_ZOOM,
 } from '../house-map.js';
 import { MAX_ZOOM, tilesForViewport } from '../map.js';
 import { wgs84ToSjtsk } from '../sjtsk.js';
@@ -164,6 +164,26 @@ describe('house map — the section', () => {
         expect(html).toContain('49.6118° N, 15.2251° E');
         expect(html).toContain('href="https://www.openstreetmap.org/?mlat=49.61180&amp;mlon=15.22510#map=18/49.61180/15.22510"');
         expect(houseMapHtml(input({ mode: 'file', location: null, town: { lat: 49.6, lng: 15.2 } }))).toBe('');
+    });
+
+    it('open elsewhere: four links at the own point, lat/lon in each one\'s order to 5 places, today\'s view; none for a town only', () => {
+        const links = houseElsewhereLinks({ lat: 49.611804, lng: 15.225096 }, 'cs');
+        expect(links.map(l => [l.id, l.label, l.url])).toEqual([
+            ['osm', 'OpenStreetMap', 'https://www.openstreetmap.org/?mlat=49.61180&mlon=15.22510#map=18/49.61180/15.22510'],
+            // Mapy.com's center is lon,lat.
+            ['mapy', 'Mapy.com', 'https://mapy.com/fnc/v1/showmap?mapset=basic&center=15.22510,49.61180&zoom=18&marker=true'],
+            ['google', 'Google Mapy', 'https://www.google.com/maps/search/?api=1&query=49.61180,15.22510'],
+            ['streetview', 'Street View', 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=49.61180,15.22510'],
+        ]);
+        expect(houseElsewhereLinks({ lat: -33.5, lng: -70.25 })[2].url).toBe('https://www.google.com/maps/search/?api=1&query=-33.50000,-70.25000');
+        const app = houseMapHtml(input());
+        expect(app).toContain('Open elsewhere:');
+        expect(app.match(/class="hmap-else-a"[^>]*target="_blank" rel="noopener noreferrer"/g)).toHaveLength(4);
+        expect(app).toContain('today’s view');
+        expect(houseMapHtml(input({ location: null, town: { lat: 49.6, lng: 15.2 } }))).not.toContain('hmap-else');
+        const file = houseMapHtml(input({ mode: 'file' }));
+        expect(file).toContain('data-else="mapy"');
+        expect(file).toContain('data-else="streetview"');
     });
 
     it('the point label leaves out the "čp." and keeps a street', () => {

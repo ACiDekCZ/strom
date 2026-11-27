@@ -164,9 +164,10 @@ export const housesMethods = uiModule({
             </div>
             <span class="houses-town-chip-host"></span>
             <button type="button" class="places-chip sel-opt houses-history-chip" id="houses-only-history" aria-pressed="false">${this.escapeHtml(s.onlyHistory)}</button>
+            <button type="button" class="places-chip sel-opt houses-researched-chip" id="houses-researched" aria-pressed="false" hidden>${this.escapeHtml(s.researchedOnly)}</button>
             <select class="places-sort" id="houses-sort" aria-label="${this.escapeHtml(s.sortLabel)}" title="${this.escapeHtml(s.sortLabel)}">
-                ${([['number', s.sortNumber], ['oldest', s.sortOldest], ['people', s.sortPeople]] as const)
-                    .map(([v, label]) => `<option value="${v}">${this.escapeHtml(label)}</option>`).join('')}
+                ${([['number', s.sortNumber], ['oldest', s.sortOldest], ['people', s.sortPeople], ['researched', s.sortResearched]] as const)
+                    .map(([v, label]) => `<option value="${v}"${v === 'researched' ? ' hidden disabled' : ''}>${this.escapeHtml(label)}</option>`).join('')}
             </select>
             <span class="houses-count" id="houses-count"></span>`;
         modal.insertBefore(bar, modal.querySelector(':scope > .modal-content'));
@@ -231,6 +232,13 @@ export const housesMethods = uiModule({
             state.shown.clear();
             this.renderHousesList();
         };
+        const researched = overlay.querySelector('#houses-researched') as HTMLButtonElement;
+        researched.onclick = () => {
+            if (!state) return;
+            state.filter.researched = !state.filter.researched;
+            state.shown.clear();
+            this.renderHousesList();
+        };
         const sort = overlay.querySelector('#houses-sort') as HTMLSelectElement;
         sort.onchange = () => {
             if (!state) return;
@@ -267,6 +275,7 @@ export const housesMethods = uiModule({
         if (t.closest('.houses-empty-clear')) {
             state.filter.query = '';
             state.filter.onlyHistory = false;
+            state.filter.researched = false;
             const input = document.getElementById('houses-filter') as HTMLInputElement | null;
             if (input) input.value = '';
             this.renderHousesList();
@@ -341,7 +350,10 @@ export const housesMethods = uiModule({
         state.observer = null;
         const s = strings.houses;
         const lang = getCurrentLanguage();
-        const result = houseTownGroups(state.houses, state.filter, state.sort, state.texts, lang);
+        // "Researched" and "Recently researched": only with the research's houses (their states).
+        const doneOf = this.houseDoneOf();
+        const result = houseTownGroups(state.houses, state.filter, doneOf ? state.sort : (state.sort === 'researched' ? 'number' : state.sort),
+            state.texts, lang, doneOf ?? undefined);
         const ids = state.filter.town || result.groups.length ? this.placeIdentitiesNowSafe(result.groups.map(g => g.townKey)) : new Map<string, string>();
         // The bar: search count, town chip, chip state, the sort, the totals.
         const q = state.filter.query.trim();
@@ -351,8 +363,17 @@ export const housesMethods = uiModule({
         if (clear) clear.hidden = !q;
         const chip = document.getElementById('houses-only-history');
         chip?.setAttribute('aria-pressed', String(state.filter.onlyHistory));
+        const researchedChip = document.getElementById('houses-researched');
+        if (researchedChip) {
+            researchedChip.hidden = !doneOf;
+            researchedChip.setAttribute('aria-pressed', String(!!doneOf && !!state.filter.researched));
+        }
         const sort = document.getElementById('houses-sort') as HTMLSelectElement | null;
-        if (sort) sort.value = state.sort;
+        if (sort) {
+            const opt = sort.querySelector<HTMLOptionElement>('option[value="researched"]');
+            if (opt) { opt.hidden = !doneOf; opt.disabled = !doneOf; }
+            sort.value = doneOf || state.sort !== 'researched' ? state.sort : 'number';
+        }
         const totals = document.getElementById('houses-count');
         if (totals) totals.textContent = s.count(result.shown, result.towns);
         const host = document.querySelector('#houses-modal .houses-town-chip-host');
@@ -363,7 +384,7 @@ export const housesMethods = uiModule({
                 : '';
         }
         if (result.groups.length === 0) {
-            const text = q ? s.empty(q) : s.emptyHistory;
+            const text = q ? s.empty(q) : doneOf && state.filter.researched ? s.emptyResearched : s.emptyHistory;
             list.innerHTML = `<div class="houses-empty"><p>${this.escapeHtml(text)}</p>
                 <button type="button" class="secondary houses-empty-clear">${this.escapeHtml(s.clearSearch)}</button></div>`;
             return;
@@ -390,14 +411,17 @@ export const housesMethods = uiModule({
         if (!state) return '';
         const s = strings.houses;
         const closed = state.closedTowns.has(g.townKey);
-        const searching = !!state.filter.query.trim();
+        // A search or "Researched" (the houses done may all be below the threshold): the town's count of hits.
+        const searching = !!state.filter.query.trim() || (!!state.filter.researched && !!this.houseDoneOf());
         const full = [district, s.townMeta(g.withHistory, g.numbers, g.persons)].filter(Boolean).join(' · ');
         const short = s.townMetaShort(g.withHistory, g.numbers);
         const meta = searching ? [district, s.searchCount(g.houses.length + g.more.length, g.total)].filter(Boolean).join(' · ') : full;
         const limit = state.shown.get(g.townKey) ?? HOUSES_BATCH;
         const rows = g.houses.slice(0, limit).map(h => this.renderHouseRowHtml(h)).join('');
         const rest = g.houses.length - Math.min(limit, g.houses.length);
-        const moreOpen = state.moreOpen.has(g.townKey) || (searching && g.houses.length === 0);
+        // "Researched": the houses done below the threshold shown too (the chip asks for every one of them).
+        const moreOpen = state.moreOpen.has(g.townKey) || (searching && g.houses.length === 0)
+            || (!!state.filter.researched && !!this.houseDoneOf());
         const moreLimit = state.shown.get(`${g.townKey}\u0000more`) ?? HOUSES_BATCH;
         const more = g.more.length ? `
             <div class="house-more">
@@ -463,9 +487,8 @@ export const housesMethods = uiModule({
         const detailId = `house-detail-${this.housesDomId(h.id)}`;
         const chev = `<button type="button" class="house-chev" aria-expanded="${open}" aria-controls="${detailId}" aria-label="${this.escapeHtml(houseTitle(h))}">${open ? '▾' : '▸'}</button>`;
         const no = `<span class="house-no"><b>${this.escapeHtml(houseLabel(h.text))}</b>${was}${name}</span>`;
-        // ⋯ on every row, a house below the threshold too: any house of the tree may be asked for (Milan 27 Nov 2026).
-        const menu = DataManager.isReadOnly() && !this.houseMenuResearchItems(h).length ? '' :
-            `<button type="button" class="house-more-btn" aria-haspopup="menu" aria-label="${this.escapeHtml(s.rowMenu(houseTitle(h)))}">⋯</button>`;
+        // ⋯ on every row, a house below the threshold too (its page first; any house of the tree may be asked for, Milan 27 Nov 2026).
+        const menu = `<button type="button" class="house-more-btn" aria-haspopup="menu" aria-label="${this.escapeHtml(s.rowMenu(houseTitle(h)))}">⋯</button>`;
         if (simple) {
             const first = h.personIds[0] ? data.persons[h.personIds[0]] : undefined;
             const line = [first ? shownName(first) : '', yearsText(h)].filter(Boolean).join(' · ');
@@ -602,21 +625,31 @@ export const housesMethods = uiModule({
 
     // ==================== MENUS ====================
 
+    /**
+     * A row's ⋯ (Milan 27 Nov 2026): the house's page and the map first (every house, read-only too), the
+     * research's rows (its action, attach), then the tree's own changes (merge, split).
+     */
     openHouseRowMenu(btn: HTMLElement, h: TreeHouse): void {
         const s = strings.houses;
+        const go: HouseMenuItem[] = [
+            { key: 'page', label: s.pageItem, run: () => this.openHouse(h.id, MODAL_ID) },
+            ...(this.houseOnMapPossible(h, this.housePageResearch(h))
+                ? [{ key: 'map', label: s.page.onMap, run: () => this.showHouseOnMap(h, this.housePageResearch(h)) }] : []),
+        ];
         const research = this.houseMenuResearchItems(h, btn);
         const own: HouseMenuItem[] = DataManager.isReadOnly() ? [] : [
             { key: 'merge', label: s.merge, run: () => this.showHouseMergeDialog(h.id) },
             ...(this.houseSplitCandidates(h).length ? [{ key: 'split', label: s.split, run: () => this.showHouseSplitDialog(h.id) }] : []),
         ];
-        this.openHousesMenu(btn, s.rowMenu(houseTitle(h)), research, own);
+        this.openHousesMenu(btn, s.rowMenu(houseTitle(h)), [go, research, own]);
     },
 
-    /** A small `.context-menu` under its button: arrows move, Enter runs, Escape or a press outside closes it. */
-    openHousesMenu(btn: HTMLElement, title: string, items: HouseMenuItem[], after: HouseMenuItem[] = []): void {
+    /** A small `.context-menu` under its button (groups split by a line): arrows move, Enter runs, Escape or a press outside closes it. */
+    openHousesMenu(btn: HTMLElement, title: string, groups: HouseMenuItem[][]): void {
         if (!state) return;
         state.closeMenu?.();
-        const all = [...items, ...after];
+        const filled = groups.filter(g => g.length);
+        const all = filled.flat();
         if (!all.length) return;
         const menu = document.createElement('div');
         menu.className = 'context-menu houses-menu';
@@ -633,14 +666,15 @@ export const housesMethods = uiModule({
             menu.appendChild(row);
             rows.push(row);
         };
-        items.forEach(add);
-        if (items.length && after.length) {
-            const hr = document.createElement('div');
-            hr.className = 'context-menu-divider';
-            hr.setAttribute('role', 'separator');
-            menu.appendChild(hr);
-        }
-        after.forEach(add);
+        filled.forEach((g, i) => {
+            if (i) {
+                const hr = document.createElement('div');
+                hr.className = 'context-menu-divider';
+                hr.setAttribute('role', 'separator');
+                menu.appendChild(hr);
+            }
+            g.forEach(add);
+        });
         (btn.closest('.modal-overlay') ?? document.body).appendChild(menu);
         const M = 8, w = menu.offsetWidth, hgt = menu.offsetHeight;
         const r = btn.getBoundingClientRect();

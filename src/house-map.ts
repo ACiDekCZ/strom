@@ -205,6 +205,34 @@ function manualMapsHtml(research: HouseResearch | null, lang: Language): string 
     return links.length ? `<span class="hmap-man"><span class="hmap-mu">${esc(M.manual)}</span>${links.join('')}</span>` : '';
 }
 
+/** A map elsewhere a house's own point opens in (Milan 27 Nov 2026): only a link, nothing is sent until it is followed. */
+export interface HouseElsewhereLink { id: 'osm' | 'mapy' | 'google' | 'streetview'; label: string; url: string }
+
+/**
+ * OpenStreetMap, Mapy.com, Google Maps and Street View at a house's own point, in their documented URL forms
+ * without a key (Google Maps URLs `api=1`; Mapy.com `/fnc/v1/showmap`, center lon,lat), coordinates to 5 places.
+ */
+export function houseElsewhereLinks(p: HouseMapPoint, lang?: Language): HouseElsewhereLink[] {
+    const M = getStringsForLang(lang ?? 'en').houses.page.map;
+    const lat = p.lat.toFixed(5), lon = p.lng.toFixed(5);
+    return [
+        { id: 'osm', label: 'OpenStreetMap', url: `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=18/${lat}/${lon}` },
+        { id: 'mapy', label: 'Mapy.com', url: `https://mapy.com/fnc/v1/showmap?mapset=basic&center=${lon},${lat}&zoom=18&marker=true` },
+        { id: 'google', label: M.googleMaps, url: `https://www.google.com/maps/search/?api=1&query=${lat},${lon}` },
+        { id: 'streetview', label: M.streetView, url: `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}` },
+    ];
+}
+
+/** "Open elsewhere: OpenStreetMap ↗ · Mapy.com ↗ · Google Maps ↗ · Street View ↗ · today's view" ('' without a point). */
+export function houseElsewhereHtml(p: HouseMapPoint | null | undefined, lang?: Language): string {
+    if (!p) return '';
+    const M = getStringsForLang(lang ?? 'en').houses.page.map;
+    const links = houseElsewhereLinks(p, lang).map(l =>
+        `<a class="hmap-else-a" data-else="${l.id}" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.label)} ↗</a>`);
+    return `<span class="hmap-else"><span class="hmap-mu">${esc(M.elsewhere)}</span>${links.join('<span class="hmap-else-sep" aria-hidden="true">·</span>')}`
+        + `<span class="hmap-else-note" title="${esc(M.todayViewTip)}">${esc(M.todayView)}</span></span>`;
+}
+
 /** "49.6118° N, 15.2251° E". */
 function coordsText(p: HouseMapPoint): string {
     const f = (n: number): string => (Math.round(Math.abs(n) * 1e4) / 1e4).toFixed(4);
@@ -223,10 +251,9 @@ export function houseMapHtml(input: HouseMapInput): string {
         // No map server in the file: the location in words, links to open by hand (K3.3: only with the location).
         const p = input.location;
         if (!p) return '';
-        const osm = `https://www.openstreetmap.org/?mlat=${p.lat.toFixed(5)}&mlon=${p.lng.toFixed(5)}#map=18/${p.lat.toFixed(5)}/${p.lng.toFixed(5)}`;
         return `<div class="hmap-u hmap-u--file"><span class="hmap-pos"><span>${esc(housePositionText(input))}</span>`
-            + `<span class="hmap-coords">${esc(coordsText(p))} · <a href="${esc(osm)}" target="_blank" rel="noopener noreferrer">OpenStreetMap ↗</a></span></span>`
-            + `${manual}</div>`;
+            + `<span class="hmap-coords">${esc(coordsText(p))}</span></span>`
+            + `${houseElsewhereHtml(p, input.lang)}${manual}</div>`;
     }
     const point = input.location ?? input.town ?? null;
     if (!point) return '';
@@ -256,5 +283,5 @@ export function houseMapHtml(input: HouseMapInput): string {
         + '</div>'
         + `<div class="hmap-u"><span class="hmap-pos"><span class="hmap-pos-t">${esc(housePositionText(input))}</span>`
         + (acts ? `<span class="hmap-acts">${acts}</span>` : '') + '</span>'
-        + manual + '</div></div>';
+        + houseElsewhereHtml(input.location, input.lang) + manual + '</div></div>';
 }

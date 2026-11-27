@@ -1699,6 +1699,32 @@ export const mapMethods = uiModule({
         // The open house's pill filled.
         document.querySelectorAll<HTMLElement>('#map-container .map-house-pt').forEach(el => el.classList.toggle('is-open', el.dataset.house === house.id));
         this.openMapPopupAt(popup, { lat: point.lat, lon: point.lon }, opts);
+        if (opts.pan !== false && !popup.classList.contains('map-popup--sheet')) this.panMapBesideBubble(popup, house.id);
+    },
+
+    /**
+     * The bubble in the middle never covers its house's pill (Milan 27 Nov 2026, "On the map" centres the house):
+     * the map moves so the pill stands left of the bubble, or above it, or right of it, where there is room.
+     */
+    panMapBesideBubble(popup: HTMLElement, id: string): void {
+        const container = document.getElementById('map-container');
+        const pill = Array.from(container?.querySelectorAll<HTMLElement>('.map-house-pt') ?? []).find(el => el.dataset.house === id);
+        if (!container || !pill || !this.mapCenter) return;
+        const gap = 16;
+        const c = container.getBoundingClientRect(), b = popup.getBoundingClientRect(), p = pill.getBoundingClientRect();
+        const covered = p.right > b.left - gap && p.left < b.right + gap && p.bottom > b.top - gap && p.top < b.bottom + gap;
+        if (!covered) return;
+        const px = (p.left + p.right) / 2, py = (p.top + p.bottom) / 2;
+        const half = { w: p.width / 2 + gap, h: p.height / 2 + gap };
+        let dx = 0, dy = 0;
+        if (b.left - c.left >= p.width + 2 * gap) dx = (b.left - half.w) - px;
+        else if (b.top - c.top >= p.height + 2 * gap) dy = (b.top - half.h) - py;
+        else if (c.right - b.right >= p.width + 2 * gap) dx = (b.right + half.w) - px;
+        else return;
+        // The map (and the pill with it) moves by (dx, dy).
+        this.mapCenter = panCenter(this.mapCenter, this.mapZoom, Math.round(dx), Math.round(dy));
+        this.drawMapTiles(container);
+        this.drawMapMarkers(container, this.mapPlaces());
     },
 
     /**

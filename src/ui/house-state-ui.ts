@@ -9,7 +9,7 @@ import { strings, getCurrentLanguage, type Language } from '../strings.js';
 import { collectHouses, houseTitle, type TreeHouse } from '../houses.js';
 import { houseOfQuestion, houseTaskView, type HouseTaskView } from '../house-tasks.js';
 import type { LiveQueueItem } from '../research-link.js';
-import { houseGroupIds } from '../houses-view.js';
+import { houseGroupIds, type HouseDoneOf } from '../houses-view.js';
 import { placeKey } from '../places.js';
 import { formatPlaceDate } from '../place-identity.js';
 import { formatFlexDate } from '../dates.js';
@@ -65,8 +65,9 @@ export interface HouseStateOf {
 /**
  * The badge of a house's research state (empty without a row: the research does not know the house).
  * `answer`: the waiting state carries its "Answer" (the question opens as an item of "Awaiting action").
+ * `plain`: a line of words (the place menu's item), without the done tag's ✓.
  */
-export function houseStateHtml(row: HouseStateOf | null | undefined, opts: { lang: Language; answer?: boolean }): string {
+export function houseStateHtml(row: HouseStateOf | null | undefined, opts: { lang: Language; answer?: boolean; plain?: boolean }): string {
     if (!row) return '';
     const st = strings.houses.st;
     switch (row.state) {
@@ -80,7 +81,8 @@ export function houseStateHtml(row: HouseStateOf | null | undefined, opts: { lan
         case 'running':
             return `<span class="hs" data-state="running"><span class="hs-pulse" aria-hidden="true"></span>${esc(st.running)}</span>`;
         case 'done':
-            return `<span class="hs is-text" data-state="done">${esc(st.done(formatPlaceDate(row.at, opts.lang)).trim())}</span>`;
+            // Researched: a tag with ✓ and its day (Milan 27 Nov 2026: seen at once, the day kept).
+            return `<span class="hs${opts.plain ? ' is-text' : ' is-done'}" data-state="done">${opts.plain ? '' : '<span class="hs-ok" aria-hidden="true">✓</span>'}${esc(st.done(formatPlaceDate(row.at, opts.lang)).trim())}</span>`;
         case 'waiting': {
             const q = row.question;
             const act = opts.answer && q?.id
@@ -161,6 +163,21 @@ export const houseStateMethods = uiModule({
     /** The rev of the list read now ('' none). */
     houseStatesRev(): string {
         return list?.rev ?? '';
+    },
+
+    /**
+     * The houses' done days for the Houses window's "Researched" and "Recently researched" (houses-view
+     * HouseDoneOf), null without the research's houses (no research with `house`, its list not read yet).
+     */
+    houseDoneOf(): HouseDoneOf | null {
+        const b = this.houseResearchBridge();
+        if (!b) return null;
+        this.houseStatesSync();
+        if (list?.base !== b.base) return null;
+        return h => {
+            const row = this.houseResearchRow(h);
+            return row?.state === 'done' ? row.at ?? '' : null;
+        };
     },
 
     /** The research's row of a house of the tree (any of its joined numbers), or null. */

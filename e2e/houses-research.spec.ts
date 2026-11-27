@@ -108,7 +108,8 @@ test.describe('Houses: the research\'s state', () => {
         expect(houses.lists).toBe(lists);
 
         await changeHouses(page, bridge, houses, [row({ state: 'done', at: '2027-03-12' })], 'r2');
-        await expect(side(page).locator('.hs[data-state="done"]')).toHaveText('done 12 Mar 2027');
+        // Researched: a tag with ✓ (aria-hidden) and its day (Milan 27 Nov 2026).
+        await expect(side(page).locator('.hs.is-done[data-state="done"]')).toHaveText('✓done 12 Mar 2027');
 
         await changeHouses(page, bridge, houses, [row({ state: 'queued', work: 'takeover' })], 'r3');
         await expect(side(page).locator('.hs[data-state="takeover"]')).toHaveText('own research waiting to be taken over');

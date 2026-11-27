@@ -151,6 +151,33 @@ describe('the list of the window', () => {
         expect(strings.houses.count(6, 2)).toBe('6 houses in 2 towns');
     });
 
+    // The research's word (Milan 27 Nov 2026): čp. 7 done on 26 Nov, čp. 40 (below the threshold) on 27 Nov, čp. 3 done
+    // without a day; the others not done.
+    const DONE: Record<string, string> = { 'belokamen|7': '2026-11-26T08:00:00Z', 'belokamen|40': '2026-11-27T05:00:00Z', 'hvozdnice|3': '' };
+    const doneOf = (h: TreeHouse): string | null => DONE[h.id] ?? null;
+
+    it('"Researched" keeps the houses done, "Recently researched" sorts the latest first', () => {
+        const r = houseTownGroups(houses, { query: '', onlyHistory: false, researched: true }, 'number', texts, 'en', doneOf);
+        expect(r.groups.flatMap(g => [...g.houses, ...g.more]).map(h => h.id)).toEqual(['belokamen|7', 'belokamen|40', 'hvozdnice|3']);
+        expect(r).toMatchObject({ shown: 3, total: 6 });
+        // With "With history only" and the search too.
+        const both = houseTownGroups(houses, { query: 'bělokamen', onlyHistory: true, researched: true }, 'number', texts, 'en', doneOf);
+        expect(both.groups.flatMap(g => [...g.houses, ...g.more]).map(h => h.id)).toEqual(['belokamen|7']);
+        // Without the research's word the chip does nothing.
+        expect(houseTownGroups(houses, { query: '', onlyHistory: false, researched: true }, 'number', texts, 'en')).toMatchObject({ shown: 6 });
+
+        const bel = houses.filter(h => h.townKey === 'belokamen');
+        expect(sortHouses(bel, 'researched', doneOf).map(h => h.id)).toEqual(['belokamen|40', 'belokamen|7', 'belokamen|16']);
+        // A done house without its day after the dated ones, the not done ones last by number.
+        expect(sortHouses(houses, 'researched', doneOf).map(h => h.id).slice(0, 3)).toEqual(['belokamen|40', 'belokamen|7', 'hvozdnice|3']);
+        // In the window: the houses with history and "More houses" each in that order.
+        const sorted = houseTownGroups(houses, { query: '', onlyHistory: false }, 'researched', texts, 'en', doneOf);
+        expect(sorted.groups[0].houses.map(h => h.id)).toEqual(['belokamen|7', 'belokamen|16']);
+        expect(sorted.groups[1].more.map(h => h.id)).toEqual(['hvozdnice|5', 'hvozdnice|koprivna 12']);
+        // Without it: by number.
+        expect(sortHouses(bel, 'researched').map(h => h.id)).toEqual(['belokamen|7', 'belokamen|16', 'belokamen|40']);
+    });
+
     it('a renumbered house shows its former number, a street keeps its name', () => {
         const h16 = byId(houses).get('belokamen|16')!;
         expect(h16.text).toBe('čp. 16');

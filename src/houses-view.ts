@@ -10,10 +10,19 @@ import { compareHouses, houseIsStreet, houseKey, placeKey } from './places.js';
 import { foldSearch } from './history-manage.js';
 import type { HouseNumber, TreeHouse } from './houses.js';
 
-/** How the houses of a town are ordered: by number, the oldest first, the most people first. */
-export type HousesSort = 'number' | 'oldest' | 'people';
+/**
+ * How the houses of a town are ordered: by number, the oldest first, the most people first, the research's most
+ * recently done first ('researched': only with the research's houses).
+ */
+export type HousesSort = 'number' | 'oldest' | 'people' | 'researched';
 
-export const HOUSES_SORTS: readonly HousesSort[] = ['number', 'oldest', 'people'];
+export const HOUSES_SORTS: readonly HousesSort[] = ['number', 'oldest', 'people', 'researched'];
+
+/**
+ * The research's word on a house for the list: the day its history was done (ISO, '' without a date) when its
+ * state is done, else null. Without it (no research with `house`) "Researched" and "Recently researched" do nothing.
+ */
+export type HouseDoneOf = (house: TreeHouse) => string | null;
 
 export function readHousesSort(v: unknown): HousesSort {
     return HOUSES_SORTS.includes(v as HousesSort) ? v as HousesSort : 'number';
@@ -22,6 +31,8 @@ export function readHousesSort(v: unknown): HousesSort {
 export interface HousesFilter {
     query: string;
     onlyHistory: boolean;
+    /** Only houses the research has done ("Researched"). */
+    researched?: boolean;
     /** One town only (its placeKey), when opened from a town. */
     town?: string;
 }
@@ -84,13 +95,22 @@ export function houseMatches(house: TreeHouse, query: string, searchText?: strin
     return foldSearch(q).split(/\s+/).filter(Boolean).every(w => text.includes(w));
 }
 
-/** The houses in the order of the sort (ties by number). */
-export function sortHouses(list: readonly TreeHouse[], sort: HousesSort): TreeHouse[] {
+/**
+ * The houses in the order of the sort (ties by number). 'researched': the houses done, the latest first (one
+ * without a date after the dated ones), then the others by number.
+ */
+export function sortHouses(list: readonly TreeHouse[], sort: HousesSort, doneOf?: HouseDoneOf): TreeHouse[] {
     const byNumber = (a: TreeHouse, b: TreeHouse): number => compareHouses(a.text, b.text);
     const from = (h: TreeHouse): number => h.period?.from ?? Number.POSITIVE_INFINITY;
+    const done = sort === 'researched' && doneOf ? new Map(list.map(h => [h.id, doneOf(h)])) : null;
     return [...list].sort((a, b) => {
         if (sort === 'oldest') return from(a) - from(b) || byNumber(a, b);
         if (sort === 'people') return b.persons - a.persons || byNumber(a, b);
+        if (done) {
+            const da = done.get(a.id) ?? null, db = done.get(b.id) ?? null;
+            if ((da === null) !== (db === null)) return da === null ? 1 : -1;
+            if (da !== null && db !== null && da !== db) return da < db ? 1 : -1;
+        }
         return byNumber(a, b);
     });
 }
@@ -105,7 +125,8 @@ const mostOf = (m: ReadonlyMap<string, number>): string =>
  * filter is left out. `searchTexts` (by house id) saves building them again.
  */
 export function houseTownGroups(houses: readonly TreeHouse[], filter: HousesFilter, sort: HousesSort,
-    searchTexts?: ReadonlyMap<HouseId, string>, lang?: string): HousesListResult {
+    searchTexts?: ReadonlyMap<HouseId, string>, lang?: string, doneOf?: HouseDoneOf): HousesListResult {
+    const researched = !!filter.researched && !!doneOf;
     const town = filter.town ? placeKey(filter.town) : '';
     const byTown = new Map<string, TreeHouse[]>();
     for (const h of houses) {
@@ -129,14 +150,15 @@ export function houseTownGroups(houses: readonly TreeHouse[], filter: HousesFilt
             for (const p of h.personIds) persons.add(p);
         }
         const passing = list.filter(h => (!filter.onlyHistory || h.overThreshold)
+            && (!researched || doneOf!(h) !== null)
             && houseMatches(h, filter.query, searchTexts?.get(h.id)));
         if (passing.length === 0) continue;
         shown += passing.length;
         groups.push({
             townKey,
             town: mostOf(names),
-            houses: sortHouses(passing.filter(h => h.overThreshold), sort),
-            more: sortHouses(passing.filter(h => !h.overThreshold), 'number'),
+            houses: sortHouses(passing.filter(h => h.overThreshold), sort, doneOf),
+            more: sortHouses(passing.filter(h => !h.overThreshold), sort === 'researched' ? sort : 'number', doneOf),
             total: list.length,
             withHistory: list.filter(h => h.overThreshold).length,
             numbers: numbers.size,

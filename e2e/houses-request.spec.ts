@@ -204,8 +204,9 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         await expect(item.locator('.place-menu-house-line')).toHaveText('done 12 Mar 2027 · house page');
     });
 
-    // The row's ⋯ menu (Milan 27 Nov 2026): the same action as in its detail (houseActionOf), above "Attach material…".
+    // The row's ⋯ menu (Milan 27 Nov 2026): "House page" first, then the same action as in its detail (houseActionOf), above "Attach material…".
     const menuItems = (page: Page) => page.locator('.houses-menu [role="menuitem"]');
+    const actItem = (page: Page) => page.locator('.houses-menu [role="menuitem"][data-action^="act-"]');
     async function openRowMenu(page: Page, key = KEY, more = false): Promise<void> {
         await page.evaluate(() => window.Strom.UI.showHousesWindow());
         // A house without history: under the town's "More houses".
@@ -219,8 +220,8 @@ test.describe('Houses: asking the research for a house\'s history', () => {
     test('⋯ menu, setting off: "Find the house history…" with AI and the terminal, the dialog', async ({ page }) => {
         const houses = await setup(page);
         await openRowMenu(page);
-        await expect(menuItems(page)).toHaveText([/^Find the house history…/, 'Attach material…', 'Merge with another house…']);
-        const ask = menuItems(page).first();
+        await expect(menuItems(page)).toHaveText(['House page', /^Find the house history…/, 'Attach material…', 'Merge with another house…']);
+        const ask = actItem(page);
         await expect(ask.locator('.research-ai-badge')).toHaveCount(1);
         await expect(ask.locator('.research-open-mark')).toHaveCount(1);
         await ask.click();
@@ -236,7 +237,7 @@ test.describe('Houses: asking the research for a house\'s history', () => {
     test('⋯ menu, setting on: "Move to the top" over the bridge, no mark, no terminal; also for a queued house', async ({ page }) => {
         const houses = await setup(page, { on: true });
         await openRowMenu(page);
-        const top = menuItems(page).first();
+        const top = actItem(page);
         await expect(top).toHaveText('Move to the top');
         await expect(top.locator('.research-ai-badge, .research-open-mark')).toHaveCount(0);
         await top.click();
@@ -246,14 +247,14 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         // Now queued: the menu still offers it.
         await expect(houseRow(page).locator('.house-side .hs[data-state="queued"]')).toBeVisible();
         await houseRow(page).locator('.house-more-btn').click();
-        await expect(menuItems(page).first()).toHaveText('Move to the top');
+        await expect(actItem(page)).toHaveText('Move to the top');
     });
 
     test('⋯ menu: a house done "Request again…"; being researched or waiting nothing but its own items', async ({ page }) => {
         const houses = await setup(page, { on: true, rows: [row({ state: 'done', at: '2027-03-12' })] });
         await openRowMenu(page);
-        await expect(menuItems(page)).toHaveText(['Request again…', 'Attach material…', 'Merge with another house…']);
-        await menuItems(page).first().click();
+        await expect(menuItems(page)).toHaveText(['House page', 'Request again…', 'Attach material…', 'Merge with another house…']);
+        await actItem(page).click();
         await expect(dialog(page)).toBeVisible();
         await expect(dialog(page).locator('.hrq-again')).toBeVisible();
         await dialog(page).locator('[data-hrq="cancel"].secondary').click();
@@ -265,7 +266,7 @@ test.describe('Houses: asking the research for a house\'s history', () => {
             await page.evaluate(() => window.Strom.UI.loadHouseStates());
             await openRowMenu(page);
             await expect(houseRow(page).locator(`.house-side .hs[data-state="${state}"]`)).toBeVisible();
-            await expect(menuItems(page)).toHaveText(['Attach material…', 'Merge with another house…']);
+            await expect(menuItems(page)).toHaveText(['House page', 'Attach material…', 'Merge with another house…']);
             await page.keyboard.press('Escape');
         }
     });
@@ -274,8 +275,8 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         const houses = await setup(page, { on: true });
         // Anna's čp. 4: one person, no history, no row of the research.
         await openRowMenu(page, 'belokamen|4', true);
-        await expect(menuItems(page).first()).toHaveText('Move to the top');
-        await menuItems(page).first().click();
+        await expect(actItem(page)).toHaveText('Move to the top');
+        await actItem(page).click();
         await expect.poll(() => houses.requests).toEqual([{ house: 'belokamen|4' }]);
     });
 
@@ -288,6 +289,54 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         await expect(act).toHaveText('Move to the top');
         await act.click();
         await expect.poll(() => houses.requests).toEqual([{ house: KEY }]);
+    });
+
+    test('the Houses window with the research\'s states: the done tag with ✓ and its day, "Researched", "Recently researched", ⋯ "House page"', async ({ page }) => {
+        // čp. 16 done on 18 Mar, čp. 4 (Anna, also dying there: a house with history too) not researched.
+        await setup(page, { on: true, rows: [row({ state: 'done', at: '2027-03-18' }), row({ id: 'A0002', key: 'belokamen|4', house: '4', persons: 1 })] });
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const anna = Object.values(dm.getData().persons).find((p: { firstName: string }) => p.firstName === 'Anna') as { id: string };
+            dm.updatePerson(anna.id as never, { deathPlace: 'Bělokamen', deathAddress: 'čp. 4', deathDate: '1890' } as never);
+        });
+        await page.evaluate(() => window.Strom.UI.showHousesWindow());
+        const rows = page.locator('#houses-modal .house-row');
+        await expect(rows).toHaveCount(2);
+        const done = houseRow(page).locator('.house-side .hs.is-done[data-state="done"]');
+        await expect(done).toHaveText('✓done 18 Mar 2027');
+        await expect(done.locator('.hs-ok[aria-hidden="true"]')).toHaveCount(1);
+        // Sorted by number, then the latest researched first.
+        const order = () => rows.evaluateAll(els => els.map(e => (e as HTMLElement).dataset.house));
+        expect(await order()).toEqual(['belokamen|4', KEY]);
+        const sort = page.locator('#houses-sort');
+        await expect(sort.locator('option[value="researched"]')).toHaveText('Recently researched');
+        await sort.selectOption('researched');
+        await expect.poll(order).toEqual([KEY, 'belokamen|4']);
+        // "Researched": the house done only, the count of hits.
+        const chip = page.locator('#houses-researched');
+        await expect(chip).toBeVisible();
+        await expect(chip).toHaveText('Researched');
+        await chip.click();
+        await expect(chip).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(order).toEqual([KEY]);
+        await chip.click();
+        await expect.poll(order).toEqual([KEY, 'belokamen|4']);
+        // ⋯ starts with the house's page.
+        await houseRow(page).locator('.house-more-btn').click();
+        await expect(menuItems(page).first()).toHaveText('House page');
+        await menuItems(page).first().click();
+        await expect(page.locator('#house-page-modal #hp-title')).toHaveText('Bělokamen čp. 16');
+        await expect(page.locator('#house-page-modal .hs.is-done')).toContainText('done 18 Mar 2027');
+    });
+
+    test('without the research: no "Researched", no "Recently researched"; ⋯ still has "House page"', async ({ page }) => {
+        await setup(page, { features: [] });
+        await page.evaluate(() => window.Strom.UI.showHousesWindow());
+        await expect(houseRow(page)).toBeVisible();
+        await expect(page.locator('#houses-researched')).toBeHidden();
+        await expect(page.locator('#houses-sort option[value="researched"]')).toBeDisabled();
+        await houseRow(page).locator('.house-more-btn').click();
+        await expect(menuItems(page).first()).toHaveText('House page');
     });
 
     test('an older research without house.request: no action anywhere, the house page still there', async ({ page }) => {

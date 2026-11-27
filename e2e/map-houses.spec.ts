@@ -155,7 +155,7 @@ test.describe('Family houses on the map', () => {
         expect(box.y).toBeGreaterThan(title.y + 4);
     });
 
-    test('On the map from the house page\'s ⋯ menu: the map with the house in the middle and its bubble open', async ({ page }) => {
+    test('On the map from the house page\'s ⋯ menu: the house selected beside its open bubble, never under it', async ({ page }) => {
         await seedHouses(page);
         // Switched off earlier: On the map turns the layer on again.
         await page.evaluate(() => window.Strom.SettingsManager.setMapHouses(false));
@@ -168,10 +168,36 @@ test.describe('Family houses on the map', () => {
         await expect(pill(page)).toHaveClass(/is-open/);
         await expect(popup(page).locator('.map-popup-head strong')).toHaveText('Bělokamen čp. 16');
         await expect(chip(page)).toHaveAttribute('aria-pressed', 'true');
-        // The house in the middle of the map.
-        const map = (await page.locator('#map-container .map-canvas').boundingBox())!;
+        // Selected (ringed, Milan 27 Nov 2026) and not under the bubble: left of it, at its height.
+        await expect(pill(page)).toHaveCSS('box-shadow', /rgb/);
+        const bubble = (await popup(page).boundingBox())!;
         const at = (await pill(page).boundingBox())!;
-        expect(Math.abs(at.x + at.width / 2 - (map.x + map.width / 2))).toBeLessThan(40);
+        expect(at.x + at.width).toBeLessThanOrEqual(bubble.x);
+        expect(at.y + at.height / 2).toBeGreaterThan(bubble.y);
+        expect(at.y + at.height / 2).toBeLessThan(bubble.y + bubble.height);
+        // Its own point elsewhere: four links in a new window, "today's view".
+        const elsewhere = popup(page).locator('.map-popup-else');
+        await expect(elsewhere.locator('a')).toHaveText(['OpenStreetMap ↗', 'Mapy.com ↗', 'Google Maps ↗', 'Street View ↗']);
+        await expect(elsewhere.locator('a[data-else="mapy"]')).toHaveAttribute('href', 'https://mapy.com/fnc/v1/showmap?mapset=basic&center=15.20400,49.50300&zoom=18&marker=true');
+        await expect(elsewhere.locator('a[target="_blank"][rel="noopener noreferrer"]')).toHaveCount(4);
+        await expect(elsewhere).toContainText('today’s view');
+    });
+
+    test('On the map from a row\'s ⋯ in the Houses window (after House page); a house without a point has no links elsewhere', async ({ page }) => {
+        await seedHouses(page);
+        await page.evaluate(() => window.Strom.UI.showHousesWindow());
+        await page.locator(`#houses-modal .house-row[data-house="${KEY}"] .house-more-btn`).click();
+        const items = page.locator('.houses-menu [role="menuitem"]');
+        await expect(items.nth(0)).toHaveText('House page');
+        await expect(items.nth(1)).toHaveText('On the map');
+        await items.nth(1).click();
+        await expect(page.locator('#houses-modal')).toBeHidden();
+        await expect(pill(page)).toHaveClass(/is-open/);
+        await expect(popup(page).locator('.map-popup-head strong')).toHaveText('Bělokamen čp. 16');
+        // čp. 4 has no point of its own: its town's point, no links elsewhere.
+        await page.evaluate(() => window.Strom.UI.openHouse('belokamen|4' as never));
+        await expect(pageWin(page).locator('.hmap')).toBeVisible();
+        await expect(pageWin(page).locator('.hmap-else')).toHaveCount(0);
     });
 
     test('a house without a point: On the map shows its town', async ({ page }) => {

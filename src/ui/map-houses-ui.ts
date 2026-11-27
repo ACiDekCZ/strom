@@ -19,7 +19,7 @@ import { collectHouses, houseTitle, type TreeHouse } from '../houses.js';
 import { houseGroupIds } from '../houses-view.js';
 import { fetchHouse, houseCache, type HouseResearch } from '../house-bridge.js';
 import { pointInViewport } from '../map.js';
-import { HOUSE_MAP_MAX_ZOOM } from '../house-map.js';
+import { HOUSE_MAP_MAX_ZOOM, houseElsewhereHtml } from '../house-map.js';
 import { housesApartFromTowns, housesWithPoint, mapHouseLocation, mapHousePoints, mapHouseSummary, mapHousesSwitch, type MapHousePoint } from '../map-houses.js';
 import { houseStateHtml } from './house-state-ui.js';
 import { requestHouseMapMove } from './house-map-ui.js';
@@ -147,9 +147,12 @@ export const mapHousesMethods = uiModule({
             if (at.x < -60 || at.y < -60 || at.x > width + 60 || at.y > height + 60) return '';
             const h = byId.get(p.id);
             const title = h ? houseTitle(h) : p.label;
-            return `<button type="button" class="map-house-pt${open === p.id ? ' is-open' : ''}" data-house="${esc(p.id)}"`
-                + ` style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;" aria-label="${esc(`${P.point(p.label)} · ${title}`)}"`
-                + ` title="${esc(title)}">${esc(p.label)}</button>`;
+            // Researched: the ✓ of the Houses window's row, without its day (that is in the bubble; Milan 27 Nov 2026).
+            const done = !!h && this.houseResearchRow(h)?.state === 'done';
+            const label = done ? `${P.point(p.label)} · ${title} · ${strings.houses.researchedMark}` : `${P.point(p.label)} · ${title}`;
+            return `<button type="button" class="map-house-pt${open === p.id ? ' is-open' : ''}${done ? ' is-done' : ''}" data-house="${esc(p.id)}"`
+                + ` style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;" aria-label="${esc(label)}"`
+                + ` title="${esc(title)}">${done ? '<span class="map-house-ok" aria-hidden="true">✓</span>' : ''}${esc(p.label)}</button>`;
         }).join('');
     },
 
@@ -169,6 +172,9 @@ export const mapHousesMethods = uiModule({
             + (people.length > shown.length
                 ? `<button type="button" class="map-popup-more map-popup-hmore">${esc(strings.map.morePeople(people.length - shown.length))}</button>` : '');
         const canMove = !DataManager.isReadOnly();
+        // The house's own point elsewhere (OpenStreetMap, Mapy.com, Google Maps, Street View; Milan 27 Nov 2026).
+        const own = mapHouseLocation(house, data.houses, this.mapHouseResearch(house));
+        const elsewhere = own ? houseElsewhereHtml({ lat: own.lat, lng: own.lon }, getCurrentLanguage()) : '';
         return `
             <div class="map-popup-grip" aria-hidden="true"></div>
             <div class="map-popup-top">
@@ -180,6 +186,7 @@ export const mapHousesMethods = uiModule({
                 ${state ? `<div class="map-popup-hstate">${state}</div>` : ''}
             </div>
             <div class="map-popup-body"><div class="map-popup-people">${chips}</div></div>
+            ${elsewhere ? `<div class="map-popup-else">${elsewhere}</div>` : ''}
             <div class="map-popup-foot map-popup-hfoot">
                 <button type="button" class="map-popup-house-page" data-house="${esc(house.id)}">${esc(H.page.open)}</button>
                 <button type="button" class="map-popup-town-houses" data-town="${esc(house.ref.town)}">${esc(H.townHouses)}</button>

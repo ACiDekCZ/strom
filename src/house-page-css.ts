@@ -122,7 +122,11 @@ export const HOUSE_PAGE_CSS = `
 .hp .hmap-act { padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .hp .hmap-man { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .hp .hmap-mu { color: var(--text-light); }
-.hp .hmap-man a, .hp .hmap-coords a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.hp .hmap-else { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.hp .hmap-else .hmap-mu { margin-right: 2px; }
+.hp .hmap-else-sep { color: var(--text-light); }
+.hp .hmap-else-note { color: var(--text-light); font-size: 12px; font-style: italic; }
+.hp .hmap-man a, .hp .hmap-coords a, .hp .hmap-else a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
 @media (hover: hover) {
     .hp .hp-name-edit:hover, .hp .hp-reveal:hover { color: var(--text); }
     .hp .hp-mini:hover { background: var(--hover-bg); }
