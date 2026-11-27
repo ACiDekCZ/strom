@@ -22,6 +22,7 @@ import { filterAndSort } from '../person-picker.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { formatTreeSize } from '../format.js';
 import { iconSvg } from '../icons.js';
+import { COFFEE_URL } from '../about-links.js';
 import { inferBirthUpperBounds, isLivingPerson, type PrivacyMode } from '../privacy.js';
 import { giftPersonKey, loadGiftMemory, saveGiftMemory } from '../gift-memory.js';
 import {
@@ -180,6 +181,8 @@ export const GIFT_COVER_ID = 'gift-cover-modal';
 /** The making of one package (§8): its phase, the progress, the finished file. */
 interface GiftRun {
     phase: 'making' | 'cancelled' | 'done' | 'nodownload' | 'oom' | 'failed';
+    /** The coffee line has come in once (drawn again without its slide-in). */
+    thanked?: boolean;
     ctrl: AbortController | null;
     steps: GiftStep[];
     progress: GiftProgress | null;
@@ -229,6 +232,34 @@ async function writeToFolder(dir: FileSystemDirectoryHandle, name: string, blob:
 /** "Save to folder…" is offered where the browser lets a page write into a folder (Chrome, Edge). */
 function canSaveToFolder(): boolean {
     return typeof (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker === 'function';
+}
+
+/** About's coffee cup (index.html .about-coffee-cup), without its steam's animation. */
+const COFFEE_CUP = '<svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 5.5c-.8-.9.8-1.6 0-3"/>'
+    + '<path d="M10 5.5c-.8-.9.8-1.6 0-3"/><path d="M14 5.5c-.8-.9.8-1.6 0-3"/>'
+    + '<path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/></svg>';
+
+/**
+ * After a package made (one, or a batch with at least one): a quiet line at the bottom, thanks to the author by a
+ * coffee, the About dialog's link in a new tab. It slides in a moment after the done message the first time
+ * (index.html .gift-thanks.is-new; still with prefers-reduced-motion) and is simply there when drawn again.
+ */
+function giftThanks(box: HTMLElement, run: GiftRun): void {
+    const M = strings.giftTree.make;
+    const line = el('p', `gift-thanks${run.thanked ? '' : ' is-new'}`);
+    line.dataset.gk = 'thanks';
+    run.thanked = true;
+    const a = document.createElement('a');
+    a.className = 'gift-thanks-coffee';
+    a.href = COFFEE_URL;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.dataset.gk = 'coffee';
+    a.innerHTML = COFFEE_CUP;
+    a.appendChild(el('span', '', M.thankCoffee));
+    line.append(el('span', 'gift-thanks-t', M.thankLine), a);
+    box.appendChild(line);
 }
 
 /** Save a Blob as a file (an `<a download>`; the URL let go once the browser has it). */
@@ -1869,6 +1900,7 @@ export const giftTreeMethods = uiModule({
         if (u.g.mode !== 'list') {
             box.appendChild(el('p', 'gift-note', phone ? M.savedShort(run.names, run.couple) : M.saved(run.names, run.couple)));
         }
+        giftThanks(box, run);
     },
 
     /** A batch's making (§8 [58]), its end (§8 [60]) and its errors: the packages' rows, ✓ done, the one running, the waiting. */
@@ -1970,6 +2002,7 @@ export const giftTreeMethods = uiModule({
             box.appendChild(rowsList(false));
         }
         box.appendChild(el('p', 'gift-note', info.folder ? B.doneFolderNote : B.doneNote));
+        if (made.length) giftThanks(box, run);
     },
 
     /** The footer while making and at its end (the guide's own buttons hidden meanwhile). */

@@ -128,6 +128,8 @@ test('a list: couples as one package, one person\'s own settings, Family trees 2
     expect(download.suggestedFilename()).toBe('Family trees 2026.zip');
     await expect(dialog.locator('.gift-run-h')).toHaveText('The family trees are ready');
     await expect(dialog.locator('.gift-done-size')).toContainText('2 packages');
+    // The coffee line after the packages made (1127), as after one package.
+    await expect(dialog.locator('.gift-run [data-gk="coffee"]')).toHaveText('Coffee for Strom');
 
     const outer = readZip(readFileSync((await download.path())!));
     expect([...outer.keys()].sort()).toEqual(['Family tree – Daniel Berg and Julia Novak – 2026.zip', 'Family tree – Emma Holm – 2026.zip']);
@@ -188,6 +190,7 @@ test('a package that fails is a warning row and the others are made; Cancel all 
     await expect(dialog.locator('.prog-t')).toContainText('Person 1 of 2');
     await dialog.locator('[data-gk="run-cancel"]').click();
     await expect(dialog.locator('.gift-run-h')).toHaveText('Cancelled');
+    await expect(dialog.locator('[data-gk="thanks"]')).toHaveCount(0);
     await expect(dialog.locator('[data-gk="run-again"]')).toBeVisible();
     expect(downloads).toBe(0);
 });

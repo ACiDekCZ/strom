@@ -33365,6 +33365,18 @@
         }
         .gift-done-size { flex: none; font-size: 12.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         .gift-done-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+        /* After a package made: thanks by a coffee, quiet at the bottom; slides in once after the done message. */
+        .gift-thanks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 18px 0 0; padding-top: 12px;
+            border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 13px; }
+        .gift-thanks-coffee { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border);
+            border-radius: 999px; color: var(--text-primary); text-decoration: none; font-size: 13px; }
+        .gift-thanks-coffee .ui-icon { color: var(--accent); }
+        @media (hover: hover) { .gift-thanks-coffee:hover { background: var(--hover-bg); } }
+        .gift-thanks.is-new { animation: gift-thanks-in 420ms ease-out 900ms both; }
+        @keyframes gift-thanks-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { .gift-thanks.is-new { animation: none; } }
+        @media (pointer: coarse) { .gift-thanks-coffee { min-height: 44px; padding: 0 14px; } }
+        @media (max-width: 640px) { .gift-thanks { margin-top: 14px; } }
         .gift-modal .gift-done-acts .link-button { padding: 0; margin: 0; }
         .gift-modal .gift-foot [data-run-hidden] { display: none !important; }
         .gift-run-foot { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }

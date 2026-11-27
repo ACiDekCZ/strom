@@ -13277,6 +13277,9 @@ const stringsEN = {
             cancelledLead: 'Nothing was made and nothing was downloaded. The settings stay; the package can be made again.',
             again: 'Create again',
             doneH: 'The package is ready',
+            // After a package made (one or a batch): thanks to the author by a coffee (About's coffee link).
+            thankLine: 'The author can be thanked by buying a coffee.',
+            thankCoffee: 'Coffee for Strom',
             openCover: 'Open the cover page',
             another: 'Create another',
             saved: (names: string, couple: boolean) => `The settings were saved for ${names}; the next package for ${couple ? 'them' : 'this person'} starts from them.`,
@@ -26251,6 +26254,8 @@ const stringsCZ: StringsType = {
             cancelledLead: 'Nic nevzniklo a nic se nestáhlo. Nastavení zůstává, vytvořit jde znovu.',
             again: 'Vytvořit znovu',
             doneH: 'Balíček je hotový',
+            thankLine: 'Poděkovat autorovi lze koupí kávy.',
+            thankCoffee: 'Káva pro Strom',
             openCover: 'Otevřít úvodní stránku',
             another: 'Vytvořit další',
             saved: (names: string, couple: boolean) => (couple
@@ -39128,6 +39133,8 @@ const stringsDE: StringsType = {
             cancelledLead: 'Nichts ist entstanden und nichts wurde heruntergeladen. Die Einstellungen bleiben, das Paket lässt sich erneut erstellen.',
             again: 'Erneut erstellen',
             doneH: 'Das Paket ist fertig',
+            thankLine: 'Dem Autor lässt sich mit einem Kaffee danken.',
+            thankCoffee: 'Kaffee für Strom',
             openCover: 'Startseite öffnen',
             another: 'Weiteres erstellen',
             saved: (names: string, couple: boolean) => `Die Einstellungen wurden bei ${names} gespeichert; das nächste Paket für ${couple ? 'beide' : 'diese Person'} beginnt damit.`,

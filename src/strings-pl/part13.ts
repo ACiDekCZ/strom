@@ -381,6 +381,8 @@ export const plPart13: Pick<StringsType, 'giftTree'> = {
             cancelledLead: 'Nic nie powstało i nic nie zostało pobrane. Ustawienia zostają, paczkę można utworzyć ponownie.',
             again: 'Utwórz ponownie',
             doneH: 'Paczka jest gotowa',
+            thankLine: 'Autorowi można podziękować, kupując kawę.',
+            thankCoffee: 'Kawa dla Stromu',
             openCover: 'Otwórz stronę startową',
             another: 'Utwórz kolejną',
             saved: (names: string, couple: boolean) => (couple

@@ -90,6 +90,9 @@ export function websiteUrl(lang: Language): string {
 }
 
 /** The author's profile on X, offered in About in every language. */
+/** About's "Buy me a coffee" (index.html .about-coffee), also offered after a gift package is made. */
+export const COFFEE_URL = 'https://www.buymeacoffee.com/acidekcz';
+
 export const AUTHOR_X_URL = 'https://x.com/visekm';
 
 /** The author-on-X link of the About dialog (a web page in a new tab). */
