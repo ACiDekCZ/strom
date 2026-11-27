@@ -100,7 +100,8 @@ export const RESEARCH_LINK_MARKS: Readonly<Record<ResearchLinkAction, ResearchAc
     // "Process now" after a try of the verification (`do=tasks&task=`, spec 065 K7.2) the same.
     work: 'agent',
     // A house's history (spec 030 §2.10): asked for, the terminal says the estimate and the agent works at once on a
-    // yes; taking one's own research over (`do=import`) only asks for its files there — `researchLinkMark` refines it.
+    // yes; talking a house over (`do=chat`, spec 145 T2) the agent's chat on a yes; taking one's own research over
+    // (`do=import`) only asks for its files there — `researchLinkMark` refines it.
     house: 'agent',
 };
 
@@ -814,10 +815,11 @@ export interface ResearchLinkParams {
     historyDo?: 'search';
     /**
      * `house`: take one's own research of houses over (`import`, spec 030 §2.8; the terminal asks for the files) or
-     * search a house's history (`search` with `house`, part 2 §4.5: the terminal says the estimate, the agent works on a yes).
+     * search a house's history (`search` with `house`, part 2 §4.5: the terminal says the estimate, the agent works on a yes)
+     * or talk a house over with the agent (`chat` with `house`, spec 145 T2: the terminal asks, the agent's chat on a yes).
      */
-    houseDo?: 'import' | 'search';
-    /** `house` with `do=search`: the house by its key ("belokamen|16"). */
+    houseDo?: 'import' | 'search' | 'chat';
+    /** `house` with `do=search` or `do=chat`: the house by its key ("belokamen|16"). */
     house?: string;
     /** `house` with `do=search`: at most two more houses of the family in the same town, processed together. */
     houseWith?: string[];
@@ -1077,6 +1079,11 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             // spec 030 §2.8: the fixed `do=import`; part 2 (§4.5): `do=search` for one house by its key, with at most
             // two more houses (`with`) — keys only, never a name.
             if (p.houseDo === 'import') return p.house === undefined && p.houseWith === undefined ? `${base}&do=import` : null;
+            // spec 145 T2: a chat is always about one house — no `with`, no text.
+            if (p.houseDo === 'chat') {
+                const one = houseLinkKey(p.house);
+                return one && p.houseWith === undefined ? `${base}&house=${encodeURIComponent(one)}&do=chat` : null;
+            }
             if (p.houseDo !== 'search') return null;
             const house = houseLinkKey(p.house);
             const more = p.houseWith ?? [];
@@ -1231,6 +1238,16 @@ function houseLinkKey(v: unknown): string | null {
  */
 export function houseSearchLink(tree: string, house: string, more: readonly string[] = [], scheme: string = DEFAULT_RESEARCH_SCHEME): string | null {
     return researchSchemeUrl('house', { tree, house, houseDo: 'search', ...(more.length ? { houseWith: [...more] } : {}) }, scheme);
+}
+
+/**
+ * The link that talks a house over with the agent (spec 145 T2,
+ * `strom-research://house?tree=…&house=<key>&do=chat`): the research's terminal
+ * says what happens and its cost, on a yes the agent's chat about the house
+ * (AI + terminal mark). Null without a valid tree or key.
+ */
+export function houseChatLink(tree: string, house: string, scheme: string = DEFAULT_RESEARCH_SCHEME): string | null {
+    return researchSchemeUrl('house', { tree, house, houseDo: 'chat' }, scheme);
 }
 
 /** Each action's query words and the parameter of `researchSchemeUrl` each one comes from (`tree` aside). */
@@ -3843,7 +3860,10 @@ export const CENSUS_FEATURE = 'census';
  * (`POST /houses/request`; a research with an agent). `house.request.direct` is never said: with the setting off a
  * request always goes through the research's terminal.
  */
-export const HOUSE_FEATURES = ['house', 'house.material', 'house.confirm', 'house.import', 'house.auto', 'house.request'] as const;
+export const HOUSE_FEATURES = ['house', 'house.material', 'house.confirm', 'house.import', 'house.auto', 'house.request',
+    // spec 145: the agent's chat about a house (`do=chat`, only where the research has its agent); the look of houses
+    // (`/status.houses.look`, `lookCheck`, the town's pictures and field names).
+    'house.chat', 'house.look'] as const;
 export type HouseFeature = typeof HOUSE_FEATURES[number];
 /** `/status.features`: the houses' reads, `/status.houses` and the task kind `house` (`kind=house`, `known=house`). */
 export const HOUSE_FEATURE: HouseFeature = 'house';
@@ -3911,6 +3931,11 @@ export interface LiveHouses {
     estimate?: LiveHouseEstimate;
     /** Map layers whose bbox holds a town of the tree's houses (part 2). */
     layers?: LiveHouseLayer[];
+    /**
+     * spec 145 T1: the research's setting "Also the look of the houses" (switched only in the research's menu);
+     * absent: not said (an archive, an older research).
+     */
+    look?: boolean;
 }
 
 const houseCount = (v: unknown): number => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10_000_000 ? v : 0);
@@ -3989,6 +4014,7 @@ export function sanitizeLiveHouses(value: unknown): LiveHouses | null {
     return {
         on: r.on, rev: r.rev, counts: { done: n(c.done), running: n(c.running), queued: n(c.queued), waiting: n(c.waiting), held: n(c.held) },
         ...(auto ? { auto } : {}), ...(estimate ? { estimate } : {}), ...(layers?.length ? { layers } : {}),
+        ...(typeof r.look === 'boolean' ? { look: r.look } : {}),
     };
 }
 

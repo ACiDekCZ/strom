@@ -62,14 +62,15 @@ interface FakeMap {
     layers?: Record<string, unknown>[];
 }
 
-async function setup(page: Page, opts: { state?: string; empty?: boolean; recent?: boolean; map?: FakeMap } = {}): Promise<FakeHouses> {
+async function setup(page: Page, opts: { state?: string; empty?: boolean; recent?: boolean; map?: FakeMap; features?: string[];
+    extra?: Record<string, unknown> } = {}): Promise<FakeHouses> {
     await page.clock.setFixedTime(new Date('2027-03-20T10:30:00Z'));
     const houses: FakeHouses = { confirms: [] };
     const listRow = row(opts.state ? { state: opts.state } : {});
     const full = (): Record<string, unknown> => ({ ...result(), ...(opts.map?.location ? { location: opts.map.location } : {}),
-        ...(opts.map?.maps ? { maps: opts.map.maps } : {}) });
+        ...(opts.map?.maps ? { maps: opts.map.maps } : {}), ...opts.extra });
     await fakeBridge(page, {
-        features: FEATURES, links: LINKS,
+        features: opts.features ?? FEATURES, links: LINKS,
         statusExtra: { houses: { on: false, rev: 'r1', counts: { done: 1, running: 0, queued: 0, waiting: 0, held: 0 },
             ...(opts.map?.layers ? { layers: opts.map.layers } : {}) } },
     });
@@ -265,6 +266,25 @@ test.describe('The house page', () => {
         await expect(page.locator('#houses-modal')).toHaveClass(/active/);
     });
 
+    // spec 145 T2: with `house.chat` the agent's chat about the house, after the house's action, before Attach material…
+    // (without it the item is missing: the test above).
+    test('the ⋯ menu with house.chat: "Discuss with the agent" with AI and the terminal, its link do=chat', async ({ page }) => {
+        await setup(page, { features: [...FEATURES, 'house.chat'] });
+        await openFromHouses(page);
+        const win = pageWin(page);
+        await win.locator('.pp-more').click();
+        const menu = win.locator('.pp-menu');
+        await expect(menu.locator('.pp-menu-item:visible')).toHaveText(['Open in the book…', 'House name…', /^Request again…/,
+            /^Discuss with the agent/, 'Attach material…', /^Take over research from a file…/, 'Merge with another house…']);
+        const chat = menu.locator('[data-hp-menu="chat"]');
+        await expect(chat.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(chat.locator('.research-open-mark')).toHaveCount(1);
+        await chat.click();
+        await expect(menu).toBeHidden();
+        await expect.poll(() => links(page)).toHaveLength(1);
+        expect((await links(page))[0]).toMatch(/^strom-research[a-z0-9-]*:\/\/house\?tree=[^&]+&house=belokamen%7C16&do=chat$/);
+    });
+
     test('a queued house: the tree\'s residents and the queue\'s sentence', async ({ page }) => {
         await setup(page, { state: 'queued', empty: true });
         await page.evaluate(k => window.Strom.UI.openHousePage(k), KEY);
@@ -393,6 +413,49 @@ test.describe('The house page', () => {
         await expect(map.locator('.hmap-pos-t')).toHaveText('Location uncertain (the number may have changed)');
         expect(await houseData()).toEqual([]);
     });
+});
+
+// 1127 (Milan: "the role wraps, it does not look nice"): Role / How and When keep their words whole and take their
+// content's width, the name the rest; German's longest roles, long names, nothing wider than the page.
+test.describe('The house page\'s tables', () => {
+    const LONG = 'Maximilian Kunibert Fíšek-Stranný z Horního Bělokamene';
+    const residents = ['farmer', 'retired', 'lodger', 'servant', 'tenant', 'other'].map((role, i) => ({
+        id: `r${i}`, name: `${LONG} ${i + 1}`, role, from: String(1820 + i * 10), to: String(1850 + i * 10), sources: [] }));
+    const holders = ['purchase', 'inheritance', 'marriage', 'auction', 'allotment', 'handover'].map((how, i) => ({
+        id: `h${i}`, name: `${LONG} ${i + 1}`, how, from: String(1800 + i * 15), to: String(1815 + i * 15), sources: [] }));
+
+    for (const width of [1440, 1024, 390]) {
+        test(`${width} px, German: each role and each When on one line, the table no wider than the page`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 900 });
+            await setup(page, { extra: { holders, residents } });
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            await page.evaluate(k => window.Strom.UI.openHousePage(k), KEY);
+            const win = pageWin(page);
+            await expect(win.locator('#hp-sec-people td.hp-role').first()).toHaveText('Kauf');
+            const r = await page.evaluate(() => {
+                const lines = (td: Element): number => {
+                    const range = document.createRange();
+                    range.selectNodeContents(td);
+                    return new Set([...range.getClientRects()].map(x => Math.round(x.top))).size;
+                };
+                const cells = [...document.querySelectorAll('#house-page-modal #hp-sec-people td.hp-role, #house-page-modal #hp-sec-people td.hp-y')];
+                const body = document.querySelector('#house-page-modal .pp-body') as HTMLElement;
+                const tables = [...document.querySelectorAll<HTMLElement>('#house-page-modal .hp-table')];
+                return {
+                    cells: cells.length,
+                    wrapped: cells.filter(td => td.textContent && lines(td) !== 1).map(td => td.textContent),
+                    tableWide: tables.filter(t => t.scrollWidth > t.parentElement!.clientWidth + 1).length,
+                    body: body.scrollWidth <= body.clientWidth,
+                    doc: document.documentElement.scrollWidth <= window.innerWidth,
+                };
+            });
+            expect(r.cells).toBe(24);
+            expect(r.wrapped).toEqual([]);
+            expect(r.tableWide).toBe(0);
+            expect(r.body).toBe(true);
+            expect(r.doc).toBe(true);
+        });
+    }
 });
 
 test.describe('The house page on a phone', () => {

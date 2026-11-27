@@ -493,6 +493,8 @@ export const housePageMethods = uiModule({
             b ? [
                 // The house's action, as beside its state (houseActionOf): ask, move to the top, ask again.
                 ((a) => a ? item(`act-${a.action}`, a.html, false, true) : '')(this.houseActionNow(house, 14)),
+                // spec 145 T2: the agent's chat about the house, only with `house.chat`.
+                this.houseChatPossible() ? item('chat', this.houseChatLabel(), false, true) : '',
                 houseFeature(b.features, 'house.material') ? item('attach', H.attach) : '',
                 houseFeature(b.features, 'house.import') && researchDeviceAllows('house')
                     ? item('import', researchActionLabel(H.import, researchLinkMark('house', { houseDo: 'import' })), false, true) : '',
@@ -539,6 +541,7 @@ export const housePageMethods = uiModule({
                 overlayEl()?.querySelector<HTMLElement>('.pp-more'));
             return;
         }
+        if (key === 'chat') { this.openHouseChat(house, el); return; }
         if (key === 'attach') { this.showHouseMaterialDialog(house); return; }
         if (key === 'import') {
             const b = this.houseResearchBridge();

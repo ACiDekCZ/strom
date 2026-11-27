@@ -893,8 +893,9 @@ export const researchTreeSettingsMethods = uiModule({
      * Spec 030 §6 (K6.1): "House history" under Census records — only with `house.auto` (not in an archive nor a
      * research waiting for its agent, like census records). Off: the estimate of what the setting gives the agent
      * (`/status.houses.auto` + `estimate`; the price only once measured); on: the tasks by state and "Houses ›"
-     * (the open tree only); switched off with tasks set aside: how many. Without the bridge inactive with its
-     * sentence. No mark: the write goes through the bridge, no terminal.
+     * (the open tree only) and, when the research says it (`houses.look`, spec 145 T1), whether the look of the houses
+     * is researched too — only said, switched in the research's terminal; switched off with tasks set aside: how many.
+     * Without the bridge inactive with its sentence. No mark: the write goes through the bridge, no terminal.
      */
     renderResearchHousesRow(): void {
         const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-houses-host`);
@@ -928,6 +929,7 @@ export const researchTreeSettingsMethods = uiModule({
             </label>
             ${atRest ? `<p class="research-houses-st" id="research-houses-st"><span>${esc(housesAutoSummary(said!.counts))}</span>${openable
                 ? `<button type="button" class="link-button research-houses-open" id="research-houses-open">${esc(a.housesLink)}</button>` : ''}</p>` : ''}
+            ${atRest && said!.look !== undefined ? `<p class="research-stories-note research-houses-look" id="research-houses-look"><span>${esc(said!.look ? a.lookOn : a.lookOff)}</span></p>` : ''}
             ${note ? `<p class="research-stories-note research-houses-note" id="research-houses-note"><span>${esc(note)}</span></p>` : ''}`;
         const input = host.querySelector<HTMLInputElement>('#research-houses-on');
         input?.addEventListener('change', () => {

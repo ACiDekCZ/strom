@@ -129,6 +129,30 @@ test.describe('House history: Research for this tree', () => {
         await expect(note(page)).toHaveText('Postponed: 3 house tasks. They return when turned on.');
     });
 
+    // spec 145 T1: "Also the look of the houses" only said (switched in the research's terminal), only while on.
+    test('on: the look of the houses said in one quiet line, on or off with where it changes; nothing without the field or while off', async ({ page }) => {
+        const auto: FakeAuto = { houses: { ...state(true), look: true }, posts: [], replies: [] };
+        const bridge = await setup(page, auto, [...FEATURES, 'house.look']);
+        await openTreeSettings(page);
+        const look = page.locator('#research-houses-look');
+        await expect(look).toHaveText('Also the look of the houses: on');
+        await expect(row(page).locator('#research-houses-look input, #research-houses-look button')).toHaveCount(0);
+        const again = async (houses: Record<string, unknown>): Promise<void> => {
+            bridge.statusExtra!.houses = houses;
+            await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
+            await poll(page);
+            await openTreeSettings(page);
+            await expect(toggle(page)).toHaveCount(1);
+        };
+        await again({ ...state(true), look: false });
+        await expect(look).toHaveText('Also the look of the houses: off – changed in the research terminal: Settings → History of the houses.');
+        await again(state(true));
+        await expect(look).toHaveCount(0);
+        await again({ ...state(false), look: true });
+        await expect(toggle(page)).not.toBeChecked();
+        await expect(look).toHaveCount(0);
+    });
+
     test('a refusal (503) says why under the row, the switch as it was; without the bridge it rests', async ({ page }) => {
         const auto: FakeAuto = { houses: state(false), posts: [], replies: [{ status: 503, body: { error: 'Busy.', code: 'research.busy' } }] };
         const bridge = await setup(page, auto);

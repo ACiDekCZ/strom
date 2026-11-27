@@ -10,7 +10,7 @@ import {
     batchDoneHouse, clearHouseCaches, confirmHouse, fetchHouse, fetchHouses, houseCache, houseFeature, houseMaterialBody, houseStatus,
     houseRequestWith, houseWriteReply, moveHouseToTop, requestHouse, sanitizeHouseResearch, sanitizeHouseRow, sendHouseMaterial, setHousesAuto,
 } from '../house-bridge.js';
-import { houseSearchLink, researchLinkActionOf, researchUrlMark, sanitizeLiveHouses, sanitizeLiveStatus } from '../research-link.js';
+import { houseChatLink, houseSearchLink, researchLinkActionOf, researchUrlMark, sanitizeLiveHouses, sanitizeLiveStatus } from '../research-link.js';
 
 const BASE = 'http://127.0.0.1:4711/t0k3n';
 const REV = 'f247ecdcdd1b5980';
@@ -269,6 +269,15 @@ describe('part 2: /status.houses', () => {
         expect(h.estimate).toEqual({ houses: 1, towns: 1, minutes: 50, measured: false, perHouse: { minutes: 30 }, perTown: { minutes: 20 } });
     });
 
+    it('reads the look of the houses (spec 145 T1): true, false, or not said', () => {
+        const base = { on: true, rev: REV, counts: { done: 0, running: 0, queued: 0, waiting: 0, held: 0 } };
+        expect(sanitizeLiveHouses({ ...base, look: true })!.look).toBe(true);
+        expect(sanitizeLiveHouses({ ...base, look: false })!.look).toBe(false);
+        expect(sanitizeLiveHouses(base)!).not.toHaveProperty('look');
+        expect(sanitizeLiveHouses({ ...base, look: 'yes' })!).not.toHaveProperty('look');
+        expect(houseFeature(['house', 'house.look', 'house.chat'], 'house.look')).toBe(true);
+    });
+
     it('an archive or a research waiting for its agent: exactly on, rev and counts — nothing more', () => {
         const h = sanitizeLiveHouses({ on: false, rev: REV, counts: { done: 0, running: 0, queued: 0, waiting: 0, held: 0 } })!;
         expect(h).toEqual({ on: false, rev: REV, counts: { done: 0, running: 0, queued: 0, waiting: 0, held: 0 } });
@@ -329,6 +338,12 @@ describe('part 2: a request of a house', () => {
         expect(houseSearchLink(TREE, 'belokamen')).toBeNull();
         expect(houseSearchLink(TREE, 'belokamen|16,17')).toBeNull();
         expect(houseSearchLink('not a tree', 'belokamen|16')).toBeNull();
+    });
+
+    it('reads a chat link back as its action (spec 145 T2), a chat with `with` is no link of ours', () => {
+        const link = houseChatLink(TREE, 'belokamen|16')!;
+        expect(researchLinkActionOf(link)).toEqual({ link: 'house', params: { house: 'belokamen|16', houseDo: 'chat' } });
+        expect(researchLinkActionOf(`${link}&with=belokamen%7C4`)).toBeNull();
     });
 
     it('sends with at most two more houses, without the house itself or a repeat', async () => {

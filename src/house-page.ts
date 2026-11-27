@@ -559,7 +559,7 @@ function holdersTable(c: Ctx): string {
         const how = h.item.how ? esc(P.how[h.item.how]) : '';
         const origin = h.item.origin === 'import' ? ` ${tag('own', P.origin.own)}` : '';
         rows.push(`<tr><td class="hp-nmc">${holderName(c, h.item, h.personId, h.living)}</td>`
-            + `<td class="hp-y">${h.noYears ? '' : esc(yearsSpan(c, h.item.from, h.item.to))}</td><td>${how}${origin}</td></tr>`);
+            + `<td class="hp-y">${h.noYears ? '' : esc(yearsSpan(c, h.item.from, h.item.to))}</td><td class="hp-role">${how}${origin}</td></tr>`);
     }
     return `<h3 class="hp-h3">${esc(P.holders)}</h3><table class="hp-table"><thead><tr><th>${esc(P.colHolder)}</th><th>${esc(P.colWhen)}</th>`
         + `<th>${esc(P.colHow)}</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
@@ -570,7 +570,7 @@ function residentsTable(c: Ctx): string {
     const list = residentsOf(c);
     if (!list.length) return '';
     const rows = list.map(r => `<tr><td class="hp-nmc">${holderName(c, r.item, r.personId, r.living)}</td>`
-        + `<td>${r.item.role ? esc(P.role[r.item.role]) : ''}</td>`
+        + `<td class="hp-role">${r.item.role ? esc(P.role[r.item.role]) : ''}</td>`
         + `<td class="hp-y">${r.noYears ? '' : esc(yearsSpan(c, r.item.from, r.item.to))}</td></tr>`).join('');
     return `<div class="hp-h3-row"><h3 class="hp-h3">${esc(P.residents)}</h3><span class="hp-sec-note">${esc(P.notOwner)}</span></div>`
         + `<table class="hp-table"><thead><tr><th>${esc(P.colResident)}</th><th>${esc(P.colRole)}</th><th>${esc(P.colWhen)}</th></tr></thead>`

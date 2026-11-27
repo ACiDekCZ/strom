@@ -13433,8 +13433,13 @@ const stringsEN = {
             held: (n: number) => n === 1
                 ? 'Postponed: 1 house task. It returns when turned on.'
                 : `Postponed: ${n} house tasks. They return when turned on.`,
+            // spec 145 T1: the research's setting, only said (switched in the research's own menu).
+            lookOn: 'Also the look of the houses: on',
+            lookOff: 'Also the look of the houses: off – changed in the research terminal: Settings → History of the houses.',
         },
         answer: 'Answer',
+        // spec 145 T2: the agent's chat about the house in the research's terminal.
+        discuss: 'Discuss with the agent',
         attach: 'Attach material…',
         attachTitle: 'Attach material to the house',
         drop: 'An image, PDF or text – drag here, or',
@@ -26406,8 +26411,11 @@ const stringsCZ: StringsType = {
             confirmOffTitle: 'Vypnout historii domů?',
             confirmOff: 'Čekající úkoly domů se odloží, hotové výsledky zůstanou.',
             held: (n: number) => `Odloženo: ${nCs(n, 'úkol', 'úkoly', 'úkolů')} domů. Po zapnutí se vrátí.`,
+            lookOn: 'I podoba domů: zapnuto',
+            lookOff: 'I podoba domů: vypnuto – mění se v terminálu výzkumu: Nastavení → Historie domů.',
         },
         answer: 'Odpovědět',
+        discuss: 'Probrat s agentem',
         attach: 'Přiložit materiál…',
         attachTitle: 'Přiložit materiál k domu',
         drop: 'Obrázek, PDF nebo text – přetažením sem, nebo',
@@ -39285,8 +39293,11 @@ const stringsDE: StringsType = {
             held: (n: number) => n === 1
                 ? 'Zurückgestellt: 1 Hausauftrag. Nach dem Einschalten kehrt er zurück.'
                 : `Zurückgestellt: ${n} Hausaufträge. Nach dem Einschalten kehren sie zurück.`,
+            lookOn: 'Auch das Aussehen der Häuser: ein',
+            lookOff: 'Auch das Aussehen der Häuser: aus – änderbar im Terminal der Forschung: Einstellungen → Geschichte der Häuser.',
         },
         answer: 'Antworten',
+        discuss: 'Mit Agent besprechen',
         attach: 'Material anhängen…',
         attachTitle: 'Material zum Haus anhängen',
         drop: 'Bild, PDF oder Text – hierher ziehen oder',

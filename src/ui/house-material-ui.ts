@@ -11,7 +11,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { houseTitle, type TreeHouse } from '../houses.js';
 import { formatPlaceDate } from '../place-identity.js';
 import { fetchHouse, houseFeature, sendHouseMaterial, type HouseMaterial, type HouseMaterialBody, type HouseResearch, type HouseWriteResult } from '../house-bridge.js';
-import { houseImportLink, researchDeviceAllows, researchLinkMark } from '../research-link.js';
+import { houseChatLink, houseImportLink, researchDeviceAllows, researchLinkMark } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { showToast } from './toast.js';
@@ -80,7 +80,8 @@ const formatSize = (n: number, lang: string): string => n >= 1024 * 1024
 export const houseMaterialMethods = uiModule({
     /**
      * The research's rows of a row's ⋯ menu: the house's action (houseActionOf, as in its detail: ask, move to the
-     * top, ask again; any house of the tree) and "Attach material…" with `house.material`. `opener`: the focus back.
+     * top, ask again; any house of the tree), "Discuss with the agent" with `house.chat` and "Attach material…" with
+     * `house.material`. `opener`: the focus back.
      */
     houseMenuResearchItems(house: TreeHouse, opener?: HTMLElement | null): HouseMenuItem[] {
         const b = this.houseResearchBridge();
@@ -88,6 +89,7 @@ export const houseMaterialMethods = uiModule({
         const items: HouseMenuItem[] = [];
         const act = this.houseActionNow(house, 14);
         if (act) items.push({ key: `act-${act.action}`, label: '', html: act.html, run: () => this.runHouseAction(house, act.action, opener) });
+        if (this.houseChatPossible()) items.push({ key: 'chat', label: '', html: this.houseChatLabel(), run: () => this.openHouseChat(house) });
         if (houseFeature(b.features, 'house.material')) items.push({ key: 'attach', label: strings.houses.attach, run: () => this.showHouseMaterialDialog(house) });
         return items;
     },
@@ -145,6 +147,27 @@ export const houseMaterialMethods = uiModule({
         const acts = attach || imp ? `<div class="house-research-acts">${attach}${imp}</div>` : '';
         const note = canImport ? `<p class="house-research-note">${esc(s.importNote)}</p>` : '';
         return list + acts + note;
+    },
+
+    /**
+     * Spec 145 T2: "Discuss with the agent" — only when the research says `house.chat` (it has its agent) and not on a
+     * device of the home network (like the house's other terminal links); a read-only tree keeps it as the research allows.
+     */
+    houseChatPossible(): boolean {
+        const b = this.houseResearchBridge();
+        return !!b && houseFeature(b.features, 'house.chat') && researchDeviceAllows('house');
+    },
+
+    /** The label of "Discuss with the agent" with its mark (AI + terminal). */
+    houseChatLabel(): string {
+        return researchActionLabel(strings.houses.discuss, researchLinkMark('house', { houseDo: 'chat' }), { size: 14 });
+    },
+
+    /** Opens the agent's chat about the house in the research's terminal (`do=chat`, the house by its key). */
+    openHouseChat(house: TreeHouse, el?: HTMLElement | null): void {
+        const b = this.houseResearchBridge();
+        const url = b && this.houseChatPossible() ? houseChatLink(b.researchId, this.houseRequestKey(house), announcedResearchScheme()) : null;
+        if (url) void this.launchResearchLink(url, 'terminal', el);
     },
 
     /** A click on the detail's links: true when handled. */

@@ -61,8 +61,12 @@ export const HOUSE_PAGE_CSS = `
 /* holders and residents */
 .hp .hp-table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .hp .hp-table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--text-light); padding: 4px 10px 6px 0; border-bottom: 1px solid var(--border); }
-.hp .hp-table td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--divider); vertical-align: top; overflow-wrap: anywhere; }
-.hp .hp-table td.hp-y { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-light); }
+/* Only the first column (name, description) breaks anywhere and takes the rest; When and Role / How keep their words
+   whole and take their content's width (1127: "nájem|ník" no more). */
+.hp .hp-table td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--divider); vertical-align: top; }
+.hp .hp-table td:first-child { overflow-wrap: anywhere; }
+.hp .hp-table td.hp-y { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-light); width: 1%; }
+.hp .hp-table td.hp-role { white-space: nowrap; width: 1%; }
 .hp .hp-table td.hp-unk { font-style: italic; color: var(--text-faint); }
 .hp .hp-ext-rl { color: var(--text-faint); font-size: 12.5px; }
 
@@ -153,7 +157,8 @@ export const HOUSE_PAGE_CSS = `
     .hp .hp-table, .hp .hp-table tbody, .hp .hp-table tr, .hp .hp-table td { display: block; width: auto; }
     .hp .hp-table tr { padding: 7px 0; border-bottom: 1px solid var(--divider); }
     .hp .hp-table td { padding: 0; border: 0; }
-    .hp .hp-table td.hp-y { white-space: normal; font-size: 13px; }
+    .hp .hp-table td.hp-y { font-size: 13px; width: auto; }
+    .hp .hp-table td.hp-role { white-space: normal; width: auto; }
     .hp .hp-srcs { grid-template-columns: minmax(0, 1fr); }
     .hp .hmap { height: 240px; }
     .pp-body .hp .hmap { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; }

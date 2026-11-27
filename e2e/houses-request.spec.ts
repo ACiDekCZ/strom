@@ -280,6 +280,26 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         await expect.poll(() => houses.requests).toEqual([{ house: 'belokamen|4' }]);
     });
 
+    // spec 145 T2: the agent's chat about the house only with `house.chat` (without it missing: the tests above).
+    test('⋯ menu with house.chat: "Discuss with the agent" after the action, AI and the terminal, do=chat; a house the research does not know by the tree\'s key', async ({ page }) => {
+        await setup(page, { features: [...HOUSE, 'house.chat'] });
+        await openRowMenu(page);
+        await expect(menuItems(page)).toHaveText(['House page', /^Find the house history…/, /^Discuss with the agent/, 'Attach material…',
+            'Merge with another house…']);
+        const chat = page.locator('.houses-menu [role="menuitem"][data-action="chat"]');
+        await expect(chat.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(chat.locator('.research-open-mark')).toHaveCount(1);
+        await chat.click();
+        await expect.poll(() => links(page)).toHaveLength(1);
+        expect((await links(page))[0]).toMatch(/^strom-research[a-z0-9-]*:\/\/house\?tree=[^&]+&house=belokamen%7C16&do=chat$/);
+        await page.evaluate(() => window.Strom.UI.closeHousesWindow(false));
+        // Anna's čp. 4: no row of the research.
+        await openRowMenu(page, 'belokamen|4', true);
+        await page.locator('.houses-menu [role="menuitem"][data-action="chat"]').click();
+        await expect.poll(() => links(page)).toHaveLength(2);
+        expect((await links(page))[1]).toMatch(/&house=belokamen%7C4&do=chat$/);
+    });
+
     test('the house page\'s ⋯ menu: the same action', async ({ page }) => {
         const houses = await setup(page, { on: true });
         await page.evaluate(k => window.Strom.UI.openHousePage(k), KEY);

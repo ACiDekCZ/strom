@@ -10,7 +10,7 @@ import {
     RESEARCH_LINK_ACTIONS, RESEARCH_LINK_MARKS, RESEARCH_ACTION_MARKS, researchLinkMark, researchUrlMark, researchSchemeUrl,
     RESEARCH_BRIDGE_ACTIONS, RESEARCH_BRIDGE_MARKS, researchBridgeMark, setResearchDeviceState, researchDeviceAllows,
     researchDeviceMark, deviceAllows, deviceActionOfBridgeWrite, noteResearchDeviceRefused, researchDeviceLinkAllows,
-    researchDeviceAgentLink, DEVICE_AGENT_START, DEVICE_AGENT_BRIDGE, houseImportLink, houseSearchLink,
+    researchDeviceAgentLink, DEVICE_AGENT_START, DEVICE_AGENT_BRIDGE, houseImportLink, houseSearchLink, houseChatLink,
 } from '../research-link.js';
 import { researchActionLabel, researchBridgeActionLabel, researchBridgeAgentLabel, researchLinkFlags } from '../ui/research-open-mark.js';
 import { syncActionMark } from '../ui/research-sync-ui.js';
@@ -71,6 +71,20 @@ describe('the map of research actions to their marks', () => {
         expect(researchLinkFlags(search)).toEqual({ research: true, ai: true });
         expect(researchSchemeUrl('house', { tree: TREE, houseDo: 'search' })).toBeNull();
         expect(researchSchemeUrl('house', { tree: TREE, houseDo: 'import', house: 'belokamen|16' })).toBeNull();
+    });
+
+    it('marks talking a house over with the agent (spec 145 T2): AI + terminal, one house, no with', () => {
+        expect(researchLinkMark('house', { houseDo: 'chat' })).toBe('agent');
+        const chat = houseChatLink(TREE, 'belokamen|16')!;
+        expect(chat).toBe(`strom-research://house?tree=${TREE}&house=belokamen%7C16&do=chat`);
+        expect(researchUrlMark(chat)).toBe('agent');
+        expect(researchLinkFlags(chat)).toEqual({ research: true, ai: true });
+        expect(houseChatLink(TREE, 'belokamen|16', 'strom-research-beta')).toBe(`strom-research-beta://house?tree=${TREE}&house=belokamen%7C16&do=chat`);
+        // Always one house: a chat with `with` is refused, as is one without a house.
+        expect(researchSchemeUrl('house', { tree: TREE, house: 'belokamen|16', houseDo: 'chat', houseWith: ['belokamen|4'] })).toBeNull();
+        expect(researchSchemeUrl('house', { tree: TREE, houseDo: 'chat' })).toBeNull();
+        expect(houseChatLink(TREE, 'belokamen')).toBeNull();
+        expect(houseChatLink('not a tree', 'belokamen|16')).toBeNull();
     });
 
     it('marks the state block\'s actions by the link they launch', () => {
