@@ -195,7 +195,7 @@ const TEXT: Record<HousesLang, HousesText> = {
 type J = Record<string, unknown>;
 export interface HousesCtx {
   lang: HousesLang;
-  /** strom in the demo research (build-demo.ts), its JSON answer: as the person (no agent's mark). */
+  /** strom in the demo research (build-demo.ts), its JSON answer (the data itself, no envelope): as the person (no agent's mark). */
   strom: (...args: string[]) => J;
   /** strom as the agent runs it (STROM_IN_AGENT): what the research writes of a house is the research's (origin research). */
   agent: (...args: string[]) => J;
@@ -240,7 +240,7 @@ export function addHouses(c: HousesCtx): { mill: string; other: string } {
   resi("petr", "1935", other);
 
   // the person's word: look for the mill's history (its municipality's skeleton first) — only a person's run
-  const asked = c.consent ? (person("house", "request", ...mill, "--yes").data ?? {}) as { task?: string; town?: string } : {};
+  const asked = c.consent ? person("house", "request", ...mill, "--yes") as { task?: string; town?: string } : {};
   const session = (task: string | undefined, work: () => void, result: string, summary: string, next: string) => {
     if (!task) return work();
     person("session", "start", task);
@@ -289,7 +289,7 @@ export function addHouses(c: HousesCtx): { mill: string; other: string } {
 
   // the house of the other village: asked for too, its task in the queue in its place (not first)
   if (c.consent) {
-    const o = (person("house", "request", ...other, "--yes").data ?? {}) as { task?: string; town?: string };
+    const o = person("house", "request", ...other, "--yes") as { task?: string; town?: string };
     for (const t of [o.town, o.task]) if (t) person("task", "order", t, "--default");
   }
   const list = (c.strom("house", "list").houses ?? []) as { id?: string; house: string; place: { name: string } }[];

@@ -14,7 +14,8 @@ function run(lang: HousesLang, consent: boolean, home: [number, number] = [49.5,
   const times: number[] = [];
   const any = new Proxy({}, { get: (_t, k) => (typeof k === "string" ? `X_${k}` : undefined) }) as Record<string, string>;
   const names = new Proxy({}, { get: (_t, k) => (typeof k === "string" ? [`/${k}/`, `Name ${k}`] : undefined) }) as Record<string, [string, string]>;
-  const answer = (args: string[]) => (args[0] === "house" && args[1] === "request" ? { status: "ok", data: { task: "T0100", town: "T0099" } } : { status: "ok", data: {} });
+  // strom --json answers with the data itself (no envelope), as build-demo's strom() hands it on
+  const answer = (args: string[]) => (args[0] === "house" && args[1] === "request" ? { task: "T0100", house: "A0001", town: "T0099", asked: true } : {});
   addHouses({
     lang, consent, home, from: 15.48,
     strom: (...args) => { calls.push({ as: "person", args }); return answer(args) as never; },
