@@ -216,3 +216,136 @@ describe('house page — the saved file (K7.1, K3.3)', () => {
         expect(housePageFileName(houseOf(data, HOUSE_ID))).toBe('belokamen-cp-16.html');
     });
 });
+
+describe('house page — the building (spec 145 T1)', () => {
+    const TOWN = { id: 'A0002', place: { id: 'L0001', name: 'Bělokamen' }, text: '', passed: [], manual: [], archiveOnly: [], maps: [], unknown: [] };
+    const section = (html: string): string => {
+        const at = html.indexOf('id="hp-sec-look"');
+        return at < 0 ? '' : html.slice(at, html.indexOf('</section>', at));
+    };
+    const count = (html: string, text: string): number => html.split(text).length - 1;
+
+    /** The full look: its text, a picture of the house, the town's pictures and field names, the check: a source. */
+    function fullLook(): HouseResearch {
+        const r = fullResearch();
+        r.look = {
+            text: 'Zděné přízemní stavení se dvěma okny do návsi.', certainty: 'probable', origin: 'research',
+            images: [{ url: 'https://example.org/dum.jpg', license: 'CC BY 4.0', credit: 'Archiv Brodek' }],
+        };
+        r.lookCheck = { next: 'source', text: 'pozemková kniha popisuje stavení podrobněji', task: 'T0002', at: '2026-11-27', origin: 'research' };
+        r.lookTask = true;
+        r.state = 'queued';
+        r.town = {
+            ...TOWN,
+            pictures: [{ id: 'i1', url: 'https://commons.example.org/naves.jpg', license: 'CC BY-SA 4.0', credit: 'Jan Brodský', shows: 'Náves od kaple, 1912' }],
+            fieldNames: [
+                { id: 'f1', name: 'Na Skále', kind: 'samota' },
+                { id: 'f2', name: 'Prouzalův mlýn', kind: 'mlýn', house: '16', url: 'https://example.org/mlyn' },
+            ],
+        };
+        return r;
+    }
+
+    it('the full look: text with its tag, the house\'s picture, the town\'s pictures under their heading, field names, still researched', () => {
+        const data = dataWithSources();
+        const html = buildHousePage(data, houseOf(data, HOUSE_ID), fullLook(), 'app', { ...opts, look: true });
+        const look = section(html);
+        expect(look).toContain('Zděné přízemní stavení');
+        expect(look).toMatch(/hp-look">[^<]*<span class="hp-otag hp-otag--guess">probable</);
+        expect(look).toContain('<img class="hp-img" src="https://example.org/dum.jpg"');
+        // The town's pictures: what they show, author and licence, a link out, a lazy picture with no referrer.
+        expect(look).toContain('<h3 class="hp-h3">Pictures of the town</h3>');
+        expect(look).toMatch(/<img class="hp-img" src="https:\/\/commons\.example\.org\/naves\.jpg" alt="Náves od kaple, 1912" loading="lazy" referrerpolicy="no-referrer">/);
+        expect(look).toContain('Jan Brodský · CC BY-SA 4.0 · <a href="https://commons.example.org/naves.jpg" target="_blank" rel="noopener noreferrer">commons.example.org ↗</a>');
+        // The field names: this house's first and marked, its number, a link where there is one.
+        expect(look).toContain('<h3 class="hp-h3">Field names</h3>');
+        expect(look.indexOf('Prouzalův mlýn')).toBeLessThan(look.indexOf('Na Skále'));
+        expect(look).toMatch(/hp-fn--this"><span class="hp-fn"><a href="https:\/\/example\.org\/mlyn"[^>]*>Prouzalův mlýn ↗<\/a><\/span><span class="hp-ql-s">mlýn · at no\. 16</);
+        // The check: still researched, its task in the queue; no "not known".
+        expect(look).toContain('The look of the house is still being researched: pozemková kniha popisuje stavení podrobněji. Its task is in the research queue.');
+        expect(look).not.toContain('not known');
+        expect(look).not.toContain('house-attach');
+    });
+
+    it('the task of the look done: no more "still researched"', () => {
+        const data = dataWithSources();
+        const r = fullLook();
+        r.state = 'done';
+        const look = section(buildHousePage(data, houseOf(data, HOUSE_ID), r, 'app', { ...opts, look: true }));
+        expect(look).toContain('Zděné přízemní stavení');
+        expect(look).not.toContain('still being researched');
+    });
+
+    it('none: only the one item of what is not known (not the check\'s text), once on the page, Attach material… and the steps by hand', () => {
+        const data = dataWithSources();
+        const r = fullResearch();
+        r.look = undefined;
+        r.lookCheck = { next: 'none', text: 'žádný volný obrázek ani popis', at: '2026-11-27', origin: 'research' };
+        r.unknown.push({ id: 'u9', text: 'podoba: víc automaticky nejde – žádný volný obrázek ani popis', question: null, about: 'look' });
+        r.manual = [{ id: 'o1', what: 'Indikační skica k. ú. Bělokamen, list 2', url: 'https://archiv.example.org/skica', why: 'stáhnout a přiložit k domu' }];
+        const attach = '<button type="button" class="hp-mini house-attach">Attach material…</button>';
+        const html = buildHousePage(data, houseOf(data, HOUSE_ID), r, 'app', { ...opts, look: true, app: { lookAttachHtml: attach } });
+        const look = section(html);
+        expect(count(html, 'podoba: víc automaticky nejde')).toBe(1);
+        expect(look).toContain('podoba: víc automaticky nejde');
+        expect(look).not.toContain('What the house looked like is not known.');
+        expect(count(look, 'žádný volný obrázek ani popis')).toBe(1);
+        // The other unknown stays in What is not known.
+        expect(html.slice(html.indexOf('id="hp-sec-unknown"'))).toContain('Kdo dům držel 1912–1913?');
+        expect(look).toContain(attach);
+        expect(look).toContain('<a href="https://archiv.example.org/skica" target="_blank" rel="noopener noreferrer">Indikační skica k. ú. Bělokamen, list 2 ↗</a>');
+        expect(look).toContain('stáhnout a přiložit k domu');
+    });
+
+    it('a researched house without a look: the general sentence with house.look; nothing without it, nothing without a research', () => {
+        const data = dataWithSources();
+        const r = fullResearch();
+        r.look = undefined;
+        const attach = '<button type="button" class="hp-mini house-attach">Attach material…</button>';
+        const look = section(buildHousePage(data, houseOf(data, HOUSE_ID), r, 'app', { ...opts, look: true, app: { lookAttachHtml: attach } }));
+        expect(look).toContain('<p class="hp-note hp-look-unk">What the house looked like is not known.</p>');
+        expect(look).toContain(attach);
+        // Without the feature the section stays out; a house still at work says nothing either.
+        expect(section(buildHousePage(data, houseOf(data, HOUSE_ID), r, 'app', { ...opts, app: { lookAttachHtml: attach } }))).toBe('');
+        expect(section(buildHousePage(data, houseOf(data, HOUSE_ID), { ...r, state: 'running' }, 'app', { ...opts, look: true }))).toBe('');
+        expect(section(buildHousePage(data, houseOf(data, HOUSE_ID), null, 'app', { ...opts, look: true }))).toBe('');
+        // An older research's look shows without the feature.
+        expect(section(buildHousePage(data, houseOf(data, HOUSE_ID), fullResearch(), 'app', opts))).toContain('Zděné přízemní stavení');
+    });
+
+    it('the saved file: links instead of pictures, no buttons, no names of people', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(HOUSE_NOW);
+        try {
+            const data = dataWithSources();
+            const r = fullLook();
+            const doc = buildHousePageDocument(data, houseOf(data, HOUSE_ID), r, { ...opts, look: true, app: { lookAttachHtml: '<button class="house-attach">x</button>' } });
+            const look = section(doc);
+            expect(look).toContain('Pictures of the town');
+            expect(look).toContain('Náves od kaple, 1912');
+            expect(look).toContain('commons.example.org ↗');
+            expect(look).toContain('Prouzalův mlýn');
+            expect(doc).not.toMatch(/<img[^>]+src="https?:/);
+            expect(look).not.toContain('<button');
+            expect(doc).not.toContain(LIVING_NAME);
+            // The not known state in the file: its sentence, no button.
+            const none = fullResearch();
+            none.look = undefined;
+            const noneLook = section(buildHousePageDocument(data, houseOf(data, HOUSE_ID), none, { ...opts, look: true }));
+            expect(noneLook).toContain('What the house looked like is not known.');
+            expect(noneLook).not.toContain('<button');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('all four languages name the pictures and field names of the town', () => {
+        const data = dataWithSources();
+        const want = { cs: ['Obrázky obce', 'Pomístní jména', 'u čp. 16'], en: ['Pictures of the town', 'Field names', 'at no. 16'],
+            de: ['Bilder des Ortes', 'Flurnamen', 'bei Nr. 16'], pl: ['Obrazy miejscowości', 'Nazwy terenowe', 'przy nr 16'] } as const;
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            const look = section(buildHousePage(data, houseOf(data, HOUSE_ID), fullLook(), 'app', { ...opts, lang, look: true }));
+            for (const w of want[lang]) expect(look, `${lang}: ${w}`).toContain(w);
+        }
+    });
+});

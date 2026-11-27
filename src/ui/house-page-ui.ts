@@ -211,10 +211,13 @@ export const housePageMethods = uiModule({
         ].join('') : '';
         const stateHtml = b ? houseStateHtml(row, { lang, answer: true }) + this.houseActionHtml(house) : '';
         const layers = b ? houseStatus(this.researchStatusOf(b.researchId))?.layers ?? [] : [];
+        // Attach material… under a look not known (spec 145 T1): the same action, only for a tree that can be changed.
+        const lookAttach = b && canEdit && houseFeature(b.features, 'house.material')
+            ? `<button type="button" class="hp-mini house-attach">${esc(H.attach)}</button>` : '';
         const body = buildHousePage(data, house, research, 'app', {
-            lang, now: new Date(), research: !!b, state: row?.state ?? null, layers,
+            lang, now: new Date(), research: !!b, state: row?.state ?? null, layers, look: !!b && houseFeature(b.features, 'house.look'),
             app: {
-                stateHtml, materialActionsHtml: materialActions, canEdit,
+                stateHtml, materialActionsHtml: materialActions, lookAttachHtml: lookAttach, canEdit,
                 canConfirm: canEdit && !!b && houseFeature(b.features, 'house.confirm'),
             },
         });
@@ -449,6 +452,7 @@ export const housePageMethods = uiModule({
             const b = this.houseResearchBridge();
             const html = buildHousePageDocument(DataManager.getData(), house, this.housePageResearch(house), {
                 lang: getCurrentLanguage(), now: new Date(), research: !!b, state: b ? this.houseResearchRow(house)?.state ?? null : null,
+                look: !!b && houseFeature(b.features, 'house.look'),
                 layers: b ? houseStatus(this.researchStatusOf(b.researchId))?.layers ?? [] : [],
                 fontCss: appFontFaceCss([...POSTER_SERIF_FACES]),
             });

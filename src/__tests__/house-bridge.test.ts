@@ -435,3 +435,71 @@ describe('part 2: a house\'s result', () => {
         expect(sanitizeHouseResearch({ house: MILL })!.town).toMatchObject({ id: 'A0002' });
     });
 });
+
+describe('spec 145 T1: the look of a house', () => {
+    const TOWN = { id: 'A0002', place: { id: 'L0001', name: 'Bělokamen' }, passed: [], manual: [], archiveOnly: [], maps: [], unknown: [] };
+
+    it('reads the check of the look, the town\'s pictures with their licence and its field names', () => {
+        const h = sanitizeHouseResearch({
+            ...MILL, work: 'house', look: { text: 'Zděné stavení', certainty: 'medium', origin: 'research', images: [] },
+            lookCheck: { next: 'source', text: 'pramen popisuje stavení podrobněji', task: 'T0002', at: '2026-11-27T10:00:00Z', origin: 'research' },
+            unknown: [{ id: 'u1', text: 'podoba: víc automaticky nejde', question: null, about: 'look' }, { id: 'u2', text: 'Kdo?', about: 'other' }],
+            passed: [{ id: 'p1', what: 'prošlo: matriky, pozemková kniha', checklist: true }, { id: 'p2', what: 'Kronika', checklist: 'yes' }],
+            town: {
+                ...TOWN,
+                pictures: [
+                    { id: 'i1', url: 'https://commons.example.org/naves.jpg', license: 'CC BY-SA 4.0', credit: 'Jan Brodský', shows: 'náves s čp. 16', origin: 'research' },
+                    { id: 'i2', url: 'https://commons.example.org/bez.jpg', shows: 'bez licence' },
+                    { id: 'i3', url: 'javascript:alert(1)', license: 'CC0', shows: 'špatná adresa' },
+                    { id: 'i4', url: 'https://commons.example.org/x.jpg', license: 'CC0' },
+                ],
+                fieldNames: [
+                    { id: 'f1', name: 'Prouzalův mlýn', kind: 'mlýn', lat: 49.61, lon: 15.22, house: '16', url: 'https://example.org/mlyn', source: 'S0041', origin: 'research' },
+                    { id: 'f2', name: 'Na Skále', lat: 200, lon: 15 },
+                    { id: 'f3', kind: 'samota' },
+                ],
+            },
+        })!;
+        expect(h.look).toEqual({ text: 'Zděné stavení', certainty: 'medium', origin: 'research', images: [] });
+        expect(h.lookTask).toBeUndefined();
+        expect(h.lookCheck).toEqual({ next: 'source', text: 'pramen popisuje stavení podrobněji', task: 'T0002', at: '2026-11-27T10:00:00Z', origin: 'research' });
+        expect(h.unknown).toEqual([
+            { id: 'u1', text: 'podoba: víc automaticky nejde', question: null, about: 'look' },
+            { id: 'u2', text: 'Kdo?', question: null },
+        ]);
+        expect(h.passed).toEqual([{ id: 'p1', what: 'prošlo: matriky, pozemková kniha', checklist: true }, { id: 'p2', what: 'Kronika' }]);
+        // A picture without its licence, its web address or what it shows is left out.
+        expect(h.town!.pictures).toEqual([
+            { id: 'i1', url: 'https://commons.example.org/naves.jpg', license: 'CC BY-SA 4.0', credit: 'Jan Brodský', shows: 'náves s čp. 16', origin: 'research' },
+        ]);
+        // A field name keeps a point only when it is one; without a name it is left out.
+        expect(h.town!.fieldNames).toEqual([
+            { id: 'f1', name: 'Prouzalův mlýn', kind: 'mlýn', lat: 49.61, lon: 15.22, house: '16', url: 'https://example.org/mlyn', source: 'S0041', origin: 'research' },
+            { id: 'f2', name: 'Na Skále' },
+        ]);
+    });
+
+    it('an unknown next or a check without its text is none; empty or missing lists are none', () => {
+        const h = sanitizeHouseResearch({ ...MILL, lookCheck: { next: 'later', text: 'x' }, town: { ...TOWN, pictures: [], fieldNames: 'no' } })!;
+        expect(h.lookCheck).toBeUndefined();
+        expect(sanitizeHouseResearch({ ...MILL, lookCheck: { next: 'none' } })!.lookCheck).toBeUndefined();
+        expect(h.town).not.toHaveProperty('pictures');
+        expect(h.town).not.toHaveProperty('fieldNames');
+        // A research that does not know the look loses nothing.
+        const old = sanitizeHouseResearch({ ...MILL, town: TOWN })!;
+        expect(old).not.toHaveProperty('lookCheck');
+        expect(old).not.toHaveProperty('lookTask');
+        expect(old.town).toMatchObject({ id: 'A0002' });
+    });
+
+    it('the task of the look: work house with look true in the row and in the detail', () => {
+        expect(sanitizeHouseRow({ ...QUEUED_ROW, work: 'house', look: true })).toMatchObject({ work: 'house', look: true });
+        expect(sanitizeHouseRow({ ...QUEUED_ROW, work: 'house', look: 'yes' })).not.toHaveProperty('look');
+        expect(sanitizeHouseRow({ ...QUEUED_ROW, work: 'town', look: true })).not.toHaveProperty('look');
+        expect(sanitizeHouseRow(QUEUED_ROW)).not.toHaveProperty('look');
+        const h = sanitizeHouseResearch({ ...MILL, state: 'queued', work: 'house', look: true })!;
+        expect(h).toMatchObject({ work: 'house', lookTask: true });
+        // `look: true` is the task's flag, not a look.
+        expect(h.look).toBeUndefined();
+    });
+});

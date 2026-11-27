@@ -458,6 +458,91 @@ test.describe('The house page\'s tables', () => {
     }
 });
 
+// spec 145 T1: The building with the look of the house, the town's pictures and field names, the check of the look;
+// a look not known says so once, with Attach material… and the step by hand.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+const LOOK_FULL = {
+    look: { text: 'Zděné přízemní stavení se dvěma okny do návsi, krytina pálená.', certainty: 'probable', origin: 'research',
+        images: [{ url: 'https://pictures.example.org/dum16.png', license: 'CC BY 4.0', credit: 'Archiv Brodek' }] },
+    lookCheck: { next: 'source', text: 'pozemková kniha popisuje stavení podrobněji', task: 'T0002', at: '2027-03-01', origin: 'research' },
+    town: {
+        id: 'A0002', place: { id: 'L0001', name: 'Bělokamen' }, passed: [], manual: [], archiveOnly: [], maps: [], unknown: [],
+        pictures: [
+            { id: 'i1', url: 'https://pictures.example.org/naves.png', license: 'CC BY-SA 4.0', credit: 'Jan Brodský', shows: 'Náves od kaple, 1912', origin: 'research' },
+            { id: 'i2', url: 'https://pictures.example.org/hraz.png', license: 'CC0', shows: 'Hráz rybníka pod obcí', origin: 'research' },
+        ],
+        fieldNames: [
+            { id: 'f1', name: 'Na Skále', kind: 'samota', origin: 'research' },
+            { id: 'f2', name: 'Prouzalův mlýn', kind: 'mlýn', house: '16', url: 'https://maps.example.org/mlyn', origin: 'research' },
+        ],
+    },
+};
+const LOOK_NONE = {
+    lookCheck: { next: 'none', text: 'žádný volný obrázek ani popis', at: '2027-03-01', origin: 'research' },
+    unknown: [
+        { id: 'u1', text: 'Kdo dům držel 1880–1884?', question: 'Q0001' },
+        { id: 'u9', text: 'podoba: víc automaticky nejde – žádný volný obrázek ani popis', question: null, about: 'look' },
+    ],
+    manual: [{ id: 'o1', what: 'Indikační skica k. ú. Bělokamen, list 2', url: 'https://archiv.example.org/skica', why: 'stáhnout a přiložit k domu' }],
+};
+
+async function stubPictures(page: Page): Promise<void> {
+    await page.route(/^https:\/\/pictures\.example\.org\//, route => route.fulfill({ status: 200, contentType: 'image/png', body: PNG }));
+}
+
+test.describe('The house page\'s building', () => {
+    test('the full look: its text and picture, the town\'s pictures, the field names with this house first, still researched', async ({ page }) => {
+        await stubPictures(page);
+        await setup(page, { features: [...FEATURES, 'house.look'], extra: LOOK_FULL });
+        await page.evaluate(k => window.Strom.UI.openHousePage(k), KEY);
+        const sec = pageWin(page).locator('#hp-sec-look');
+        await expect(sec.locator('h2')).toHaveText('The building');
+        await expect(sec.locator('.hp-look')).toContainText('Zděné přízemní stavení');
+        await expect(sec.locator('.hp-look .hp-otag')).toHaveText('probable');
+        await expect(sec.locator('.hp-h3')).toHaveText(['Pictures of the town', 'Field names']);
+        // Each picture lazy, without a referrer; what it shows, its author and licence, a link out.
+        await expect(sec.locator('img.hp-img')).toHaveCount(3);
+        for (const img of await sec.locator('img.hp-img').all()) {
+            await expect(img).toHaveAttribute('loading', 'lazy');
+            await expect(img).toHaveAttribute('referrerpolicy', 'no-referrer');
+        }
+        const naves = sec.locator('.hp-figs .hp-fig').first();
+        await expect(naves.locator('.hp-fig-what')).toHaveText('Náves od kaple, 1912');
+        await expect(naves.locator('.hp-fig-by')).toHaveText('Jan Brodský · CC BY-SA 4.0 · pictures.example.org ↗');
+        await expect(naves.locator('a')).toHaveAttribute('target', '_blank');
+        // The field names: the one at this house first and marked.
+        await expect(sec.locator('.hp-fns .hp-fn')).toHaveText(['Prouzalův mlýn ↗', 'Na Skále']);
+        await expect(sec.locator('.hp-fns .hp-fn--this')).toContainText('mlýn · at no. 16');
+        await expect(sec.locator('.hp-look-more')).toHaveText('The look of the house is still being researched: pozemková kniha popisuje stavení podrobněji.');
+        await expect(sec.locator('.house-attach')).toHaveCount(0);
+        await expect(pageWin(page).locator('.pp-toc-link', { hasText: 'The building' })).toHaveCount(1);
+    });
+
+    test('not known: the one item once on the page, the step by hand, Attach material… opens its dialog', async ({ page }) => {
+        await setup(page, { features: [...FEATURES, 'house.look'], extra: LOOK_NONE });
+        await page.evaluate(k => window.Strom.UI.openHousePage(k), KEY);
+        const win = pageWin(page);
+        const sec = win.locator('#hp-sec-look');
+        await expect(sec.locator('.hp-look-unk')).toHaveText('podoba: víc automaticky nejde – žádný volný obrázek ani popis');
+        await expect(win.getByText('podoba: víc automaticky nejde', { exact: false })).toHaveCount(1);
+        await expect(win.locator('#hp-sec-unknown')).toContainText('Kdo dům držel 1880–1884?');
+        await expect(win.locator('#hp-sec-unknown')).not.toContainText('podoba');
+        await expect(sec.locator('.hp-look-hand a')).toHaveText('Indikační skica k. ú. Bělokamen, list 2 ↗');
+        await expect(sec.locator('.hp-look-hand')).toContainText('stáhnout a přiložit k domu');
+        await expect(sec.locator('img')).toHaveCount(0);
+        await sec.locator('.house-attach').click();
+        await expect(page.locator('#house-material-modal')).toBeVisible();
+    });
+
+    test('a researched house without its look: the sentence and Attach material… only with house.look', async ({ page }) => {
+        await setup(page, { features: [...FEATURES, 'house.look'] });
+        await page.evaluate(k => window.Strom.UI.openHousePage(k), KEY);
+        const sec = pageWin(page).locator('#hp-sec-look');
+        await expect(sec.locator('.hp-look-unk')).toHaveText('What the house looked like is not known.');
+        await expect(sec.locator('.house-attach')).toHaveText('Attach material…');
+    });
+});
+
 test.describe('The house page on a phone', () => {
     test.use({ viewport: { width: 390, height: 844 } });
 

@@ -84,6 +84,7 @@ export const plPart14: Pick<StringsType, 'houses'> = {
         st: {
             none: 'niezbadany', queued: 'w kolejce', running: 'w badaniu', done: (d: string) => `gotowe ${d}`,
             waiting: 'czeka na odpowiedź', held: 'odłożone', takeover: 'własna kwerenda czeka na przejęcie',
+            queuedLook: 'w kolejce: wygląd domu',
         },
         takeoverNote: 'agent przejmie ją w następnej sesji',
         req: {
@@ -242,6 +243,12 @@ export const plPart14: Pick<StringsType, 'houses'> = {
             questionNote: 'pytanie badań · czeka także w Czeka na załatwienie',
             searched: (d: string) => `przeszukano ${d}`,
             foundNothing: 'nic nie znaleziono',
+            lookPictures: 'Obrazy miejscowości',
+            lookFieldNames: 'Nazwy terenowe',
+            lookAtHouse: (n: string) => `przy nr ${n}`,
+            lookMore: (why: string) => `Wygląd domu jest jeszcze badany: ${why}.`,
+            lookQueued: 'Zadanie czeka w kolejce badań.',
+            lookUnknown: 'Nie wiadomo, jak dom wyglądał.',
             materials: 'Materiały domu',
             save: 'Zapisz HTML',
             saved: (name: string) => `Zapisano: ${name}`,

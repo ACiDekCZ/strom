@@ -39,6 +39,14 @@ describe('houseStateHtml', () => {
         expect(text(held)).toBe('odloženo');
     });
 
+    it('a queued task of the house\'s look (spec 145 T1) says so; running and done as any other', () => {
+        setLanguage('cs');
+        expect(text(houseStateHtml({ state: 'queued', work: 'house', look: true }, { lang: 'cs' }))).toBe('ve frontě: podoba domu');
+        expect(text(houseStateHtml({ state: 'running', work: 'house', look: true }, { lang: 'cs' }))).toBe('zkoumá se');
+        setLanguage('de');
+        expect(text(houseStateHtml({ state: 'queued', look: true }, { lang: 'de' }))).toBe('in der Warteschlange: Aussehen des Hauses');
+    });
+
     it('done: a tag with ✓ (aria-hidden) and its date in the app\'s language; plain in a line of words', () => {
         setLanguage('cs');
         const cs = houseStateHtml({ state: 'done', at: '2027-03-12T10:20:00Z' }, { lang: 'cs' });

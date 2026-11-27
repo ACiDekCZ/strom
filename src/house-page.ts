@@ -23,6 +23,7 @@
 import type { PersonId, PlaceRecord, StromData } from './types.js';
 import type {
     HouseCertainty, HouseEvent, HouseHolder, HouseMaterial, HouseNumberItem, HouseResearch, HouseResident, HouseSource, HouseState,
+    HouseUnknown,
 } from './house-bridge.js';
 import type { LiveHouseLayer } from './research-link.js';
 import { houseFacts, houseLabel, houseTitle, type HouseFact, type TreeHouse } from './houses.js';
@@ -48,6 +49,8 @@ export interface HousePageApp {
     stateHtml?: string;
     /** The materials' actions (Attach material…, Take over research from a file…), drawn by the window; '' none. */
     materialActionsHtml?: string;
+    /** Attach material… under a look not known (spec 145 T1: `house.material`, a tree that can be changed); '' none. */
+    lookAttachHtml?: string;
     /** A renumbering's Confirm / Not the same house (`house.confirm`, a tree that can be changed). */
     canConfirm?: boolean;
     /** The name after the farm, the reveal of a sensitive event: a tree that can be changed. */
@@ -62,6 +65,8 @@ export interface HousePageOptions {
     research?: boolean;
     /** The research's state of the house (none: it does not know the house). */
     state?: HouseState | null;
+    /** The research knows the look of houses (`house.look`): a researched house without one says it is not known. */
+    look?: boolean;
     /** The research's map layers (`/status.houses.layers`), for the map (§4). */
     layers?: readonly LiveHouseLayer[];
     app?: HousePageApp;
@@ -609,31 +614,86 @@ function treeResidentsHtml(c: Ctx): string {
         + `<th>${esc(P.colInHouse)}</th><th>${esc(P.colRecords)}</th></tr></thead><tbody>${rows}</tbody></table>`);
 }
 
+/** The house's items of what of its look is not known: The building shows them, What is not known does not. */
+const lookUnknowns = (r: HouseResearch | null): HouseUnknown[] => r?.unknown.filter(u => u.about === 'look') ?? [];
+
+function unknownRow(c: Ctx, u: HouseUnknown): string {
+    const answer = c.app && u.question
+        ? `<span class="hp-ql-r"><button type="button" class="hp-mini" data-hp-act="answer" data-question="${esc(u.question)}">${esc(c.H.answer)}</button></span>` : '';
+    const note = u.question ? `<span class="hp-ql-s">${esc(c.P.questionNote)}</span>` : '';
+    return `<div class="hp-ql-i"><span class="hp-qt">${esc(u.text)}</span>${answer}${note}</div>`;
+}
+
+/** A link out of the page (↗, a new window). */
+const outLink = (url: string, text: string): string =>
+    `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(text)} ↗</a>`;
+
+/** A house number without its marker ("čp. 16" → "16"), to tell a field name at this house. */
+const bareNumber = (n: string | undefined): string => (n ?? '').replace(/[^\p{N}/]+/gu, ' ').trim();
+
+/**
+ * The building (spec 145 T1): the short look with its certainty and the house's pictures, the town's pictures
+ * (the town is not the house), its field names (this house's first), what the check of the look said (researched
+ * further, or what is not known with Attach material… and the steps by hand). Shown with `house.look` or when the
+ * research's data carry a look; the file links the pictures (it calls no network) and has no buttons.
+ */
 function lookHtml(c: Ctx): string {
-    const look = c.research?.look;
-    if (!look) return '';
-    const text = look.text ? `<p class="hp-look">${esc(look.text)}${look.certainty === 'guess' ? ` ${tag('guess', c.P.origin.guess)}` : ''}</p>` : '';
+    const r = c.research;
+    if (!r) return '';
+    const { P } = c;
+    const look = r.look;
+    // Its certainty (a conjecture, probable), else where it came from, as elsewhere on the page.
+    const tags = look ? certaintyTag(c, look.certainty) || (look.origin ? originTag(c, look.origin) : '') : '';
+    const text = look?.text ? `<p class="hp-look">${esc(look.text)}${tags ? ` ${tags}` : ''}</p>` : '';
     // Only images with a free licence; the file links to them (it calls no network).
-    const figs = look.images.filter(im => im.license && im.url && safeHttpUrl(im.url)).map(im => {
+    const images = (look?.images ?? []).filter(im => im.license && im.url && safeHttpUrl(im.url));
+    const figs = images.map(im => {
         const url = safeHttpUrl(im.url)!;
         const img = c.app ? `<img class="hp-img" src="${esc(url)}" alt="${esc(im.credit ?? '')}" loading="lazy" referrerpolicy="no-referrer">` : '';
-        const caption = [im.credit, im.license].filter(Boolean).map(t => esc(t!)).join(' · ')
-            + ` · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(hostOf(url))} ↗</a>`;
+        const caption = [im.credit, im.license].filter(Boolean).map(t => esc(t!)).join(' · ') + ` · ${outLink(url, hostOf(url))}`;
         return `<figure class="hp-fig">${img}<figcaption>${caption}</figcaption></figure>`;
     }).join('');
-    return text || figs ? section('look', c.P.sec.look, text + figs) : '';
+    // What the check of the look said: researched further (until the task of the look is done), or not known.
+    const check = r.lookCheck;
+    const lookDone = r.lookTask === true && r.state === 'done';
+    const more = check && check.next !== 'none' && !lookDone
+        ? `<p class="hp-note hp-look-more">${esc(P.lookMore(check.text.replace(/[.\s]+$/, '')))}${r.lookTask && r.state === 'queued' ? ` ${esc(P.lookQueued)}` : ''}</p>` : '';
+    const unknowns = lookUnknowns(r);
+    const notKnown = !look?.text && !images.length && !more
+        && (check?.next === 'none' || unknowns.length > 0 || (!!c.opts.look && r.state === 'done'));
+    let unknown = '';
+    if (unknowns.length) unknown = `<div class="hp-ql hp-look-unk">${unknowns.map(u => unknownRow(c, u)).join('')}</div>`;
+    else if (notKnown) unknown = `<p class="hp-note hp-look-unk">${esc(P.lookUnknown)}</p>`;
+    // The steps by hand (a sketch of the cadastre to download and attach) and Attach material…, only while not known.
+    const manual = notKnown && r.manual.length
+        ? `<div class="hp-ql hp-look-hand">${r.manual.map(m => `<div class="hp-ql-i"><span>${outLink(m.url, m.what)}</span>`
+            + `${m.why ? `<span class="hp-ql-s">${esc(m.why)}</span>` : ''}</div>`).join('')}</div>` : '';
+    const attach = notKnown && c.app && c.opts.app?.lookAttachHtml ? `<div class="hp-acts">${c.opts.app.lookAttachHtml}</div>` : '';
+    // The town's pictures and field names.
+    const pictures = (r.town?.pictures ?? []).map(p => {
+        const img = c.app ? `<img class="hp-img" src="${esc(p.url)}" alt="${esc(p.shows)}" loading="lazy" referrerpolicy="no-referrer">` : '';
+        const by = [p.credit, p.license].filter(Boolean).map(t => esc(t!)).join(' · ');
+        return `<figure class="hp-fig">${img}<figcaption><span class="hp-fig-what">${esc(p.shows)}</span>`
+            + `<span class="hp-fig-by">${by} · ${outLink(p.url, hostOf(p.url))}</span></figcaption></figure>`;
+    }).join('');
+    const own = bareNumber(r.house);
+    const atThis = (n: string | undefined): boolean => !!own && bareNumber(n) === own;
+    const names = [...(r.town?.fieldNames ?? [])].sort((a, b) => Number(atThis(b.house)) - Number(atThis(a.house))).map(f => {
+        const sub = [f.kind ? esc(f.kind) : '', f.house ? esc(P.lookAtHouse(f.house)) : ''].filter(Boolean).join(' · ');
+        const name = f.url ? outLink(f.url, f.name) : esc(f.name);
+        return `<div class="hp-ql-i${atThis(f.house) ? ' hp-fn--this' : ''}"><span class="hp-fn">${name}</span>`
+            + `${sub ? `<span class="hp-ql-s">${sub}</span>` : ''}</div>`;
+    }).join('');
+    const body = text + figs + more + unknown + manual + attach
+        + (pictures ? `<h3 class="hp-h3">${esc(P.lookPictures)}</h3><div class="hp-figs${c.app ? ' hp-figs--img' : ''}">${pictures}</div>` : '')
+        + (names ? `<h3 class="hp-h3">${esc(P.lookFieldNames)}</h3><div class="hp-ql hp-fns">${names}</div>` : '');
+    return body ? section('look', P.sec.look, body) : '';
 }
 
 function unknownHtml(c: Ctx): string {
-    const list = [...(c.research?.unknown ?? []), ...(c.research?.town?.unknown ?? [])];
+    const list = [...(c.research?.unknown ?? []).filter(u => u.about !== 'look'), ...(c.research?.town?.unknown ?? [])];
     if (!list.length) return '';
-    const rows = list.map(u => {
-        const answer = c.app && u.question
-            ? `<span class="hp-ql-r"><button type="button" class="hp-mini" data-hp-act="answer" data-question="${esc(u.question)}">${esc(c.H.answer)}</button></span>` : '';
-        const note = u.question ? `<span class="hp-ql-s">${esc(c.P.questionNote)}</span>` : '';
-        return `<div class="hp-ql-i"><span class="hp-qt">${esc(u.text)}</span>${answer}${note}</div>`;
-    }).join('');
-    return section('unknown', c.P.sec.unknown, `<div class="hp-ql">${rows}</div>`);
+    return section('unknown', c.P.sec.unknown, `<div class="hp-ql">${list.map(u => unknownRow(c, u)).join('')}</div>`);
 }
 
 function passedHtml(c: Ctx): string {

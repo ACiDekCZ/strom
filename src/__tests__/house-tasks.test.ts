@@ -53,6 +53,13 @@ describe('houseTaskView', () => {
         expect(v).toEqual({ text: 'Převzít rešerši domu čp. 16', house: 'belokamen|16' });
     });
 
+    it('the house\'s look (spec 145 T1) keeps the research\'s own name, leading to the house', () => {
+        setLanguage('cs');
+        const v = houseTaskView({ id: 'T0011', text: 'Podoba domu Bělokamen 16', taskKind: 'house', house: 'belokamen|16' },
+            ctx([row({ task: 'T0011', work: 'house', look: true })]));
+        expect(v).toEqual({ text: 'Podoba domu Bělokamen 16', house: 'belokamen|16' });
+    });
+
     it('a town\'s frame: its town when known (the frame met), else the research\'s own text', () => {
         setLanguage('cs');
         expect(houseTaskView({ id: 'T0003', text: 'History of the houses of Bělokamen', taskKind: 'house' }, ctx([], { T0003: 'Bělokamen' })))

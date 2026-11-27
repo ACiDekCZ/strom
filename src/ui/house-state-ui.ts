@@ -59,6 +59,8 @@ export interface HouseStateOf {
     state: HouseState;
     at?: string;
     work?: HouseWork;
+    /** The task is the house's look (spec 145 T1). */
+    look?: true;
     question?: { id: string; text?: string };
 }
 
@@ -77,6 +79,7 @@ export function houseStateHtml(row: HouseStateOf | null | undefined, opts: { lan
                 return `<span class="hs" data-state="takeover">${esc(st.takeover)}</span>`
                     + `<span class="hs-note">${esc(strings.houses.takeoverNote)}</span>`;
             }
+            if (row.look) return `<span class="hs" data-state="queued" data-work="look">${esc(st.queuedLook)}</span>`;
             return `<span class="hs" data-state="queued">${esc(st.queued)}</span>`;
         case 'running':
             return `<span class="hs" data-state="running"><span class="hs-pulse" aria-hidden="true"></span>${esc(st.running)}</span>`;

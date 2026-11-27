@@ -92,6 +92,8 @@ export interface HouseListRow {
     at?: string;
     task?: string;
     work?: HouseWork;
+    /** The task is the house's look (spec 145 T1: `work: "house", look: true`). */
+    look?: true;
     question?: HouseQuestion;
     persons: number;
     years?: { from: number; to: number };
@@ -189,6 +191,8 @@ export interface HousePassed {
     found?: boolean;
     at?: string;
     origin?: HouseOrigin;
+    /** One line of what of the list of sources was gone through (spec 145 T5). */
+    checklist?: true;
 }
 
 /** A link to go through by hand (`o…`): not gone through yet. */
@@ -204,6 +208,8 @@ export interface HouseUnknown {
     text: string;
     /** The question (Q…/T…) asked of a person, null: none asked. */
     question: string | null;
+    /** What of the house's look is not known (spec 145 T1). */
+    about?: 'look';
 }
 
 export interface HouseArchiveOnly {
@@ -228,7 +234,46 @@ export interface HouseMaterial {
 export interface HouseLook {
     text: string;
     certainty?: HouseCertainty;
+    origin?: HouseOrigin;
     images: { url?: string; license?: string; credit?: string; file?: string }[];
+}
+
+/** What the check of a house's look found next (spec 145 T1): `none` no more automatically. */
+export type HouseLookNext = 'material' | 'picture' | 'source' | 'none';
+
+/** The check of a house's look at the end of its research (spec 145 T1). */
+export interface HouseLookCheck {
+    next: HouseLookNext;
+    text: string;
+    /** The task of the house's look it made (T…). */
+    task?: string;
+    at?: string;
+    origin?: HouseOrigin;
+}
+
+/** A picture of the town under a free licence (its frame, spec 145 T1). */
+export interface HouseTownPicture {
+    id: string;
+    url: string;
+    license: string;
+    credit?: string;
+    /** What it shows. */
+    shows: string;
+    origin?: HouseOrigin;
+}
+
+/** A field name of the town (a mill, a farm, a solitude) with its point (its frame, spec 145 T1). */
+export interface HouseFieldName {
+    id: string;
+    name: string;
+    kind?: string;
+    lat?: number;
+    lon?: number;
+    /** The number of the house it lies at. */
+    house?: string;
+    url?: string;
+    source?: string;
+    origin?: HouseOrigin;
 }
 
 /** The frame of the house's town (its record in the research), when there is one. */
@@ -243,6 +288,10 @@ export interface HouseTown {
     archiveOnly: HouseArchiveOnly[];
     maps: HouseMap[];
     unknown: HouseUnknown[];
+    /** Its pictures under a free licence (spec 145 T1), when there are any. */
+    pictures?: HouseTownPicture[];
+    /** Its field names (spec 145 T1), when there are any. */
+    fieldNames?: HouseFieldName[];
     /** When the town's frame task was done (a date; true from an older bridge that only said so). */
     done?: string | true;
     task?: string;
@@ -262,6 +311,8 @@ export interface HouseResearch {
     at?: string;
     task?: string;
     work?: HouseWork;
+    /** The task is the house's look (`look: true` beside `work`, spec 145 T1). */
+    lookTask?: true;
     question?: HouseQuestion;
     /** The tree's people of the house (the research's ids). */
     persons: string[];
@@ -272,6 +323,7 @@ export interface HouseResearch {
     holders: HouseHolder[];
     residents: HouseResident[];
     look?: HouseLook;
+    lookCheck?: HouseLookCheck;
     maps: HouseMap[];
     passed: HousePassed[];
     manual: HouseManual[];
@@ -296,6 +348,7 @@ const CERTAINTIES: readonly HouseCertainty[] = ['high', 'medium', 'guess', 'prob
 const EVENT_KINDS: readonly HouseEventKind[] = ['built', 'rebuilt', 'fire', 'flood', 'transfer', 'renumber', 'demolished', 'auction', 'other'];
 const HOLDER_HOWS: readonly HouseHolderHow[] = ['purchase', 'inheritance', 'marriage', 'auction', 'allotment', 'other'];
 const ROLES: readonly HouseResidentRole[] = ['farmer', 'retired', 'lodger', 'servant', 'tenant', 'other'];
+const LOOK_NEXT: readonly HouseLookNext[] = ['material', 'picture', 'source', 'none'];
 
 const idOf = (v: unknown): string | undefined => (typeof v === 'string' && ID_RE.test(v) ? v : undefined);
 const text = (v: unknown, max = 2000): string | undefined => {
@@ -351,6 +404,7 @@ function sources(v: unknown): HouseSource[] {
 
 const opt = <K extends string, V>(k: K, v: V | undefined): { [P in K]?: V } =>
     (v === undefined ? {} : { [k]: v } as { [P in K]?: V });
+const nonEmpty = <T>(xs: T[]): T[] | undefined => (xs.length ? xs : undefined);
 
 function place(v: unknown): HousePlace | null {
     const r = asRecord(v);
@@ -380,6 +434,7 @@ function passed(r: Record<string, unknown>): HousePassed | null {
     return {
         id, what, ...opt('source', idOf(r.source)), ...opt('url', httpUrl(r.url)),
         ...opt('found', typeof r.found === 'boolean' ? r.found : undefined), ...opt('at', isoDay(r.at)), ...opt('origin', origin(r.origin)),
+        ...opt('checklist', r.checklist === true ? true as const : undefined),
     };
 }
 
@@ -393,7 +448,7 @@ function manual(r: Record<string, unknown>): HouseManual | null {
 function unknownItem(r: Record<string, unknown>): HouseUnknown | null {
     const id = idOf(r.id);
     const t = text(r.text, 1000);
-    return id && t ? { id, text: t, question: idOf(r.question) ?? null } : null;
+    return id && t ? { id, text: t, question: idOf(r.question) ?? null, ...opt('about', r.about === 'look' ? 'look' as const : undefined) } : null;
 }
 
 function archiveOnly(r: Record<string, unknown>): HouseArchiveOnly | null {
@@ -455,12 +510,45 @@ function look(v: unknown): HouseLook | undefined {
     const t = text(r?.text, 4000);
     if (!r || !t) return undefined;
     return {
-        text: t, ...opt('certainty', oneOf(r.certainty, CERTAINTIES)),
+        text: t, ...opt('certainty', oneOf(r.certainty, CERTAINTIES)), ...opt('origin', origin(r.origin)),
         images: list(r.images, i => {
             const url = httpUrl(i.url);
             const file = text(i.file, 400);
             return url || file ? { ...opt('url', url), ...opt('license', text(i.license, 200)), ...opt('credit', text(i.credit, 400)), ...opt('file', file) } : null;
         }),
+    };
+}
+
+function lookCheck(v: unknown): HouseLookCheck | undefined {
+    const r = asRecord(v);
+    const next = oneOf(r?.next, LOOK_NEXT);
+    const t = text(r?.text, 1000);
+    if (!r || !next || !t) return undefined;
+    return { next, text: t, ...opt('task', idOf(r.task)), ...opt('at', date(r.at)), ...opt('origin', origin(r.origin)) };
+}
+
+/** A picture of the town: only with its web address and its licence (none: not shown). */
+function picture(r: Record<string, unknown>): HouseTownPicture | null {
+    const id = idOf(r.id);
+    const url = httpUrl(r.url);
+    const license = text(r.license, 200);
+    const shows = text(r.shows, 1000);
+    if (!id || !url || !license || !shows) return null;
+    return { id, url, license, ...opt('credit', text(r.credit, 400)), shows, ...opt('origin', origin(r.origin)) };
+}
+
+function fieldName(r: Record<string, unknown>): HouseFieldName | null {
+    const id = idOf(r.id);
+    const name = text(r.name, 200);
+    if (!id || !name) return null;
+    const coord = (v: unknown, max: number): number | undefined =>
+        typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= max ? v : undefined;
+    const lat = coord(r.lat, 90);
+    const lon = coord(r.lon, 180);
+    const point = lat !== undefined && lon !== undefined;
+    return {
+        id, name, ...opt('kind', text(r.kind, 100)), ...opt('lat', point ? lat : undefined), ...opt('lon', point ? lon : undefined),
+        ...opt('house', text(r.house, 100)), ...opt('url', httpUrl(r.url)), ...opt('source', idOf(r.source)), ...opt('origin', origin(r.origin)),
     };
 }
 
@@ -479,6 +567,7 @@ function town(v: unknown): HouseTown | undefined {
         ...opt('id', id), ...opt('place', townPlace), text: text(r.text, 4000) ?? '',
         passed: list(r.passed, passed), manual: list(r.manual, manual), archiveOnly: list(r.archiveOnly, archiveOnly),
         maps: list(r.maps, mapItem), unknown: list(r.unknown, unknownItem),
+        ...opt('pictures', nonEmpty(list(r.pictures, picture))), ...opt('fieldNames', nonEmpty(list(r.fieldNames, fieldName))),
         ...opt('done', done), ...opt('task', task), ...opt('state', oneOf(r.state, STATES)),
     };
 }
@@ -508,7 +597,8 @@ export function sanitizeHouseRow(value: unknown): HouseListRow | null {
     const numbers = Array.isArray(r.numbers) ? r.numbers.slice(0, MAX_ITEMS).map(rowNumber).filter((n): n is HouseRowNumber => !!n) : undefined;
     return {
         ...opt('id', id), key, place: p, house, ...opt('name', text(r.name, 200)), ...opt('numbers', numbers?.length ? numbers : undefined), state,
-        ...opt('at', isoDay(r.at)), ...opt('task', idOf(r.task)), ...opt('work', oneOf(r.work, WORKS)), ...opt('question', question(r.question)),
+        ...opt('at', isoDay(r.at)), ...opt('task', idOf(r.task)), ...opt('work', oneOf(r.work, WORKS)),
+        ...opt('look', r.work === 'house' && r.look === true ? true as const : undefined), ...opt('question', question(r.question)),
         persons: count(r.persons), ...opt('years', years(r.years)),
         summary: {
             events: count(s.events), holders: count(s.holders), residents: count(s.residents),
@@ -562,10 +652,11 @@ export function sanitizeHouseResearch(value: unknown): HouseResearch | null {
         ? [...new Set(r.sensitive.map(idOf).filter((x): x is string => !!x && timelineIds.has(x)))] : [];
     return {
         ...opt('id', id), key, place: p, house, ...opt('name', text(r.name, 200)), ...opt('nameBy', text(r.nameBy, 40)), state,
-        ...opt('at', isoDay(r.at)), ...opt('task', idOf(r.task)), ...opt('work', oneOf(r.work, WORKS)), ...opt('question', question(r.question)),
+        ...opt('at', isoDay(r.at)), ...opt('task', idOf(r.task)), ...opt('work', oneOf(r.work, WORKS)),
+        ...opt('lookTask', r.work === 'house' && r.look === true ? true as const : undefined), ...opt('question', question(r.question)),
         persons, ...opt('years', years(r.years)),
         numbers: list(r.numbers, numberItem), ...opt('location', location(r.location)),
-        timeline, holders, residents, ...opt('look', look(r.look)),
+        timeline, holders, residents, ...opt('look', look(r.look)), ...opt('lookCheck', lookCheck(r.lookCheck)),
         maps: list(r.maps, mapItem), passed: list(r.passed, passed), manual: list(r.manual, manual),
         unknown: list(r.unknown, unknownItem), archiveOnly: list(r.archiveOnly, archiveOnly), materials: list(r.materials, material),
         sensitive, ...opt('town', town(r.town)),

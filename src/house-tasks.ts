@@ -39,7 +39,8 @@ function numberOf(key: string, house: TreeHouse | null, row: HouseListRow | unde
 
 /**
  * A queued task of a house in words (null: not a task of a house). The house's own task:
- * "House history {n}, {town}", a takeover of an own research "Take over research for house {n}";
+ * "House history {n}, {town}", a takeover of an own research "Take over research for house {n}", the house's
+ * look the research's own text;
  * a town's frame (a task of a house without a house) "Town skeleton {town} for houses" when its
  * town is known, else the research's text.
  */
@@ -55,7 +56,9 @@ export function houseTaskView(q: Pick<LiveQueueItem, 'id' | 'text' | 'taskKind' 
     const n = numberOf(q.house, house, row);
     const town = house?.ref.town ?? row?.place.name ?? '';
     const takeover = row?.task === q.id && row.work === 'takeover';
-    const text = takeover ? I.taskImport(n) : town ? I.taskHouse(n, town) : q.text;
+    // The house's look (spec 145 T1): the research names it ("Look of the house Lhota 9").
+    const look = row?.task === q.id && row.look === true;
+    const text = takeover ? I.taskImport(n) : !look && town ? I.taskHouse(n, town) : q.text;
     return { text, ...(house ? { house: house.id } : {}) };
 }
 

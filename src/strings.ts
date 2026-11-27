@@ -13383,6 +13383,7 @@ const stringsEN = {
         st: {
             none: 'not researched', queued: 'queued', running: 'being researched', done: (d: string) => `done ${d}`,
             waiting: 'waiting for an answer', held: 'postponed', takeover: 'own research waiting to be taken over',
+            queuedLook: 'queued: the look of the house',
         },
         takeoverNote: 'the agent takes it over in its next session',
         // Asking the research for a house's history (spec 030 §2) and the family houses of a town (§5).
@@ -13548,6 +13549,13 @@ const stringsEN = {
             questionNote: 'research question · also waiting in Awaiting action',
             searched: (d: string) => `searched ${d}`,
             foundNothing: 'nothing found',
+            // The look of the house (spec 145 T1).
+            lookPictures: 'Pictures of the town',
+            lookFieldNames: 'Field names',
+            lookAtHouse: (n: string) => `at no. ${n}`,
+            lookMore: (why: string) => `The look of the house is still being researched: ${why}.`,
+            lookQueued: 'Its task is in the research queue.',
+            lookUnknown: 'What the house looked like is not known.',
             materials: 'House materials',
             save: 'Save HTML',
             saved: (name: string) => `Saved: ${name}`,
@@ -26365,6 +26373,7 @@ const stringsCZ: StringsType = {
         st: {
             none: 'nezkoumáno', queued: 've frontě', running: 'zkoumá se', done: (d: string) => `hotovo ${d}`,
             waiting: 'čeká na odpověď', held: 'odloženo', takeover: 'rešerše čeká na převzetí',
+            queuedLook: 've frontě: podoba domu',
         },
         takeoverNote: 'převezme agent v příštím sezení',
         req: {
@@ -26523,6 +26532,12 @@ const stringsCZ: StringsType = {
             questionNote: 'otázka výzkumu · čeká také v Čeká na vyřízení',
             searched: (d: string) => `prošlo se ${d}`,
             foundNothing: 'nic nenalezeno',
+            lookPictures: 'Obrázky obce',
+            lookFieldNames: 'Pomístní jména',
+            lookAtHouse: (n: string) => `u čp. ${n}`,
+            lookMore: (why: string) => `Podoba domu se ještě zkoumá: ${why}.`,
+            lookQueued: 'Úkol je ve frontě výzkumu.',
+            lookUnknown: 'Jak dům vypadal, není známo.',
             materials: 'Materiály domu',
             save: 'Uložit HTML',
             saved: (name: string) => `Uloženo: ${name}`,
@@ -39245,6 +39260,7 @@ const stringsDE: StringsType = {
         st: {
             none: 'nicht erforscht', queued: 'in der Warteschlange', running: 'wird erforscht', done: (d: string) => `fertig ${d}`,
             waiting: 'wartet auf Antwort', held: 'zurückgestellt', takeover: 'eigene Recherche wartet auf Übernahme',
+            queuedLook: 'in der Warteschlange: Aussehen des Hauses',
         },
         takeoverNote: 'der Agent übernimmt sie in der nächsten Sitzung',
         req: {
@@ -39405,6 +39421,12 @@ const stringsDE: StringsType = {
             questionNote: 'Frage der Forschung · wartet auch unter Wartet auf Bearbeitung',
             searched: (d: string) => `durchsucht ${d}`,
             foundNothing: 'nichts gefunden',
+            lookPictures: 'Bilder des Ortes',
+            lookFieldNames: 'Flurnamen',
+            lookAtHouse: (n: string) => `bei Nr. ${n}`,
+            lookMore: (why: string) => `Das Aussehen des Hauses wird noch erforscht: ${why}.`,
+            lookQueued: 'Die Aufgabe steht in der Warteschlange der Forschung.',
+            lookUnknown: 'Wie das Haus aussah, ist nicht bekannt.',
             materials: 'Materialien des Hauses',
             save: 'HTML speichern',
             saved: (name: string) => `Gespeichert: ${name}`,

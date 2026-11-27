@@ -75,6 +75,15 @@ export const HOUSE_PAGE_CSS = `
 .hp .hp-fig { margin: 0 0 12px; }
 .hp .hp-img { display: block; max-width: 100%; height: 190px; object-fit: cover; border-radius: var(--r-md, 6px); border: 1px solid var(--border); }
 .hp .hp-fig figcaption { margin-top: 4px; font-size: 12px; color: var(--text-faint); overflow-wrap: anywhere; }
+.hp .hp-look-more, .hp .hp-look-unk { margin: 0 0 12px; }
+.hp .hp-look-hand { margin-bottom: 4px; }
+.hp .hp-figs--img { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.hp .hp-figs--img .hp-fig { margin: 0; min-width: 0; }
+.hp .hp-figs--img .hp-img { width: 100%; height: 150px; }
+.hp .hp-fig-what { display: block; font-size: 13px; color: var(--text-light); }
+.hp .hp-fig-by { display: block; }
+.hp .hp-fn { min-width: 0; overflow-wrap: anywhere; }
+.hp .hp-fn--this .hp-fn { font-weight: 600; }
 
 /* what is not known, what was searched */
 .hp .hp-ql { display: flex; flex-direction: column; }
@@ -160,6 +169,7 @@ export const HOUSE_PAGE_CSS = `
     .hp .hp-table td.hp-y { font-size: 13px; width: auto; }
     .hp .hp-table td.hp-role { white-space: normal; width: auto; }
     .hp .hp-srcs { grid-template-columns: minmax(0, 1fr); }
+    .hp .hp-figs--img { grid-template-columns: minmax(0, 1fr); }
     .hp .hmap { height: 240px; }
     .pp-body .hp .hmap { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; }
     .hp .hmap-wrap .hmap-top { order: 2; }
