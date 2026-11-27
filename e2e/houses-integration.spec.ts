@@ -402,3 +402,94 @@ test.describe('Houses: the Table, the lists, the Statistics and the search (§15
         await onHousePage(page, second ?? '');
     });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// The houses in the family pages (spec 145 T6)
+
+test.describe('Houses in the family pages (spec 145 T6)', () => {
+    const estPages = async (dialog: Locator): Promise<number> =>
+        Number((await dialog.locator('.fp-est-d').textContent())!.match(/^(\d+) page/)![1]);
+
+    test('the option Houses: in the pages, only a mention, none; the page count follows it and it is remembered', async ({ page }) => {
+        await seedVillages(page);
+        const open = async (): Promise<Locator> => {
+            await page.evaluate(() => window.Strom.UI.showBookDialog('pages'));
+            const dialog = page.locator('#book-modal');
+            await expect(dialog).toHaveClass(/active/);
+            await expect(dialog.locator('.fp-est-d')).toHaveText(/^\d+ page/);
+            return dialog;
+        };
+        let dialog = await open();
+        const sec = dialog.locator('[data-sec="houses"]');
+        await expect(sec).toBeVisible();
+        await expect(sec.locator('h3')).toHaveText('Houses');
+        await expect(sec.locator('.book-radio')).toHaveText([
+            'In the family pages, linked with the people', 'Only a mention of the house, without its pages', 'Without houses',
+        ]);
+        await expect(sec.locator('input[value="pages"]')).toBeChecked();
+        await expect(dialog.locator('[data-sum="houses"]')).toHaveText('In the pages');
+        const withPages = await estPages(dialog);
+        await sec.locator('input[value="mention"]').check();
+        await expect(dialog.locator('[data-sum="houses"]')).toHaveText('Mention only');
+        await expect.poll(() => estPages(dialog)).toBeLessThan(withPages);
+        const mention = await estPages(dialog);
+        await sec.locator('input[value="none"]').check();
+        await expect(dialog.locator('[data-sum="houses"]')).toHaveText('Without houses');
+        await expect.poll(() => estPages(dialog)).toBe(mention);
+        // Closed and opened again: the choice is remembered.
+        await page.locator('#book-modal .close-btn').click();
+        await expect(dialog).not.toHaveClass(/active/);
+        dialog = await open();
+        await expect(dialog.locator('[data-sec="houses"] input[value="none"]')).toBeChecked();
+        await expect(dialog.locator('[data-sum="houses"]')).toHaveText('Without houses');
+        await dialog.locator('[data-sec="houses"] input[value="mention"]').check();
+        await page.locator('#book-modal .close-btn').click();
+        dialog = await open();
+        await expect(dialog.locator('[data-sec="houses"] input[value="mention"]')).toBeChecked();
+        await dialog.locator('[data-sec="houses"] input[value="pages"]').check();
+        await expect.poll(() => estPages(dialog)).toBe(withPages);
+    });
+
+    test('a house\'s page in the pages\' window leads to the people\'s pages', async ({ page }) => {
+        await seedVillages(page);
+        await page.evaluate(() => window.Strom.UI.openFamilyPagesForFocus());
+        const win = page.locator('#person-page-modal');
+        await expect(win).toHaveClass(/pp-is-set/);
+        // The index of houses, then the house.
+        await win.locator('.sp-fbar-nav [data-sp-open]').first().click();
+        await win.locator('[data-sp-open="page:rejstrik-domy"]:visible').first().click();
+        await win.locator('.pp-body [data-sp-open="page:dum-belokamen-cp-16"]').first().click();
+        const house = win.locator('.pp-body article.hp');
+        await expect(house.locator('h1.pp-name')).toContainText('čp.');
+        const people = house.locator('[data-sp-open^="person:"]');
+        await expect(people.first()).toBeVisible();
+        expect(await people.count()).toBeGreaterThan(1);
+        await house.locator('.hp-table [data-sp-open="person:radegunda"]').first().click();
+        await expect(win).not.toHaveClass(/pp-is-set/);
+        await expect(win.locator('.pp-body h1.pp-name')).toContainText('Radegunda');
+    });
+});
+
+test.describe('Houses in the family pages on a phone (spec 145 T6)', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('the row Houses with its summary opens its sub-sheet; a choice comes back to the row', async ({ page }) => {
+        await seedVillages(page);
+        await page.evaluate(() => window.Strom.UI.showBookDialog('pages'));
+        const dialog = page.locator('#book-modal');
+        await expect(dialog).toHaveClass(/active/);
+        const row = dialog.locator('[data-sub-open="houses"]');
+        await expect(row).toBeVisible();
+        await expect(row.locator('.book-sum-l')).toHaveText('Houses');
+        await expect(dialog.locator('[data-sum="houses"]')).toHaveText('In the pages');
+        await expect(dialog.locator('[data-sec="houses"]')).toBeHidden();
+        await row.click();
+        await expect(dialog.locator('.book-sub-title')).toHaveText('Houses');
+        await expect(dialog.locator('[data-sec="houses"]')).toBeVisible();
+        await dialog.locator('[data-sec="houses"] .book-radio', { hasText: 'Only a mention' }).click();
+        await dialog.locator('.book-sub-back').click();
+        await expect(dialog.locator('[data-sum="houses"]')).toHaveText('Mention only');
+        expect(await dialog.locator('.book-dlg').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+    });
+});
+

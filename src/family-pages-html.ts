@@ -39,6 +39,7 @@ import {
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
 import { HOUSE_PAGE_CSS, HOUSE_PAGE_FILE_TOKENS } from './house-page-css.js';
 import { buildHousePage } from './house-page.js';
+import { housePrivacyContext, type HousePrivacyContext } from './house-privacy.js';
 import { houseOfAddress } from './person-houses.js';
 import { houseLabel, houseTitle } from './houses.js';
 import { FamilyTogetherEvent, familyTogetherEvents, familyTogetherLineHtml, sharedIndexOf } from './shared-with-line.js';
@@ -166,13 +167,30 @@ function setHouseOf(r: Render, place: string | undefined, address: string | unde
     return id && r.set.houseSlug.has(id) ? id : null;
 }
 
-/** A house's page in the set (spec 030 §13): the house page of a saved file (houseOutputFilter), its ids under the page's slug. */
+/** A set's judge of the living and of the research's people on the whole tree (spec 145 T6), once per set. */
+const housePrivacyOfSet = new WeakMap<PageSet, HousePrivacyContext>();
+
+/**
+ * A house's page in the set (spec 030 §13): the house page of a saved file
+ * (houseOutputFilter) with the research's result read before the set (spec
+ * 145 T6), the people by the set's privacy, a person with a page in the set
+ * its link; its ids under the page's slug.
+ */
 function housePageHtml(r: Render, page: SetPage): string {
-    const prot = r.set.protectedTree;
-    const shown = protectedHouseOutputs(prot, r.set.options.now).houses.find(h => h.house.id === page.id);
+    const set = r.set;
+    const prot = set.protectedTree;
+    const shown = protectedHouseOutputs(prot, set.options.now).houses.find(h => h.house.id === page.id);
     if (!shown) return '';
-    const body = buildHousePage(prot.tree, shown.house, null, 'file', { lang: r.set.options.lang, now: r.set.options.now });
-    return prefixPageIds(body, page.slug, new Set(r.set.bySlug.keys()));
+    let privacy = housePrivacyOfSet.get(set);
+    if (!privacy) housePrivacyOfSet.set(set, privacy = housePrivacyContext(prot.lineages.data, set.options.now));
+    const body = buildHousePage(prot.tree, shown.house, set.houseResearch?.get(shown.house.id) ?? null, 'file', {
+        lang: set.options.lang, now: set.options.now, names: prot.tree, privacy,
+        personLink: (id, html) => {
+            const slug = isProtectedPerson(prot, id) ? undefined : set.personSlug.get(id);
+            return slug ? pageLink(r, slug, html) : null;
+        },
+    });
+    return prefixPageIds(body, page.slug, new Set(set.bySlug.keys()));
 }
 
 /**
@@ -180,11 +198,13 @@ function housePageHtml(r: Render, page: SetPage): string {
  * people lived at, as outputs show them — house | period | generations.
  */
 function housesSectionHtml(r: Render, rod: Rod): string {
-    if (!r.set.houseSlug?.size) return '';
+    // Only a mention of the houses (spec 145 T6): the rows without links; without houses none.
+    const ids = r.set.houseIds;
+    if (!ids?.size || r.set.options.houses === 'none') return '';
     const I = r.S.houses.integration;
     const people = new Set<PersonId>([...rod.memberIds, ...rod.spouses.map(s => s.personId)]);
     const rows = protectedHouseOutputs(r.set.protectedTree, r.set.options.now).houses
-        .filter(h => r.set.houseSlug!.has(h.house.id) && h.facts.some(f => people.has(f.personId)));
+        .filter(h => ids.has(h.house.id) && h.facts.some(f => people.has(f.personId)));
     if (!rows.length) return '';
     const body = rows.map(h => `<tr><td>${houseLinkHtml(r, h.house.id, esc(houseTitle(h.house)))}</td>`
         + `<td>${h.period ? (h.period.from === h.period.to ? h.period.from : `${h.period.from}–${h.period.to}`) : ''}</td>`
@@ -1740,7 +1760,7 @@ function rodTimelinePageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     if (!rod) return '';
     const tl = buildRodTimeline({
         prot: set.protectedTree, rodId: rod.id, lang: set.options.lang, now: set.options.now,
-        history: set.history, historyOn: set.options.groups.history,
+        history: set.history, historyOn: set.options.groups.history, houses: set.options.houses !== 'none',
     });
     if (!tl) return '';
     const hist = tl.events.filter(e => e.kind === 'history' && e.history);
@@ -1850,6 +1870,7 @@ function personPageOpts(r: Render, page: SetPage): PersonPageOptions {
             ...(r.opts.groups ?? {}),
         },
         privacy: set.options.privacy, toggles: { history: true, childEvents: true }, research: false,
+        ...(set.options.houses === 'none' ? { noHouses: true } : {}),
         now: set.options.now, toc: false,
         links: {
             mode: 'set', personSlug: set.personSlug, familySlug: set.familySlug, rodSlug: set.rodSlug,
@@ -2007,6 +2028,11 @@ export function renderPage(set: PageSet, slug: string): string {
     w.html.set(slug, html);
     if (w.html.size > RENDER_PAGE_CACHE) w.html.delete(w.html.keys().next().value!);
     return html;
+}
+
+/** Draw a page of the window again at its next opening (a house's research came, spec 145 T6). */
+export function forgetRenderedPage(set: PageSet, slug: string): void {
+    windowPages.get(set)?.html.delete(slug);
 }
 
 /** The window's bar of a page (the window's renderer). */

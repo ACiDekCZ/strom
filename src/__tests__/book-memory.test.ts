@@ -153,10 +153,10 @@ describe('book memory: per tree on this device', () => {
         const s = fakeStorage();
         expect(pagesChoicesFromMemory(null)).toEqual(defaultPagesChoices());
         const allGroups = { history: true, childEvents: true, stories: true, sources: true, materials: true, pdf: true };
-        expect(defaultPagesChoices()).toEqual({ families: 'pages', clips: 'full', photos: 'full', groups: allGroups, include: { map: true, timelines: true } });
+        expect(defaultPagesChoices()).toEqual({ families: 'pages', clips: 'full', photos: 'full', groups: allGroups, include: { map: true, timelines: true }, houses: 'pages' });
         const pages = {
             families: 'section' as const, clips: 'none' as const, photos: 'small' as const,
-            groups: { ...allGroups, history: false, pdf: false }, include: { map: false, timelines: true },
+            groups: { ...allGroups, history: false, pdf: false }, include: { map: false, timelines: true }, houses: 'mention' as const,
         };
         saveBookMemory(s, 't', opts({ selection: { kind: 'rods', rods: ['r1'] as RodId[] } }), { output: 'pages', pages });
         const m = loadBookMemory(s, 't')!;
@@ -172,7 +172,10 @@ describe('book memory: per tree on this device', () => {
         // Malformed fields fall back one by one.
         const bad = parseBookMemory(JSON.stringify({ output: 'poster', pages: { families: 'all', clips: 'small', photos: 7, include: { map: false, sources: 'no' }, groups: { pdf: 0 } } }))!;
         expect(bad.output).toBeUndefined();
-        expect(bad.pages).toEqual({ families: 'pages', clips: 'small', photos: 'full', groups: allGroups, include: { map: false, timelines: true } });
+        expect(bad.pages).toEqual({ families: 'pages', clips: 'small', photos: 'full', groups: allGroups, include: { map: false, timelines: true }, houses: 'pages' });
+        // The option Houses (spec 145 T6): one of its three, else the default.
+        expect(parseBookMemory('{"pages":{"houses":"none"}}')!.pages!.houses).toBe('none');
+        expect(parseBookMemory('{"pages":{"houses":"all","clips":"none"}}')!.pages!.houses).toBe('pages');
         expect(parseBookMemory('{"pages":{"families":"x"}}')).toBeNull();
     });
 

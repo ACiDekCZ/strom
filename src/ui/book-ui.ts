@@ -30,7 +30,7 @@ import {
     autoBookTitle, bookHouseDefaults, bookHouseRecent, bookPartAvailability, bookSelectionHouses, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
-    BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PAGES_GROUP_KEYS, PagesChoices, PagesGroups,
+    BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PAGES_GROUP_KEYS, PagesChoices, PagesGroups, PagesHouses,
     bookEntrySelection, bookOptionsFromMemory, bookRodChoices, clampBookGenerations, loadBookMemory, pagesChoicesFromMemory, saveBookMemory,
 } from '../book-memory.js';
 import { BookPresetState, choosePreset, initialPresetState, presetValuesChanged } from '../book-preset.js';
@@ -54,6 +54,8 @@ import { displayYear } from '../dates.js';
 import { openPersonPopover, openSearchPopover, type SearchPopoverRow } from './person-popover.js';
 import { collectHouses, findHouse, hasNumberedHouse, houseLabel, houseTitle, type TreeHouse } from '../houses.js';
 import { loadBookHouseResearch, type BookHouseResearch } from '../book-house-research.js';
+import { protectedHouseIndex } from '../person-page.js';
+import type { HouseResearch } from '../house-bridge.js';
 import { houseMatches, houseSearchText } from '../houses-view.js';
 import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
@@ -70,7 +72,7 @@ import { GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftCutIds, type GiftDepth } from '../
 type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'gift' | 'persons' | 'house';
 type PersonKind = 'ancestors' | 'descendants';
 /** The phone's sub-sheets (§4.1, 4b; the pages' rows, 026 6b). */
-type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title' | 'families' | 'images' | 'groups' | 'include';
+type Sub = 'sel' | 'parts' | 'detail' | 'notes' | 'privacy' | 'lang' | 'title' | 'families' | 'images' | 'groups' | 'include' | 'houses';
 /**
  * The pages' footer (026 §6.5, §6.6): the options with the estimate; the
  * file being built (its progress only after ~1 s); the file ready to save.
@@ -95,6 +97,8 @@ const PRIVACY: readonly PrivacyMode[] = ['full', 'initials', 'minimal', 'anonymo
 const LANGS: readonly BookLang[] = ['cs', 'en', 'de', 'pl'];
 const IMAGE_CHOICES: readonly ImageChoice[] = ['full', 'small', 'none'];
 const INCLUDES = ['map', 'timelines'] as const;
+/** The option Houses of the pages (spec 145 T6). */
+const HOUSES_CHOICES: readonly PagesHouses[] = ['pages', 'mention', 'none'];
 /** The pages' depths of ancestors (1102 §4.1); "All" in the phone's sub-sheet only. */
 const ANC_GENS: readonly (number | 'all')[] = [2, 3, 4, 5, 6, 8, 'all'];
 const ANC_GENS_DEFAULT = 4;
@@ -497,7 +501,7 @@ function pagesOptionsHtml(sum: (sub: Sub, label: string) => string, privacyRadio
         + `<div class="book-seg sel-seg" role="radiogroup" aria-labelledby="fp-img-${key}">`
         + IMAGE_CHOICES.map(c => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-${key}="${c}">${esc(F.imgChoice[c])}</button>`).join('')
         + `</div><span class="fp-img-n" data-n="${key}"></span></div>`;
-    return `<div class="book-sum">${sum('privacy', D.privacy)}${sum('families', F.families)}${sum('groups', F.groupsRow)}${sum('images', F.images)}${sum('include', F.include)}</div>`
+    return `<div class="book-sum">${sum('privacy', D.privacy)}${sum('families', F.families)}${sum('groups', F.groupsRow)}${sum('images', F.images)}${sum('include', F.include)}${sum('houses', F.housesRow)}</div>`
         + `<section class="book-sec" data-sec="privacy"><h3 class="book-sec-h" id="book-privacy-h">${esc(D.privacy)}</h3>`
         + privacyRadios + `<p class="fp-warn" role="status" hidden></p><p class="book-hint">${esc(F.privacyHint)}</p></section>`
         + `<section class="book-sec" data-sec="families"><h3 class="book-sec-h" id="fp-families-h">${esc(F.families)}</h3>`
@@ -513,7 +517,12 @@ function pagesOptionsHtml(sum: (sub: Sub, label: string) => string, privacyRadio
         + `<section class="book-sec" data-sec="include"><h3 class="book-sec-h" id="fp-inc-h">${esc(F.include)}</h3>`
         + `<div class="fp-inc" role="group" aria-labelledby="fp-inc-h">`
         + INCLUDES.map(k => `<label class="book-radio" data-inc="${k}"><input type="checkbox" name="fp-inc" value="${k}"><span>${esc(F.inc[k])}</span></label>`).join('')
-        + `</div><p class="book-hint">${esc(F.alwaysIdx)}</p></section>`;
+        + `</div><p class="book-hint">${esc(F.alwaysIdx)}</p></section>`
+        // The houses (spec 145 T6): only for a selection whose people lived in a house with history.
+        + `<section class="book-sec" data-sec="houses" hidden><h3 class="book-sec-h" id="fp-houses-h">${esc(F.housesRow)}</h3>`
+        + `<div class="book-radios" role="radiogroup" aria-labelledby="fp-houses-h">`
+        + HOUSES_CHOICES.map(v => `<label class="book-radio"><input type="radio" name="fp-houses" value="${v}"><span>${esc(F.housesOpt[v])}</span></label>`).join('')
+        + `</div></section>`;
 }
 
 function setText(root: ParentNode, sel: string, text: string): void {
@@ -631,7 +640,7 @@ function sync(s: DialogState): void {
     if (s.sub) modal.dataset.sub = s.sub; else delete modal.dataset.sub;
     const subTitle: Record<Sub, string> = {
         sel: D.kind[s.kind], parts: D.parts, detail: D.detail, notes: D.notesRow, privacy: D.privacy, lang: D.lang, title: D.title,
-        families: F.families, images: F.images, groups: F.groupsRow, include: F.include,
+        families: F.families, images: F.images, groups: F.groupsRow, include: F.include, houses: F.housesRow,
     };
     setText(modal, '.book-sub-title', s.sub ? subTitle[s.sub] : '');
     setText(modal, '[data-sub-title]', D.kind[s.kind]);
@@ -735,6 +744,10 @@ function syncPages(s: DialogState, modal: HTMLElement): void {
     modal.querySelectorAll<HTMLElement>('[data-photos]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.photos === p.photos)));
     modal.querySelectorAll<HTMLInputElement>('input[name="fp-inc"]').forEach(i => { i.checked = p.include[i.value as typeof INCLUDES[number]]; });
     modal.querySelectorAll<HTMLInputElement>('input[name="fp-grp"]').forEach(i => { i.checked = p.groups[i.value as keyof PagesGroups]; });
+    modal.querySelectorAll<HTMLInputElement>('input[name="fp-houses"]').forEach(i => { i.checked = i.value === p.houses; });
+    // Houses (spec 145 T6): only when the selection's people lived in a house with history.
+    const houses = !!s.est?.set.houseIds?.size;
+    modal.querySelectorAll<HTMLElement>('[data-sec="houses"], [data-sub-open="houses"]').forEach(el => { el.hidden = !houses; });
     // The lines' timelines: hidden for a selection without lines (1102 §4.4).
     const noLines = s.kind === 'persons' || s.kind === 'gift' || s.kind === 'ancestors' || s.kind === 'descendants';
     const tl = modal.querySelector<HTMLElement>('[data-inc="timelines"]');
@@ -755,6 +768,7 @@ function syncPages(s: DialogState, modal: HTMLElement): void {
     sum('groups', strings.book.dlg.partsCount(grp, PAGES_GROUP_KEYS.length));
     const inc = INCLUDES.filter(k => p.include[k] && !(k === 'timelines' && noLines)).map(k => F.incShort[k]).join(', ');
     sum('include', inc ? inc.charAt(0).toLocaleUpperCase() + inc.slice(1) : F.incNone);
+    sum('houses', F.housesShort[p.houses]);
 }
 
 /** "12" / "4,3" MB in the app's language: one decimal under 10 MB (or always, for a file made). */
@@ -949,7 +963,7 @@ function pageSetOptionsOf(s: DialogState): PageSetOptions {
     return {
         lang: getCurrentLanguage(), privacy: s.opts.privacy, families: p.families, clips: p.clips, photos: p.photos,
         map: p.include.map, groups: { ...p.groups }, timelines: p.include.timelines, history: s.history,
-        minimal: s.est?.minimal ?? false,
+        minimal: s.est?.minimal ?? false, houses: p.houses,
     };
 }
 
@@ -1431,6 +1445,7 @@ export const bookUiMethods = uiModule({
             if (t.name === 'fp-min') { update(s => { s.minimal = t.checked; }); return; }
             if (t.name === 'book-privacy') { update(s => { s.opts = { ...s.opts, privacy: t.value as PrivacyMode }; }); return; }
             if (t.name === 'fp-families') { update(s => { s.pages = { ...s.pages, families: t.value as PagesChoices['families'] }; }); return; }
+            if (t.name === 'fp-houses') { update(s => { s.pages = { ...s.pages, houses: t.value as PagesHouses }; }); return; }
             if (t.name === 'fp-grp') {
                 const k = t.value as keyof PagesGroups;
                 update(s => { s.pages = { ...s.pages, groups: { ...s.pages.groups, [k]: t.checked } }; });
@@ -1586,8 +1601,11 @@ export const bookUiMethods = uiModule({
         if (!s.est) return;
         const zip = savesZip(s);
         saveBookMemory(storage(), s.treeId, currentOptions(s), memoryExtra(s));
+        // The research's results of the set's houses (spec 145 T6), read before it is built as the book's.
+        const houseResearch = await this.pagesHouseResearch(s.est.set);
+        if (st !== s || s.phase !== 'options' || (running && running !== s)) return;
         // A copy of the tree as it is now: it may be browsed and edited meanwhile (7b).
-        s.started = { sel, opts: pageSetOptionsOf(s), data: snapshotData(s.data) };
+        s.started = { sel, opts: { ...pageSetOptionsOf(s), ...(houseResearch ? { houseResearch } : {}) }, data: snapshotData(s.data) };
         await this.runPagesBuild(s, s.started.sel, s.started.opts, zip);
     },
 
@@ -1760,6 +1778,22 @@ export const bookUiMethods = uiModule({
         if (!selectionReady(sel)) return;
         this.closeBookDialog();
         this.openFamilyPagesExact(sel);
+    },
+
+    /**
+     * The research's results of a set's house pages (spec 145 T6), over the
+     * bridge (`house`); null without the bridge, without house pages or when
+     * the list cannot be read (the pages of the tree alone, no error).
+     */
+    async pagesHouseResearch(set: PageSet): Promise<ReadonlyMap<HouseId, HouseResearch> | null> {
+        const b = this.houseResearchBridge();
+        const ids = set.houseSlug;
+        if (!b || !ids?.size) return null;
+        try {
+            const houses = protectedHouseIndex(set.protectedTree).houses.filter(h => ids.has(h.id));
+            const got = await loadBookHouseResearch(b.base, houses);
+            return got.research.size ? got.research : null;
+        } catch { return null; }
     },
 
     /** The book's HTML for these options: for the window, or for a saved file. */

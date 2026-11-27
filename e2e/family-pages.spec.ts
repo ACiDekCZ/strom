@@ -93,6 +93,8 @@ test.describe('family pages: the dialog', () => {
         await expect(dialog.locator('.book-presets')).toBeHidden();
         await expect(dialog.locator('.book-dlg-side')).toBeHidden();
         for (const sec of ['privacy', 'families', 'groups', 'images', 'include']) await expect(dialog.locator(`[data-sec="${sec}"]`)).toBeVisible();
+        // A tree without a house with history: no option Houses (spec 145 T6).
+        await expect(dialog.locator('[data-sec="houses"]')).toBeHidden();
         await expect(dialog.locator('input[name="fp-families"][value="pages"]')).toBeChecked();
         await expect(dialog.locator('[data-clips="full"]')).toHaveAttribute('aria-checked', 'true');
         await expect(dialog.locator('[data-photos="full"]')).toHaveAttribute('aria-checked', 'true');
@@ -384,7 +386,9 @@ test.describe('family pages: the dialog on a phone', () => {
         const modal = dialog.locator('.book-dlg');
         const box = (await modal.boundingBox())!;
         expect(box.width).toBe(390);
-        await expect(dialog.locator('.book-sum-row .book-sum-l')).toHaveText(['Privacy of living people', 'Families', 'Person pages', 'Images', 'Includes']);
+        await expect(dialog.locator('.book-sum-row:not([hidden]) .book-sum-l')).toHaveText(['Privacy of living people', 'Families', 'Person pages', 'Images', 'Includes']);
+        // No house with history: no row Houses (spec 145 T6).
+        await expect(dialog.locator('[data-sub-open="houses"]')).toBeHidden();
         await expect(dialog.locator('[data-sum="privacy"]')).toHaveText('Initials');
         await expect(dialog.locator('[data-sum="families"]')).toHaveText('Pages of their own');
         await expect(dialog.locator('[data-sum="groups"]')).toHaveText('6 of 6');

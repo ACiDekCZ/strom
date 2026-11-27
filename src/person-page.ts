@@ -145,6 +145,11 @@ export interface PersonPageOptions {
     /** The window is always 'full'. */
     privacy: PrivacyMode;
     /**
+     * A set of family pages without houses (spec 145 T6, the option Houses
+     * "Without houses"): no row Houses, an address as a plain place.
+     */
+    noHouses?: boolean;
+    /**
      * Initial state of the switches (the page's default: all on): the timeline's
      * History / Children's events (they apply to the life chart too) and the
      * places map's Children's places (missing = on).
@@ -685,7 +690,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
     }
     // The person's houses (spec 030 §12): from the whole protected tree, once per protected tree.
     const houseIndex = prot.houseIndex ?? (prot.houseIndex = treeHouseIndex(full));
-    const houseList = houseIndex.houses.length ? personHouses(houseIndex, id) : [];
+    const houseList = houseIndex.houses.length && !opts.noHouses ? personHouses(houseIndex, id) : [];
     const page: PersonPageData = {
         personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree, living,
         history, historyPending: groups.research && historyPending,
@@ -699,7 +704,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         rod: rodRowShown(opts.privacy, prot.living.has(id)) ? personRodRowValue(prot.lineages, prot.rodLabels, id, opts.lang) : null,
         ancestors,
         ...(shared.size ? { shared } : {}),
-        ...(houseIndex.byAddress.size ? { houses: { list: houseList, index: houseIndex } } : {}),
+        ...(houseIndex.byAddress.size && !opts.noHouses ? { houses: { list: houseList, index: houseIndex } } : {}),
     };
     page.counts = countGroups(page);
     return page;

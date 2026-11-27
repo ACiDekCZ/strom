@@ -28,7 +28,7 @@ import type {
 import type { LiveHouseLayer } from './research-link.js';
 import { houseFacts, houseLabel, houseTitle, type HouseFact, type TreeHouse } from './houses.js';
 import { houseKey } from './places.js';
-import { houseOutputFilter, housePrivacyContext, type HouseOutput } from './house-privacy.js';
+import { houseOutputFilter, housePrivacyContext, type HouseOutput, type HousePrivacyContext } from './house-privacy.js';
 import { applyLivingPrivacy } from './privacy.js';
 import { getStringsForLang, joinAnd, type Language } from './strings.js';
 import { formatFlexDate, yearOf } from './dates.js';
@@ -70,6 +70,20 @@ export interface HousePageOptions {
     /** The research's map layers (`/status.houses.layers`), for the map (§4). */
     layers?: readonly LiveHouseLayer[];
     app?: HousePageApp;
+    /**
+     * A house page in a set of family pages (spec 145 T6), the file only: the
+     * link to a person's page in the set (`html` the escaped name), null the
+     * name alone (no page in the set, a protected living person).
+     */
+    personLink?: (id: PersonId, html: string) => string | null;
+    /** A set of family pages: the names as the set's privacy gives them (its protected tree); default the living by initials. */
+    names?: StromData;
+    /**
+     * A set of family pages: the living, the last ~100 years and the research's
+     * people judged on the whole tree (a protected copy has lost the dates and
+     * refs they are judged by); default judged on `data`.
+     */
+    privacy?: HousePrivacyContext;
 }
 
 export type { HouseMapInput } from './house-map.js';
@@ -145,13 +159,12 @@ function personName(c: Ctx, id: PersonId): string {
     return p ? shownName(p) : '';
 }
 
-/** A person of the tree: a link in the app, a name in the file. */
+/** A person of the tree: a link in the app, a name in the file (in a set of family pages the link to the person's page). */
 function personHtml(c: Ctx, id: PersonId, fallback = ''): string {
     const name = personName(c, id) || fallback;
     if (!name) return '';
-    return c.app
-        ? `<button type="button" class="pp-link hp-person" data-person-id="${esc(id)}">${esc(name)}</button>`
-        : `<span class="hp-nm">${esc(name)}</span>`;
+    if (c.app) return `<button type="button" class="pp-link hp-person" data-person-id="${esc(id)}">${esc(name)}</button>`;
+    return c.opts.personLink?.(id, esc(name)) ?? `<span class="hp-nm">${esc(name)}</span>`;
 }
 
 function tag(cls: string, text: string): string {
@@ -269,13 +282,13 @@ export function houseTreeRows(house: TreeHouse, facts: readonly HouseFact[], dat
 function makeCtx(data: StromData, house: TreeHouse, research: HouseResearch | null, mode: HousePageMode, opts: HousePageOptions): Ctx {
     const S = getStringsForLang(opts.lang);
     const app = mode === 'app';
-    const pctx = housePrivacyContext(data, opts.now);
+    const pctx = opts.privacy ?? housePrivacyContext(data, opts.now);
     const out = app ? null : houseOutputFilter(house, research, data, opts.now, pctx);
     const recentHouse = !!out && (out.persons.some(p => p.recent || p.living)
         || house.facts.some(f => f.year !== undefined && f.year >= pctx.from));
     return {
         mode, app, lang: opts.lang, H: S.houses, P: S.houses.page,
-        names: app ? data : applyLivingPrivacy(data, 'initials', opts.now.getFullYear()),
+        names: app ? data : opts.names ?? applyLivingPrivacy(data, 'initials', opts.now.getFullYear()),
         data, house, research, out, opts, personOfRef: pctx.personOfRef, recentHouse, recentFrom: app ? null : pctx.from,
     };
 }

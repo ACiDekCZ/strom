@@ -21,13 +21,16 @@
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PartnershipId, PersonId, StromData } from '../types.js';
+import { HouseId, PartnershipId, PersonId, StromData } from '../types.js';
 import { BookSelectionSpec } from '../book-options.js';
 import { PAGE_SET_SPLIT_BYTES, PageSet, PageSetOptions, SetPage, buildPageSet, pageSetFileName, pageSetImages } from '../family-pages.js';
 import { ZipBlobSink, ZipWriter } from '../zip.js';
 import { spoolFor, type SpoolFile } from '../spool.js';
 import { imageFileBytes, standInImage, textBlobWithImages, treeWithPoolStandIns } from '../image-standin.js';
-import { buildPageSetFilesAsync, buildPageSetHtmlAsync, pageSetZipName, pageSetRenderedPages, renderPage, renderPageBar, renderPageSearch } from '../family-pages-html.js';
+import { buildPageSetFilesAsync, buildPageSetHtmlAsync, forgetRenderedPage, pageSetZipName, pageSetRenderedPages, renderPage, renderPageBar, renderPageSearch } from '../family-pages-html.js';
+import { protectedHouseIndex } from '../person-page.js';
+import { loadBookHouseResearch } from '../book-house-research.js';
+import type { HouseResearch } from '../house-bridge.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { SHRINK_CLIP_PX, SHRINK_PHOTO_PX, SHRINK_QUALITY } from '../image-registry.js';
 import { RodId, buildLineages, rodOfPersonForCrumbs, rods as allRods } from '../lineage.js';
@@ -115,6 +118,13 @@ function cacheKey(spec: BookSelectionSpec, history: SetHistory = historyOf()): s
 /** The window's page drawn last (a page whose images came after another was drawn is not drawn). */
 let drawing = 0;
 
+/**
+ * The research's results of the window's house pages (spec 145 T6): read when
+ * a house page is first drawn, kept for the tree and the bridge they came
+ * from; the window's sets read them at each drawing.
+ */
+const winHouses = { key: '', research: new Map<HouseId, HouseResearch>(), asked: new Set<HouseId>() };
+
 /** Sets built while images were on their way (dropped from the cache when some come). */
 const waitingSets = new WeakSet<PageSet>();
 
@@ -151,7 +161,7 @@ export function windowPageSet(spec: BookSelectionSpec): PageSet {
     const shown = imageLoads.view(data);
     // Pooled images as stand-ins: a page drawn gets the images it shows put in (family-pages-images.ts).
     const set = buildPageSet(treeWithStandIns(shown), spec, {
-        lang: getCurrentLanguage(), privacy: 'full', families: 'pages', timelines: true, history,
+        lang: getCurrentLanguage(), privacy: 'full', families: 'pages', timelines: true, history, houseResearch: winHouses.research,
         ...(shown !== data ? { imageWait: pageImageWait } : {}),
     }, { treeName: treeName() });
     if (shown !== data) waitingSets.add(set);
@@ -743,6 +753,7 @@ export const familyPagesMethods = uiModule({
         scroller.innerHTML = body;
         if (scrollTop !== undefined) scroller.scrollTop = scrollTop;
         wireWindowBar(scroller, set);
+        if (page?.kind === 'house' && page.id) this.windowHouseResearch(overlay, ref, set, page.slug, page.id as HouseId);
         const root = scroller.querySelector<HTMLElement>('.sp-appset');
         if (root) { wireRodPicker(root); wireTreePages(root); wireRodTimelines(root); }
         const anchor = ref.anchor;
@@ -751,6 +762,32 @@ export const familyPagesMethods = uiModule({
             delete ref.anchor;
             requestAnimationFrame(() => scroller.querySelector<HTMLElement>(`#${CSS.escape(anchor)}`)?.scrollIntoView({ block: 'start' }));
         }
+    },
+
+    /**
+     * A house page of the window (spec 145 T6): the research's result of the
+     * house read once over the bridge (`house`); when it comes, the page is
+     * drawn again if it is still shown. No bridge or a failed read: the page of
+     * the tree alone, no error.
+     */
+    windowHouseResearch(overlay: HTMLElement, ref: SetRef, set: PageSet, slug: string, id: HouseId): void {
+        const b = this.houseResearchBridge();
+        const key = b ? `${DataManager.getCurrentTreeId() ?? ''}|${b.base}` : '';
+        if (winHouses.key !== key) { winHouses.key = key; winHouses.research.clear(); winHouses.asked.clear(); }
+        if (!b || winHouses.asked.has(id)) return;
+        const house = protectedHouseIndex(set.protectedTree).houses.find(h => h.id === id);
+        if (!house) return;
+        winHouses.asked.add(id);
+        void loadBookHouseResearch(b.base, [house]).then(got => {
+            const res = got.research.get(id);
+            if (!res || winHouses.key !== key) return;
+            winHouses.research.set(id, res);
+            forgetRenderedPage(set, slug);
+            const scroller = overlay.querySelector<HTMLElement>('.pp-body');
+            if (scroller?.isConnected && scroller.querySelector(`.hp[data-house="${CSS.escape(id)}"]`)) {
+                this.renderFamilyPagesEntry(overlay, ref, scroller.scrollTop);
+            }
+        });
     },
 
     /** "Save as file": the dialog with the pages output and this set's selection. */

@@ -37,6 +37,7 @@ import { ImageChoice, ImageRegistry, RegistryImageKind, SHRINK_CLIP_PX, SHRINK_P
 import { poolIdOf, standInOf } from './image-ref.js';
 import { imageMetaOf } from './image-meta.js';
 import type { HistoryPayload, PersonHistoryEnv } from './history.js';
+import type { HouseResearch } from './house-bridge.js';
 
 export type PageKind = 'hub' | 'rod' | 'branch' | 'family' | 'person' | 'index' | 'map' | 'tree' | 'other' | 'persons' | 'ancestors' | 'rodTimeline' | 'house';
 
@@ -122,7 +123,17 @@ export interface PageSetOptions {
     now?: Date;
     /** The app's window while the tree's images come (spec 116 §5, PersonPageOptions.imageWait); never a file. */
     imageWait?: PersonPageOptions['imageWait'];
+    /**
+     * The houses (spec 145 T6): pages of their own linked with the people
+     * (default), only a mention of the house without its pages, or none at all.
+     */
+    houses?: PageSetHouses;
+    /** The research's results of the houses, read before the set is built (the house pages show them as a saved file does). */
+    houseResearch?: ReadonlyMap<HouseId, HouseResearch>;
 }
+
+/** The option Houses of a set (spec 145 T6). */
+export type PageSetHouses = 'pages' | 'mention' | 'none';
 
 /** The groups of the person pages a set carries (1102 §4.4); stories and sources also on the family pages. */
 export interface PageSetGroups {
@@ -147,7 +158,7 @@ export interface PageSetContext {
 
 export interface PageSet {
     spec: BookSelectionSpec;
-    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories' | 'timelines' | 'minimal'>> & { now: Date; groups: PageSetGroups }
+    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories' | 'timelines' | 'minimal' | 'houses'>> & { now: Date; groups: PageSetGroups }
         & Pick<PageSetOptions, 'imageWait'>;
     /** The research's history for the timelines (null: none). */
     history: { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
@@ -166,6 +177,14 @@ export interface PageSet {
     rodTimelineSlug: Map<RodId, string>;
     /** The pages of the houses with history (spec 030 §13); none: a set built before houses or without one. */
     houseSlug?: Map<HouseId, string>;
+    /**
+     * The houses with history the set's people lived at, whatever the option
+     * Houses (the dialog offers it by them; spec 145 T6); under 'pages' each
+     * has its page.
+     */
+    houseIds?: ReadonlySet<HouseId>;
+    /** The research's results of the houses (spec 145 T6): read at each house page's drawing (the window adds them as they come). */
+    houseResearch?: ReadonlyMap<HouseId, HouseResearch>;
     /** Slugs of the indexes and of the map ('' for a page the set does not have). */
     indexSlug: Record<PageSetIndexKind, string>;
     /** The indexes split by letters (1102 §7.4), their letters in order; [] for an index on one page. */
@@ -489,7 +508,8 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const options: PageSet['options'] = {
         lang, privacy: opts.privacy ?? PERSON_PAGE_DEFAULT_PRIVACY, families: opts.families ?? 'pages',
         clips: opts.clips ?? 'full', photos: opts.photos ?? 'full', map: opts.map ?? true,
-        sources, stories, groups, timelines: opts.timelines ?? false, minimal: opts.minimal ?? false, now: opts.now ?? new Date(),
+        sources, stories, groups, timelines: opts.timelines ?? false, minimal: opts.minimal ?? false, houses: opts.houses ?? 'pages',
+        now: opts.now ?? new Date(),
         ...(opts.imageWait ? { imageWait: opts.imageWait } : {}),
     };
     // Ancestors without a depth: the dialog's default (§4.1).
@@ -689,9 +709,13 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     // The houses with history the set's people lived at (spec 030 §13), as outputs show them (houseOutputFilter).
     const startCrumb: PageCrumb = whole ? introCrumb : { slug: intro.slug, label: F.start };
     const houseSlug = new Map<HouseId, string>();
+    const houseIds = new Set<HouseId>();
     const housePages: SetPage[] = [];
     for (const { house, facts } of protectedHouseOutputs(prot, options.now).houses) {
         if (!facts.some(f => personSlug.has(f.personId))) continue;
+        houseIds.add(house.id);
+        // Only a mention or no houses (spec 145 T6): no page and no index of houses.
+        if (options.houses !== 'pages') continue;
         const slug = uniqueSlug(['dum', asciiSlug(house.ref.town), asciiSlug(house.text)].filter(Boolean).join('-'), used);
         houseSlug.set(house.id, slug);
         const title = housePageTitle(tree, house, lang);
@@ -739,7 +763,8 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
 
     const out: PageSet = {
         spec, options, history: opts.history ?? null, selection: sel, protectedTree: prot, rodIds, rodLabels: labels,
-        pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, rodTimelineSlug, houseSlug, indexSlug, indexLetters, minimalIds, mapSlug,
+        pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, rodTimelineSlug, houseSlug, houseIds,
+        ...(opts.houseResearch ? { houseResearch: opts.houseResearch } : {}), indexSlug, indexLetters, minimalIds, mapSlug,
         introSlug: intro.slug, otherSlug, otherRodIds: small.map(r => r.id), otherAnchor, otherPersonIds, images, searchIndex: [], treeName: ctx.treeName?.trim() ?? '',
     };
     out.searchIndex = buildSearchIndex(out, rods);

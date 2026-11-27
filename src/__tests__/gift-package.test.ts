@@ -270,6 +270,21 @@ describe('one package', () => {
         expect(paths).toContain(`${r.folder}/Vějíř předků – Jonas Holm.svg`);
     });
 
+    it('spec 145 T6: the family pages of the package take the remembered option Houses', async () => {
+        const { houseTree } = await import('./helpers/house-book-fixture.js');
+        const { defaultPagesChoices } = await import('../book-memory.js');
+        const settings = { ...settingsFor([], 'en', { app: false, book: false, fan: false, gedcom: false }), cut: { ...settingsFor([]).cut, recipients: ['hostivit' as PersonId] } };
+        const housePages = async (houses?: 'pages' | 'mention' | 'none') => {
+            const env = testEnv(fresh(), houses ? { pages: { ...defaultPagesChoices(), houses } } : {});
+            const r = await buildGiftPackage({ data: houseTree(), settings, treeName: 'Prouzal', env });
+            return [...zipFiles(await blobBytes(r.blob)).keys()].filter(p => p.includes('/Family pages/houses/'));
+        };
+        expect((await housePages()).length).toBeGreaterThan(0);
+        expect((await housePages('pages')).length).toBeGreaterThan(0);
+        expect(await housePages('mention')).toEqual([]);
+        expect(await housePages('none')).toEqual([]);
+    });
+
     it('the app gets the sender and the message with the salutation in place', async () => {
         const c = fresh();
         await buildGiftPackage({ data: sensitiveTree(), settings: settingsFor(['daniel'], 'en', { pages: false, book: false }), treeName: 'Berg', env: testEnv(c) });

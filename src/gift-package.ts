@@ -506,7 +506,7 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
             const opts: PageSetOptions = {
                 lang, privacy: 'full', families: choices.families,
                 clips: settings.photos ? 'full' : 'none', photos: settings.photos ? 'full' : 'none',
-                map: choices.include.map, groups: { ...choices.groups }, timelines: choices.include.timelines, now,
+                map: choices.include.map, groups: { ...choices.groups }, timelines: choices.include.timelines, houses: choices.houses, now,
             };
             const set = buildPageSet(data, { kind: 'tree' }, opts, { treeName: input.treeName });
             const total = pageSetRenderedPages(set).length;

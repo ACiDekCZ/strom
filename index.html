@@ -29826,6 +29826,8 @@
         #book-modal .fp-inc { display: flex; flex-wrap: wrap; gap: 2px 22px; }
         #book-modal .fp-inc input { margin: 0; accent-color: var(--primary); }
         #book-modal .fp-inc .book-radio[hidden] { display: none; }
+        /* Houses (spec 145 T6): only for a selection with a house with history */
+        #book-modal .book-sec[data-sec="houses"][hidden], #book-modal .book-sum-row[data-sub-open="houses"][hidden] { display: none; }
         /* 1102 §4.1: the pages' depth of ancestors with its count; chosen people (chips, search, a list of 7 rows); the book's line after chosen people */
         #book-modal .book-sel-moved { margin: 8px 2px 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
         #book-modal .book-sel-moved[hidden], #book-modal .book-anc-line[hidden], #book-modal .book-gift-line[hidden], #book-modal .book-gens[hidden], #book-modal .book-gens-t[hidden] { display: none; }
@@ -29911,6 +29913,7 @@
             #book-modal .book-dlg[data-sub="families"] [data-sec="families"],
             #book-modal .book-dlg[data-sub="images"] [data-sec="images"],
             #book-modal .book-dlg[data-sub="include"] [data-sec="include"],
+            #book-modal .book-dlg[data-sub="houses"] [data-sec="houses"]:not([hidden]),
             #book-modal .book-dlg[data-sub="groups"] [data-sec="groups"] { display: block; border-top: 0; padding-top: 4px; }
             #book-modal .book-dlg[data-sub="sel"] .book-anc-seg [data-anc-gen="all"] { display: block; }
             #book-modal .book-dlg[data-sub="sel"][data-kind="persons"] .book-sub-done { display: block; min-height: 48px; margin-top: 4px; }

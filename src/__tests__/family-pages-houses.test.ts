@@ -9,10 +9,10 @@ import { describe, expect, it } from 'vitest';
 import type { PersonId, StromData } from '../types.js';
 import { collectHouses } from '../houses.js';
 import { houseOutputs } from '../house-events.js';
-import { buildPageSet, pageSetPath } from '../family-pages.js';
+import { buildPageSet, estimatePageSetSize, pageSetPath } from '../family-pages.js';
 import { buildPageSetHtml } from '../family-pages-html.js';
 import { buildLineages, rods } from '../lineage.js';
-import { HOUSE_ID, HOUSE_NOW, LIVING_NAME, OLD_HOUSE_ID, SENSITIVE_TEXT, houseTree } from './helpers/house-book-fixture.js';
+import { HOUSE_ID, HOUSE_NOW, LIVING_NAME, OLD_HOUSE_ID, SENSITIVE_TEXT, houseResearch, houseTree } from './helpers/house-book-fixture.js';
 
 const pid = (s: string): PersonId => s as PersonId;
 
@@ -111,5 +111,96 @@ describe('a set of a line with houses', () => {
         // The house's events on the line's timeline stop before the last ~100 years too.
         const tl = section(html, [...set.rodTimelineSlug.values()][0]);
         expect(tl.match(/sp-tl-row--house[^>]*><span class="sp-tl-y">(\d+)/g)!.map(m => Number(m.slice(-4))).every(y => y < 1926)).toBe(true);
+    });
+});
+
+describe('houses in the family pages (spec 145 T6)', () => {
+    const research = (edit?: (r: ReturnType<typeof houseResearch>) => void) => {
+        const r = houseResearch();
+        edit?.(r);
+        return { houseResearch: new Map([[HOUSE_ID, r]]) };
+    };
+
+    it('the house\'s page carries the research\'s results through the privacy filter of a saved file', () => {
+        const set = prouzalSet(undefined, research());
+        const page = section(buildPageSetHtml(set), set.houseSlug!.get(HOUSE_ID)!);
+        // The holders of the research, before the last ~100 years.
+        expect(page).toContain('hp-sec--people');
+        for (const name of ['Svatobor Prouzal', 'Hostivít Prouzal', 'Lubor Prouzal', 'Radegunda Prouzalová']) expect(page).toContain(name);
+        // Never the sensitive event, the rebuilding of 1962 or the stranger holding it from 1951.
+        for (const text of [SENSITIVE_TEXT, 'Přestavba stodoly', 'Kvido Stranný', LIVING_NAME]) expect(page).not.toContain(text);
+        // Without the research's results the page is the tree's alone.
+        expect(section(buildPageSetHtml(prouzalSet()), set.houseSlug!.get(HOUSE_ID)!)).not.toContain('hp-sec--people');
+    });
+
+    it('the house\'s people link to their pages in the set; one without a page stays text', () => {
+        // Radegunda's father (P0009) has no page in the line's set.
+        const set = prouzalSet(undefined, research(r => { r.residents[0] = { ...r.residents[0], name: 'Drahobud Mlynář', person: 'P0009' }; }));
+        expect(set.personSlug.has(pid('drahobud'))).toBe(false);
+        const page = section(buildPageSetHtml(set), set.houseSlug!.get(HOUSE_ID)!);
+        expect(page).toContain(`<a class="pp-link" href="#${set.personSlug.get(pid('svatobor'))}">Svatobor Prouzal</a>`);
+        expect(page).toContain(`<a class="pp-link" href="#${set.personSlug.get(pid('lubor'))}">Lubor Prouzal</a>`);
+        // The tree's own events of the house link too.
+        expect(page).toMatch(new RegExp(`Died <a class="pp-link" href="#${set.personSlug.get(pid('kunhuta'))}">Kunhuta Prouzalová</a>`));
+        expect(page).toMatch(/<span class="hp-nm">Drahobud [^<]*<\/span>/);
+        expect(page).not.toMatch(/<a [^>]*>Drahobud/);
+        // Every link of the page leads to a page of the set.
+        for (const m of page.matchAll(/<a class="pp-link[^"]*" href="#([^"]+)"/g)) expect(set.bySlug.has(m[1].split('--')[0])).toBe(true);
+    });
+
+    it('a protected living person is named as the set names them, never by the research\'s name, and not linked', () => {
+        for (const privacy of ['initials', 'anonymous'] as const) {
+            const set = prouzalSet(undefined, { ...research(), privacy });
+            const page = section(buildPageSetHtml(set), set.houseSlug!.get(HOUSE_ID)!);
+            expect(page).not.toContain(LIVING_NAME);
+            expect(page).not.toContain('Prouzalová</a></td><td class="hp-role">other');
+            expect(set.personSlug.has(pid('bohuslava'))).toBe(false);
+        }
+        const initials = section(buildPageSetHtml(prouzalSet(undefined, { ...research(), privacy: 'initials' })), 'dum-belokamen-cp-16');
+        expect(initials).toContain('<span class="hp-nm">B. P.</span>');
+        // Full names chosen: the living person's page exists and the house leads to it.
+        const full = prouzalSet(undefined, { ...research(), privacy: 'full' });
+        expect(section(buildPageSetHtml(full), 'dum-belokamen-cp-16')).toContain(`<a class="pp-link" href="#${full.personSlug.get(pid('bohuslava'))}">${LIVING_NAME} Prouzalová</a>`);
+    });
+
+    it('the option Houses: pages, only a mention, none', () => {
+        const pages = prouzalSet();
+        const mention = prouzalSet(undefined, { houses: 'mention' });
+        const none = prouzalSet(undefined, { houses: 'none' });
+        // The set knows its houses whatever the option (the dialog shows the option by them).
+        for (const set of [pages, mention, none]) expect([...set.houseIds!].sort()).toEqual([HOUSE_ID, OLD_HOUSE_ID].sort());
+        expect(pages.options.houses).toBe('pages');
+        // Pages and the index only with 'pages'.
+        expect(mention.houseSlug!.size).toBe(0);
+        expect(none.houseSlug!.size).toBe(0);
+        expect(mention.indexSlug.houses).toBe('');
+        expect(mention.pages.length).toBe(pages.pages.length - 3);
+        expect(none.pages.length).toBe(mention.pages.length);
+        const html = { pages: buildPageSetHtml(pages), mention: buildPageSetHtml(mention), none: buildPageSetHtml(none) };
+        for (const h of [html.mention, html.none]) {
+            expect(h).not.toContain('rejstrik-domy');
+            expect(h).not.toContain('sp-house-link');
+            expect(h).not.toContain('<article class="pp hp"');
+        }
+        // A mention: the line's houses as text, the house on the timeline, the person's row Houses without a link.
+        const rod = (k: 'mention' | 'none') => section(html[k], [...(k === 'mention' ? mention : none).rodSlug.values()][0]);
+        expect(rod('mention')).toMatch(/<section class="sp-block sp-houses">[\s\S]*<td>Bělokamen čp.\u00a016<\/td><td>1820–1920<\/td>/);
+        const tl = (k: 'mention' | 'none') => section(html[k], [...(k === 'mention' ? mention : none).rodTimelineSlug.values()][0]);
+        expect(tl('mention')).toContain('data-tl-k="houses"');
+        const person = (k: 'mention' | 'none') => section(html[k], (k === 'mention' ? mention : none).personSlug.get(pid('hostivit'))!);
+        expect(person('mention')).toContain('class="pp-houses"');
+        // None: no section, no events of houses, no row Houses; the address as a plain place.
+        expect(rod('none')).not.toContain('sp-houses');
+        expect(tl('none')).not.toContain('data-tl-k="houses"');
+        expect(tl('none')).not.toContain('sp-tl-row--house');
+        expect(person('none')).not.toContain('pp-houses');
+        expect(person('none')).toContain('Bělokamen');
+    });
+
+    it('the size estimate and the page count change with the option', () => {
+        const size = (houses: 'pages' | 'mention' | 'none') => estimatePageSetSize(prouzalSet(undefined, { houses }));
+        expect(size('mention').bytes).toBeLessThan(size('pages').bytes);
+        expect(size('mention').pages).toBe(size('pages').pages - 3);
+        expect(size('none').bytes).toBeLessThanOrEqual(size('mention').bytes);
     });
 });

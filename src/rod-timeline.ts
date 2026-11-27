@@ -124,6 +124,8 @@ export interface RodTimelineInput {
     history?: { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
     /** The group "History" of the set (§5.5); off: no bands, no rows, no chip. */
     historyOn?: boolean;
+    /** The houses' events (spec 030 §13); false: a set without houses (spec 145 T6). Default true. */
+    houses?: boolean;
 }
 
 /** Rows of places on the overview (§5.2). */
@@ -421,7 +423,7 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
 
     // The houses' events of the line's people (spec 030 §13), as the set's outputs show the houses.
     const ofLine = new Set<PersonId>([...members, ...spouses]);
-    for (const h of protectedHouseOutputs(prot, input.now).events) {
+    for (const h of input.houses === false ? [] : protectedHouseOutputs(prot, input.now).events) {
         if (ofLine.has(h.personId)) events.push({ kind: 'house', year: h.year, sort: h.year + 0.5, personId: h.personId, house: h });
     }
 

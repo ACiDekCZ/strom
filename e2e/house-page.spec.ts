@@ -586,3 +586,41 @@ test.describe('The house page on a phone', () => {
         expect(sizes.body).toBeLessThanOrEqual(sizes.client);
     });
 });
+
+test.describe('The house page in the family pages (spec 145 T6)', () => {
+    test('the window and the saved file carry the research\'s result: holders linked to their pages, nothing of the last ~100 years', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.openFamilyPages());
+        const win = page.locator('#person-page-modal');
+        await expect(win).toHaveClass(/pp-is-set/);
+        await win.locator('.sp-fbar-nav [data-sp-open]').first().click();
+        await win.locator('[data-sp-open="page:rejstrik-domy"]:visible').first().click();
+        await win.locator('.pp-body [data-sp-open^="page:dum-"]').first().click();
+        const house = win.locator('.pp-body article.hp');
+        // The research's holders arrive over the bridge: Josef leads to his page, the stranger is text.
+        await expect(house.locator('.hp-table button[data-sp-open^="person:"]', { hasText: 'Josef Fíšek' })).toBeVisible();
+        await expect(house.locator('.hp-table tr', { hasText: 'Kvido Stranný' })).toBeVisible();
+        await expect(house.locator('.hp-table tr', { hasText: 'Kvido Stranný' }).locator('[data-sp-open]')).toHaveCount(0);
+        await expect(house).not.toContainText('Přestavba stodoly');
+        await expect(house).not.toContainText('Marie Prouzalová');
+        await win.locator('.pp-close, .close-btn').first().click();
+
+        // The saved file: the same result through the same filter.
+        await page.evaluate(() => window.Strom.UI.showBookDialog('pages'));
+        const dialog = page.locator('#book-modal');
+        await expect(dialog).toHaveClass(/active/);
+        await dialog.locator('#book-open').click();
+        const res = dialog.locator('.fp-res');
+        await expect(res.locator('.fp-res-t')).toHaveText('The file is ready');
+        const [download] = await Promise.all([page.waitForEvent('download'), res.locator('.fp-res-save').click()]);
+        const html = await readFile((await download.path())!, 'utf8');
+        const at = html.indexOf('<article class="pp hp"');
+        expect(at).toBeGreaterThan(0);
+        const hp = html.slice(at, html.indexOf('</article>', at));
+        expect(hp).toMatch(/<a class="pp-link" href="#[^"]+">Josef Fíšek<\/a>/);
+        expect(hp).toContain('Kvido Stranný');
+        expect(hp).not.toContain('Přestavba stodoly');
+        expect(hp).not.toContain('Marie Prouzalová');
+    });
+});
+

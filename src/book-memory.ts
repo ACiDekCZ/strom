@@ -70,7 +70,12 @@ export interface PagesChoices {
     photos: ImageChoice;
     groups: PagesGroups;
     include: PagesInclude;
+    /** The houses (spec 145 T6): pages linked with the people, only a mention, none. */
+    houses: PagesHouses;
 }
+
+/** The option Houses of the family pages (spec 145 T6), as PageSetOptions.houses. */
+export type PagesHouses = 'pages' | 'mention' | 'none';
 
 /** The pages' rows when nothing is remembered: families as pages where it makes sense, images as they are, everything in. */
 export function defaultPagesChoices(): PagesChoices {
@@ -78,6 +83,7 @@ export function defaultPagesChoices(): PagesChoices {
         families: 'pages', clips: 'full', photos: 'full',
         groups: { history: true, childEvents: true, stories: true, sources: true, materials: true, pdf: true },
         include: { map: true, timelines: true },
+        houses: 'pages',
     };
 }
 
@@ -101,6 +107,7 @@ const OUTPUTS: readonly BookOutput[] = ['book', 'pages'];
 const FAMILIES: readonly PagesChoices['families'][] = ['pages', 'section'];
 const IMAGES: readonly ImageChoice[] = ['full', 'small', 'none'];
 const INCLUDE_KEYS: readonly (keyof PagesInclude)[] = ['map', 'timelines'];
+const HOUSES: readonly PagesHouses[] = ['pages', 'mention', 'none'];
 
 function oneOf<T extends string>(list: readonly T[], x: unknown): T | undefined {
     return typeof x === 'string' && (list as readonly string[]).includes(x) ? x as T : undefined;
@@ -192,6 +199,8 @@ function parsePagesChoices(v: unknown): PagesChoices | null {
     if (clips) { out.clips = clips; any = true; }
     const photos = oneOf(IMAGES, o.photos);
     if (photos) { out.photos = photos; any = true; }
+    const houses = oneOf(HOUSES, o.houses);
+    if (houses) { out.houses = houses; any = true; }
     if (o.include && typeof o.include === 'object' && !Array.isArray(o.include)) {
         const src = o.include as Record<string, unknown>;
         for (const k of INCLUDE_KEYS) if (typeof src[k] === 'boolean') { out.include[k] = src[k] as boolean; any = true; }
