@@ -350,4 +350,29 @@ test.describe('Houses: asking the research for a house\'s history', () => {
         await expect(r.locator('.place-house-page')).toBeVisible();
         await expect(r.locator('.house-req')).toHaveCount(0);
     });
+
+    // A tree followed live is read-only (1127, Milan 27 Nov 2026): Houses… stays in the tree's menu, the window opens
+    // read-only (no merge, no split), and the research's action and Attach material… go over the bridge as it allows.
+    test('a followed tree: Houses… in the tree\'s menu, the window read-only, the research\'s action over the bridge', async ({ page }) => {
+        const houses = await setup(page, { on: true });
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            dm.setLiveTree(dm.getCurrentTreeId());
+        });
+        expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(true);
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-tree-row').hover();
+        const submenu = page.locator('#actions-tree-submenu');
+        await expect(submenu).toBeVisible();
+        await expect(submenu.locator('[data-action="places"], [data-action="surnames"], [data-action="rename"]')).toHaveCount(0);
+        await submenu.locator('[data-action="houses"]').click();
+        await expect(houseRow(page)).toBeVisible();
+        await houseRow(page).locator('.house-more-btn').click();
+        await expect(menuItems(page)).toHaveText(['House page', 'Move to the top', 'Attach material…']);
+        await actItem(page).click();
+        await expect(page.locator('.toast').filter({ hasText: 'House čp. 16 is at the top of the research queue.' })).toBeVisible();
+        expect(houses.requests).toEqual([{ house: KEY }]);
+        // The houses' own data stays as it is meanwhile (names, merges, points).
+        expect(await page.evaluate(() => window.Strom.DataManager.housesReadOnly())).toBe(true);
+    });
 });

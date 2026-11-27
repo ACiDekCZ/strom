@@ -177,6 +177,11 @@ export const treeActionsMethods = uiModule({
         const exportRows: TreeActionRow[] = by.export
             ? [{ key: 'export', label: s.export, run: () => this.showExportDialogFromManager(id) }] : [];
 
+        // Houses… only for a tree with a numbered house (spec 030 §1); a read-only tree has it too (followed live,
+        // locked, a preview: the window shows read-only, 1127), the only row of its Settings group then.
+        const housesRows: TreeActionRow[] = isActive && hasNumberedHouse(DataManager.getData())
+            ? [{ key: 'houses', label: strings.houses.menu, run: () => this.showHousesWindow({ parent }) }] : [];
+
         // A newer version of a sample tree known here (spec 143 §2): its update first, in Manage trees only.
         const newerSample = source === 'manager' && editable && tree.sample ? this.showcaseNewerVersion(id) : null;
         const groups: TreeActionGroup[] = [
@@ -217,12 +222,10 @@ export const treeActionsMethods = uiModule({
                 { key: 'lifeline', label: s.lifelineDefaults, value: lifelineDefaultsSummary(id), editOnly: true, run: () => this.showLifelineDefaultsDialog(id, parent) },
                 ...(isActive ? [
                     { key: 'places', label: strings.map.placesMenu, editOnly: true, run: () => this.showPlacesManager(undefined, parent) },
-                    // Houses… only for a tree with a numbered house (spec 030 §1).
-                    ...(hasNumberedHouse(DataManager.getData())
-                        ? [{ key: 'houses', label: strings.houses.menu, run: () => this.showHousesWindow({ parent }) }] : []),
+                    ...housesRows,
                     { key: 'surnames', label: strings.surnames.menu, editOnly: true, run: () => this.showSurnamesDialog(parent) },
                 ] : []),
-            ] : [] },
+            ] : housesRows },
             ...(by.structureFirst ? [] : [{ key: 'structure' as const, rows: structureRows }]),
             { key: 'manage', rows: editable ? [
                 { key: 'visibility', label: tree.isHidden ? s.showTree : s.hideTree, editOnly: true, run: () => void this.toggleTreeVisibility(id) },

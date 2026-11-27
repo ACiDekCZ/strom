@@ -637,7 +637,7 @@ export const housesMethods = uiModule({
                 ? [{ key: 'map', label: s.page.onMap, run: () => this.showHouseOnMap(h, this.housePageResearch(h)) }] : []),
         ];
         const research = this.houseMenuResearchItems(h, btn);
-        const own: HouseMenuItem[] = DataManager.isReadOnly() ? [] : [
+        const own: HouseMenuItem[] = DataManager.housesReadOnly() ? [] : [
             { key: 'merge', label: s.merge, run: () => this.showHouseMergeDialog(h.id) },
             ...(this.houseSplitCandidates(h).length ? [{ key: 'split', label: s.split, run: () => this.showHouseSplitDialog(h.id) }] : []),
         ];

@@ -211,3 +211,27 @@ test.describe('Family houses on the map', () => {
         await expect(page.locator('#map-container .map-house-pt')).toHaveCount(0);
     });
 });
+
+// "On the map" before the map's background is allowed (1127 N2): the notice card stays in sight, no bubble over it;
+// once allowed, the house is chosen beside its open bubble.
+test.describe('On the map before the background is allowed', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the notice card first, the house chosen after "Show map"', async ({ page }) => {
+        const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+        await page.route('**://tile.openstreetmap.org/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+        await page.route('**://nominatim.openstreetmap.org/**', route => route.abort());
+        await openApp(page);
+        await seedHouses(page);
+        await page.evaluate(() => window.Strom.UI.showHousesWindow());
+        await page.locator(`#houses-modal .house-row[data-house="${KEY}"] .house-more-btn`).click();
+        await page.locator('.houses-menu [role="menuitem"][data-action="map"]').click();
+        const notice = page.locator('#map-container .map-tiles-notice');
+        await expect(notice.locator('button')).toBeVisible();
+        await expect(popup(page)).toBeHidden();
+        await notice.locator('button').click();
+        await expect(notice).toHaveCount(0);
+        await expect(pill(page)).toHaveClass(/is-open/);
+        await expect(popup(page).locator('.map-popup-head strong')).toHaveText('Bělokamen čp. 16');
+    });
+});

@@ -171,7 +171,7 @@ export const mapHousesMethods = uiModule({
         const chips = this.mapPopupPeople(shown.map(p => [p.id as PersonId, new Set()] as const), Infinity, '')
             + (people.length > shown.length
                 ? `<button type="button" class="map-popup-more map-popup-hmore">${esc(strings.map.morePeople(people.length - shown.length))}</button>` : '');
-        const canMove = !DataManager.isReadOnly();
+        const canMove = !DataManager.housesReadOnly();
         // The house's own point elsewhere (OpenStreetMap, Mapy.com, Google Maps, Street View; Milan 27 Nov 2026).
         const own = mapHouseLocation(house, data.houses, this.mapHouseResearch(house));
         const elsewhere = own ? houseElsewhereHtml({ lat: own.lat, lng: own.lon }, getCurrentLanguage()) : '';

@@ -270,7 +270,7 @@ export const houseStateMethods = uiModule({
         const badge = houseStateHtml(row, { lang: getCurrentLanguage(), answer: true }) + this.houseActionHtml(h);
         const more = this.renderHouseMaterialsHtml(h);
         const sensitive = houseSensitiveHtml(h, this.houseResearchOf(h), DataManager.getData(), new Date(),
-            { lang: getCurrentLanguage(), readOnly: DataManager.isReadOnly() });
+            { lang: getCurrentLanguage(), readOnly: DataManager.housesReadOnly() });
         return badge || more || sensitive
             ? `<div class="house-research">${badge ? `<div class="house-research-state">${badge}</div>` : ''}${sensitive}${more}</div>` : '';
     },

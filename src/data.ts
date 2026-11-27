@@ -2540,8 +2540,16 @@ class DataManagerClass {
      * forgets it. `label` is the house as shown ("Bělokamen čp. 16"). One undo
      * step and a change-log entry. False while read-only or when nothing changes.
      */
+    /**
+     * The houses' own data (names, merges, points, what outputs reveal) may not change now: read-only data, or a
+     * tree locked or followed live (1127: the Houses window, the house page and the map show read-only then).
+     */
+    housesReadOnly(): boolean {
+        return this.isReadOnly() || this.isTreeLocked();
+    }
+
     setHouseUserData(id: HouseId, value: HouseUserData | undefined, label: string): boolean {
-        if (this.isReadOnly() || !isHouseId(id)) return false;
+        if (this.housesReadOnly() || !isHouseId(id)) return false;
         const clean = value ? sanitizeHouseUserData(id, value) : null;
         const before = this.data.houses?.[id];
         if (JSON.stringify(before ?? null) === JSON.stringify(clean)) return false;
@@ -2563,7 +2571,7 @@ class DataManagerClass {
      * when nothing changes.
      */
     setHousesUserData(changes: Readonly<Record<HouseId, HouseUserData | undefined>>, label: string): boolean {
-        if (this.isReadOnly()) return false;
+        if (this.housesReadOnly()) return false;
         const next = { ...(this.data.houses ?? {}) };
         let changed = false;
         for (const [id, value] of Object.entries(changes)) {

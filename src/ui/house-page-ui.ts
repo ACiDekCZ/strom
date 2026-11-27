@@ -202,7 +202,7 @@ export const housePageMethods = uiModule({
         const b = this.houseResearchBridge();
         const row = b ? this.houseResearchRow(house) : null;
         const research = this.housePageResearch(house);
-        const canEdit = !DataManager.isReadOnly();
+        const canEdit = !DataManager.housesReadOnly();
         const materialActions = b ? [
             houseFeature(b.features, 'house.material')
                 ? `<button type="button" class="hp-mini house-attach">${esc(H.attach)}</button>` : '',
@@ -340,14 +340,14 @@ export const housePageMethods = uiModule({
     async housePageAct(house: TreeHouse, el: HTMLElement): Promise<void> {
         const act = el.dataset.hpAct;
         if (act === 'name') {
-            if (DataManager.isReadOnly() || !page) return;
+            if (DataManager.housesReadOnly() || !page) return;
             page.editingName = true;
             this.startHouseNameEdit();
             return;
         }
         if (act === 'reveal') {
             const eventId = el.dataset.event;
-            if (!eventId || DataManager.isReadOnly()) return;
+            if (!eventId || DataManager.housesReadOnly()) return;
             const user = DataManager.getData().houses?.[house.id];
             const reveal = withRevealed(user?.revealInOutputs, eventId, el.dataset.reveal === 'show');
             const next: HouseUserData = { ...(user ?? {}), revealInOutputs: reveal };
@@ -383,7 +383,7 @@ export const housePageMethods = uiModule({
      * research (`/houses/confirm {what: 'location'}`) when it knows the house.
      */
     async saveHousePoint(house: TreeHouse, point: { lat: number; lng: number } | null, how: 'manual' | 'confirmed'): Promise<void> {
-        if (DataManager.isReadOnly()) return;
+        if (DataManager.housesReadOnly()) return;
         const research = this.housePageResearch(house);
         const at = point ?? (research?.location ? { lat: research.location.lat, lng: research.location.lon } : null);
         if (!at) return;
@@ -478,7 +478,7 @@ export const housePageMethods = uiModule({
         if (!menu.hidden) { this.closeHousePageMenu(true); return; }
         const P = strings.houses.page;
         const H = strings.houses;
-        const canEdit = !DataManager.isReadOnly();
+        const canEdit = !DataManager.housesReadOnly();
         const b = this.houseResearchBridge();
         const item = (key: string, label: string, narrow = false, html = false): string =>
             `<button type="button" class="pp-menu-item${narrow ? ' pp-menu-item--narrow' : ''}" role="menuitem" data-hp-menu="${key}">${html ? label : esc(label)}</button>`;
@@ -529,7 +529,7 @@ export const housePageMethods = uiModule({
         }
         if (key === 'map') { this.showHouseOnMap(house, this.housePageResearch(house)); return; }
         if (key === 'name') {
-            if (!page || DataManager.isReadOnly()) return;
+            if (!page || DataManager.housesReadOnly()) return;
             page.editingName = true;
             this.startHouseNameEdit();
             return;

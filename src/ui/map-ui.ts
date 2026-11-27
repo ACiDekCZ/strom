@@ -71,6 +71,11 @@ let mapFloorUpdate: (() => void) | null = null;
 
 /** The map point whose bubble is open (a place key or 'town:…'), null when closed. */
 let openPoint: string | null = null;
+/**
+ * A bubble asked for before the background was allowed ("On the map" of a house or a place, 1127 N2): it
+ * would cover the notice card, so it waits and opens once the background is allowed.
+ */
+let pendingBubble: { kind: 'house' | 'place'; id: string } | null = null;
 /** The open town bubble's house search, and the houses (houseKey, NO_HOUSE) shown with all their people. */
 let townQuery = '';
 let townExpanded = new Set<string>();
@@ -1442,7 +1447,13 @@ export const mapMethods = uiModule({
 
     acknowledgeMapTiles(): void {
         SettingsManager.setMapTilesAcknowledged();
-        TreeRenderer.render();
+        const pending = pendingBubble;
+        pendingBubble = null;
+        void TreeRenderer.renderAsync().then(() => {
+            if (!pending || TreeRenderer.getViewMode() !== 'map') return;
+            if (pending.kind === 'house') this.showMapHouse(pending.id);
+            else this.showMapPlace(pending.id);
+        });
     },
 
     mapViewportSize(container: HTMLElement): { width: number; height: number } {
@@ -1458,6 +1469,8 @@ export const mapMethods = uiModule({
      * the map where it is (a redraw of the open bubble).
      */
     showMapPlace(key: string, opts: { pan?: boolean } = {}): void {
+        // Before the background is allowed the notice card stays in sight: the bubble opens after it (1127 N2).
+        if (!SettingsManager.isMapTilesAcknowledged()) { pendingBubble = { kind: 'place', id: key }; return; }
         const popup = document.querySelector('.map-popup') as HTMLElement | null;
         if (!popup) return;
         const points = this.mapPoints();
@@ -1683,6 +1696,8 @@ export const mapMethods = uiModule({
      * middle of the map like a place's, a phone's sheet along the bottom.
      */
     showMapHouse(id: string, opts: { pan?: boolean } = {}): void {
+        // Before the background is allowed the notice card stays in sight: the house is chosen after it (1127 N2).
+        if (!SettingsManager.isMapTilesAcknowledged()) { pendingBubble = { kind: 'house', id }; return; }
         const popup = document.querySelector('.map-popup') as HTMLElement | null;
         const house = this.mapTreeHouse(id);
         const point = this.mapHousePointsShown().find(p => p.id === house?.id);
@@ -1973,6 +1988,7 @@ export const mapMethods = uiModule({
 
     closeMapPopup(): void {
         openPoint = null;
+        pendingBubble = null;
         document.querySelectorAll('#map-container .map-house-pt.is-open').forEach(el => el.classList.remove('is-open'));
         document.getElementById('map-container')?.classList.remove('map-sheet-open');
         const popup = document.querySelector('.map-popup') as HTMLElement | null;

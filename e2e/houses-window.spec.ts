@@ -96,9 +96,27 @@ test.describe('the Houses window', () => {
         submenu = await openTreeMenu(page);
         const item = submenu.locator('[data-action="houses"]');
         await expect(item).toHaveText(/Houses…/);
+        // Editing: the Settings group in its order, Houses… between Places… and Surnames… (1127 keeps it).
+        const settings = ['rename', 'defaultPerson', 'startup', 'lifeline', 'places', 'houses', 'surnames'];
+        const actions = (await submenu.locator('[data-action]').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.action ?? '')))
+            .filter(a => settings.includes(a));
+        expect(actions).toEqual(settings);
         await item.click();
         await expect(win(page)).toBeVisible();
         await expect(win(page).locator('#houses-title')).toHaveText('Houses');
+    });
+
+    test('a locked tree keeps Houses… in its menu, alone in Settings; the window opens without merge', async ({ page }) => {
+        await openApp(page);
+        await seedVillages(page);
+        await page.evaluate(() => window.Strom.UI.toggleTreeLock(window.Strom.TreeManager.getActiveTreeId()!));
+        await expect.poll(() => page.evaluate(() => window.Strom.DataManager.isTreeLocked())).toBe(true);
+        const submenu = await openTreeMenu(page);
+        await expect(submenu.locator('[data-action="places"], [data-action="surnames"], [data-action="rename"]')).toHaveCount(0);
+        await submenu.locator('[data-action="houses"]').click();
+        await expect(win(page)).toBeVisible();
+        await row(page, 'belokamen|16').locator('.house-more-btn').click();
+        await expect(page.locator('.houses-menu [role="menuitem"]')).toHaveText(['House page', 'On the map']);
     });
 
     test('towns, a renumbered house, the search, a row opened in place and a person in the tree', async ({ page }) => {
