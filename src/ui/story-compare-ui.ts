@@ -13,6 +13,8 @@ import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, PartnershipId, Story } from '../types.js';
+import type { HouseResearch } from '../house-bridge.js';
+import { houseLabel, houseTitle } from '../houses.js';
 import { formatFlexDate } from '../dates.js';
 import { storyProseHtml } from '../story-text.js';
 import { sourceCodeNamer, storyBasisShown, storyBasisWords, storyFactText } from '../story-sources.js';
@@ -25,8 +27,29 @@ import { shownName } from '../person-name.js';
 const COMPARE_ID = 'story-compare-modal';
 const STYLE_ID = 'story-compare-style';
 
-/** Whose story: a person's, or a couple's. */
-export type StoryTarget = { personId: PersonId } | { partnershipId: PartnershipId };
+/**
+ * Whose story: a person's, a couple's, or a house's (spec 145 T4: the research's record A…, its name, its story as
+ * the research sends it — no copy of it is in the tree).
+ */
+export type StoryTarget = { personId: PersonId } | { partnershipId: PartnershipId } | HouseStoryTarget;
+export interface HouseStoryTarget {
+    house: string;
+    name: string;
+    story: Story;
+}
+
+/** A house's approved story with its new version as a target of the comparison, or null (no new version waits). */
+export function houseStoryTarget(research: HouseResearch, name: string): HouseStoryTarget | null {
+    const st = research.story;
+    if (!research.id || !st || st.status !== 'final' || !st.draft) return null;
+    return {
+        house: research.id, name,
+        story: {
+            status: 'final', ...(st.title ? { title: st.title } : {}), text: st.text,
+            draft: { ...(st.draft.title ? { title: st.draft.title } : {}), text: st.draft.text, ...(st.draft.at ? { at: st.draft.at } : {}) },
+        },
+    };
+}
 
 /**
  * What was handed to the research for which new version, for this session
@@ -54,7 +77,7 @@ function personName(id: PersonId): string {
 
 /** The story a target carries, when a new version waits beside it. */
 export function storyWithDraft(target: StoryTarget): Story | null {
-    const story = 'personId' in target
+    const story = 'house' in target ? target.story : 'personId' in target
         ? DataManager.getPerson(target.personId)?.story
         : DataManager.getPartnership(target.partnershipId)?.story;
     return story?.status === 'final' && story.draft?.text?.trim() ? story : null;
@@ -69,6 +92,7 @@ export function draftDate(story: Story): string | undefined {
 }
 
 function targetKey(target: StoryTarget): string {
+    if ('house' in target) return `house:${target.house}`;
     if ('personId' in target) return target.personId;
     const u = DataManager.getPartnership(target.partnershipId);
     return u ? [u.person1Id, u.person2Id].sort().join('+') : target.partnershipId;
@@ -104,6 +128,53 @@ export function storyWaitingPeople(w: LiveWaiting): { id: PersonId; name: string
 }
 
 export const storyCompareMethods = uiModule({
+    /**
+     * A house's story waiting for approval (kind 'houseStory', spec 145 T4): "The story of house čp. N waits for
+     * approval" (the research's own words when the tree has not the house).
+     */
+    houseStoryWaitingText(w: LiveWaiting): string {
+        const house = w.house ? this.treeHouseOf(w.house) : null;
+        return house ? strings.houses.storyWaiting(houseLabel(house.text)) : w.what;
+    },
+
+    /** The town and the house of a house's story waiting ("Bělokamen čp. 16"), or '' (not the tree's). */
+    houseStoryWaitingWho(w: LiveWaiting): string {
+        const house = w.house ? this.treeHouseOf(w.house) : null;
+        return house ? houseTitle(house) : '';
+    },
+
+    /** Its row's text and "House čp. N ›" to the house page at its story (the research's terminal without the house). */
+    appendHouseStoryWaiting(text: HTMLElement, w: LiveWaiting): HTMLButtonElement {
+        text.textContent = '';
+        const what = document.createElement('span');
+        what.className = 'live-waiting-what';
+        const kind = document.createElement('span');
+        kind.className = 'live-kind-story';
+        kind.textContent = strings.live.kindStory;
+        what.append(kind, this.houseStoryWaitingText(w));
+        text.appendChild(what);
+        const house = w.house ? this.treeHouseOf(w.house) : null;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'live-waiting-answer house-page-link';
+        btn.textContent = house ? strings.houses.integration.houseLink(houseLabel(house.text)) : strings.houses.answer;
+        if (house) btn.dataset.house = house.id;
+        btn.onclick = (e) => { e.stopPropagation(); this.openHouseStoryWaiting(w); };
+        return btn;
+    },
+
+    /** The house's page at its story; without the house in the tree, the research's own way. */
+    openHouseStoryWaiting(w: LiveWaiting): void {
+        const house = w.house ? this.treeHouseOf(w.house) : null;
+        if (!house) {
+            const url = this.activeResearchLink('open');
+            if (url) this.launchResearchLink(url);
+            return;
+        }
+        if (this.houseOpenMain()) { this.openHouse(house.id); return; }
+        this.openHousePage(house.id, undefined, { section: 'story' });
+    },
+
     /**
      * A "Waiting for you" row of a story's new version: the label, whose it is
      * (each name shows the person in the tree) and "Compare" — the comparison
@@ -151,7 +222,9 @@ export const storyCompareMethods = uiModule({
 
     /** The decision links for a target ({} without them: not a computer, no announced links, …). */
     storyCompareUrls(target: StoryTarget): { final?: string; keep?: string } {
-        const url = (how: ResearchStoryDo): string | null => 'personId' in target
+        const url = (how: ResearchStoryDo): string | null => 'house' in target
+            ? this.activeResearchLink('story', { house: target.house, storyDo: how })
+            : 'personId' in target
             ? this.storyDraftUrl(target.personId, how)
             : this.coupleStoryDraftUrl(target.partnershipId, how);
         const final = url('final'), keep = url('keep');
@@ -170,7 +243,7 @@ export const storyCompareMethods = uiModule({
         this.closeStoryCompare();
         ensureStoryCompareStyle(document);
         const L = strings.story;
-        const who = 'personId' in target ? personName(target.personId) : coupleName(target.partnershipId);
+        const who = 'house' in target ? target.name : 'personId' in target ? personName(target.personId) : coupleName(target.partnershipId);
         const body = storyCompareHtml({
             approved: {
                 title: approved ? (approved.title || undefined) : story.title,
@@ -184,7 +257,8 @@ export const storyCompareMethods = uiModule({
             idPrefix: 'story-compare',
             prose: (text, title) => storyProseHtml(text, { title }),
             // What each version is based on (one folded section); a bare source code in the text read as the source's title.
-            basis: {
+            // A house's facts are the research's items, not the tree's: not shown (as on its page).
+            basis: 'house' in target ? undefined : {
                 shown: v => storyBasisShown(DataManager.getData().sources, v, f => storyFactText(f, strings, getCurrentLanguage())),
                 words: storyBasisWords(strings),
             },

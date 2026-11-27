@@ -298,6 +298,36 @@ export interface HouseTown {
     state?: HouseState;
 }
 
+/** One of the tree's people a house's story names (the research's id; `died`: the tree has their death). */
+export interface HouseStoryPerson {
+    id: string;
+    died: boolean;
+}
+
+/** One version of a house's story (spec 145 T4): its text (paragraphs kept), the facts and sources it rests on, its people. */
+export interface HouseStoryText {
+    title?: string;
+    text: string;
+    facts: string[];
+    sources: HouseSource[];
+    at?: string;
+    people: HouseStoryPerson[];
+}
+
+/** The task of a house's story: the live one, else the latest (its state as the research says it). */
+export interface HouseStoryTask {
+    id: string;
+    state: string;
+}
+
+/**
+ * A house's story (`story` of `GET /houses/<ref>`, feature `house.story`): a draft or an approved text (with a new
+ * version waiting beside an approved one in `draft`), or none yet while its task is in the queue (`status: null`).
+ */
+export type HouseStory =
+    | (HouseStoryText & { status: 'draft' | 'final'; draft?: HouseStoryText; task?: HouseStoryTask })
+    | { status: null; task: HouseStoryTask };
+
 /** One house's whole result (`GET /houses/<key|id>`, §2.4 with §4.2/§4.4). No `recent`: the app works it out. */
 export interface HouseResearch {
     /** The research's record (A…); none yet for a house known by a task or a material only. */
@@ -335,6 +365,8 @@ export interface HouseResearch {
     town?: HouseTown;
     /** Houses joined as the same one. */
     same: { id: string; key: HouseId }[];
+    /** The house's story (spec 145 T4; only with `house.story`). */
+    story?: HouseStory;
     rev?: string;
 }
 
@@ -607,6 +639,51 @@ export function sanitizeHouseRow(value: unknown): HouseListRow | null {
     };
 }
 
+/** A story's text: its line breaks and paragraphs kept, control characters out, at most `max` characters. */
+function storyText(v: unknown, max = 40_000): string | undefined {
+    if (typeof v !== 'string') return undefined;
+    // eslint-disable-next-line no-control-regex
+    const t = v.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]+/g, ' ')
+        .split('\n').map(l => l.replace(/\s+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (!t) return undefined;
+    if (t.length <= max) return t;
+    const cut = /[\uD800-\uDBFF]/.test(t[max - 2] ?? '') ? max - 2 : max - 1;
+    return t.slice(0, cut) + '…';
+}
+
+function storyVersion(v: unknown): HouseStoryText | undefined {
+    const r = asRecord(v);
+    const t = storyText(r?.text);
+    if (!r || !t) return undefined;
+    const facts = Array.isArray(r.facts) ? [...new Set(r.facts.slice(0, 500).map(idOf).filter((x): x is string => !!x))] : [];
+    const people = list(r.people, x => {
+        const id = idOf(x.id);
+        return id ? { id, died: x.died === true } : null;
+    });
+    return { ...opt('title', text(r.title, 300)), text: t, facts, sources: sources(r.sources), ...opt('at', isoDay(typeof r.at === 'string' ? r.at.slice(0, 10) : r.at)), people };
+}
+
+function storyTask(v: unknown): HouseStoryTask | undefined {
+    const r = asRecord(v);
+    const id = idOf(r?.id);
+    const state = typeof r?.state === 'string' && /^[a-z-]{1,20}$/.test(r.state) ? r.state : undefined;
+    return id && state ? { id, state } : undefined;
+}
+
+/** The house's story as the research sends it; unknown fields left out, nothing for what cannot be read. */
+export function sanitizeHouseStory(v: unknown): HouseStory | undefined {
+    const r = asRecord(v);
+    if (!r) return undefined;
+    const task = storyTask(r.task);
+    if (r.status === null || r.status === undefined) return task ? { status: null, task } : undefined;
+    const status = oneOf(r.status, ['draft', 'final'] as const);
+    const own = storyVersion(r);
+    if (!status || !own) return task ? { status: null, task } : undefined;
+    // A new version waits only beside an approved text.
+    const draft = status === 'final' ? storyVersion(r.draft) : undefined;
+    return { status, ...own, ...opt('draft', draft), ...opt('task', task) };
+}
+
 /** One house's whole result, checked (the detail itself or `{house: …}` of a write's reply); null: none. */
 export function sanitizeHouseResearch(value: unknown): HouseResearch | null {
     const outer = asRecord(value);
@@ -665,6 +742,7 @@ export function sanitizeHouseResearch(value: unknown): HouseResearch | null {
             const skey = keyOf(x.key);
             return sid && skey ? { id: sid, key: skey } : null;
         }),
+        ...opt('story', sanitizeHouseStory(r.story)),
         ...opt('rev', typeof outer?.rev === 'string' && outer.rev.length <= 80 ? outer.rev : typeof r.rev === 'string' && r.rev.length <= 80 ? r.rev : undefined),
     };
 }
@@ -823,7 +901,7 @@ export async function fetchHouse(base: string, keyOrId: string, opts: { timeoutM
  * downloaded / disk full (each with its feature); `locked` 423; `busy` 503 research.busy; `full` 507;
  * `network` no answer; `timeout` no answer in time (the write may have gone through); `unknown` anything else.
  */
-export type HouseWriteError = 'invalid' | 'town' | 'unknown-house' | 'archive' | 'held' | 'locked' | 'busy' | 'full' | 'network' | 'timeout' | 'unknown';
+export type HouseWriteError = 'invalid' | 'town' | 'none' | 'unknown-house' | 'archive' | 'held' | 'locked' | 'busy' | 'full' | 'network' | 'timeout' | 'unknown';
 
 export type HouseWriteResult =
     | { ok: true; house: HouseResearch | null; materials: string[]; head: string; parent: string }
@@ -844,7 +922,7 @@ export function houseWriteReply(status: number, body: unknown, features: readonl
         ({ ok: false, code: c, status, reason, bridgeCode: code, ...extra });
     const held = writeHeldOfRefusal(code, r.error, features, r.params);
     if (held) return out('held', { held });
-    if (status === 400) return out(r.reasonCode === 'house.town' ? 'town' : 'invalid');
+    if (status === 400) return out(r.reasonCode === 'house.town' ? 'town' : r.reasonCode === 'house.story.none' ? 'none' : 'invalid');
     if (status === 404) return out('unknown-house');
     if (status === 409 && (code === 'house.archive' || !code)) return out('archive');
     if (status === 423 || code === 'locked') return out('locked');
@@ -1032,4 +1110,44 @@ export async function requestHouse(base: string, house: string, more: readonly s
 export function moveHouseToTop(base: string, house: string, features: readonly string[] | null | undefined,
     check: HouseLinkCheck): Promise<HouseRequestResult> {
     return requestHouse(base, house, [], features, check);
+}
+
+/**
+ * What asking for a house's story gave: its task on top of the queue (`made: false` — the task was there already and
+ * moved on top), the house as `GET /houses/<ref>` says it now; or a refusal as any house write (`none`: nothing of the
+ * house is written in the research yet, its story is written from its research).
+ */
+export type HouseStoryWriteResult =
+    | { ok: true; house: HouseResearch | null; task: string; made: boolean; head: string; parent: string }
+    | Extract<HouseWriteResult, { ok: false }>;
+
+/** The reply to `POST /houses/story`, typed. */
+export function houseStoryReply(status: number, body: unknown, features: readonly string[] | null | undefined): HouseStoryWriteResult {
+    const r = asRecord(body) ?? {};
+    if (status >= 200 && status < 300) {
+        return {
+            ok: true, house: sanitizeHouseResearch(r.house ? { house: r.house } : null), task: idOf(r.task) ?? '',
+            made: r.made === true, head: isResearchHead(r.head) ?? '', parent: isResearchHead(r.parent) ?? '',
+        };
+    }
+    const refused = houseWriteReply(status, body, features);
+    return refused.ok ? { ok: false, code: 'unknown', status, reason: '', bridgeCode: '' } : refused;
+}
+
+/**
+ * Ask the research's agent for a house's story (`POST <token>/houses/story {house}`, feature `house.story`): its task
+ * goes on top of the queue, through the bridge, without the research's terminal. `house` is the house's key or its
+ * record (A…); never throws.
+ */
+export async function requestHouseStory(base: string, house: string, features: readonly string[] | null | undefined): Promise<HouseStoryWriteResult> {
+    const ref = keyOf(house) ?? (/^A\d{1,9}$/.test(house) ? house : undefined);
+    if (!ref || !houseFeature(features, 'house.story')) return { ok: false, code: 'invalid', status: 0, reason: '', bridgeCode: '' };
+    const res = await request(`${base}/houses/story`, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: JSON.stringify({ house: ref }),
+    }, HOUSE_WRITE_TIMEOUT_MS);
+    if (!res) return { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+    if (res.text === TIMED_OUT) return { ok: false, code: 'timeout', status: 0, reason: '', bridgeCode: '' };
+    const reply = houseStoryReply(res.status, jsonOf(res.text), features);
+    if (reply.ok && reply.house) houseCache(base).put(reply.house);
+    return reply;
 }

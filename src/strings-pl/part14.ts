@@ -162,6 +162,13 @@ export const plPart14: Pick<StringsType, 'houses'> = {
         matKind: { file: 'plik', photo: 'zdjęcie', text: 'tekst' },
         errTown: 'Miejscowość nie ma jeszcze w badaniach zapisu miejsca; materiał będzie można dołączyć, gdy znajdzie się wśród jej miejsc.',
         errArchive: 'Archiwum nie przyjmuje materiałów.',
+        // spec 145 T4: the house's story, written by the research's agent.
+        writeStory: 'Napisz opowieść o domu',
+        writeStoryAgain: 'Napisz nową wersję opowieści',
+        storyAsked: 'Zadanie agenta, by napisać opowieść, jest na początku kolejki badań.',
+        storyMoved: 'Zadanie już istniało; przesunęło się na początek kolejki badań.',
+        errStoryNone: 'W badaniach nie ma jeszcze nic o tym domu; opowieść powstaje z jego badań.',
+        storyWaiting: (n: string) => `Opowieść o domu ${n} czeka na zatwierdzenie`,
         hiddenOut: 'ukryte w wynikach',
         reveal: 'Pokaż w wynikach',
         hide: 'Ukryj w wynikach',
@@ -193,7 +200,7 @@ export const plPart14: Pick<StringsType, 'houses'> = {
             sec: {
                 numbers: 'Numery w czasie', timeline: 'Oś czasu', people: 'Właściciele i mieszkańcy', look: 'Wygląd domu',
                 map: 'Mapa', unknown: 'Czego nie wiemy', passed: 'Co przeszukano', archiveOnly: 'Tylko w czytelni',
-                sources: 'Źródła i materiały', treeResidents: 'Mieszkańcy z drzewa',
+                story: 'Opowieść', sources: 'Źródła i materiały', treeResidents: 'Mieszkańcy z drzewa',
             },
             map: {
                 layers: 'Warstwa mapy', today: 'Dziś', ortho: 'Ortofotomapa dziś', aerial: 'Zdjęcia lotnicze lat 50.',
@@ -249,6 +256,13 @@ export const plPart14: Pick<StringsType, 'houses'> = {
             lookMore: (why: string) => `Wygląd domu jest jeszcze badany: ${why}.`,
             lookQueued: 'Zadanie czeka w kolejce badań.',
             lookUnknown: 'Nie wiadomo, jak dom wyglądał.',
+            // The house's story (spec 145 T4).
+            storyDraft: 'szkic, czeka na zatwierdzenie',
+            storyNew: (d?: string) => `Nowa wersja opowieści${d ? ` (${d})` : ''} czeka na zatwierdzenie; strona pokazuje zatwierdzony tekst.`,
+            storyTask: (state: string): string => state === 'doing' ? 'Opowieść o domu jest właśnie pisana.'
+                : state === 'parked' ? 'Zadanie opowieści jest w badaniach odłożone.'
+                    : state === 'waiting' ? 'Zadanie opowieści czeka w badaniach na odpowiedź.'
+                        : 'Opowieść o domu czeka w kolejce badań.',
             materials: 'Materiały domu',
             save: 'Zapisz HTML',
             saved: (name: string) => `Zapisano: ${name}`,

@@ -80,7 +80,8 @@ const formatSize = (n: number, lang: string): string => n >= 1024 * 1024
 export const houseMaterialMethods = uiModule({
     /**
      * The research's rows of a row's ⋯ menu: the house's action (houseActionOf, as in its detail: ask, move to the
-     * top, ask again; any house of the tree), "Discuss with the agent" with `house.chat` and "Attach material…" with
+     * top, ask again; any house of the tree), "Discuss with the agent" with `house.chat`, "Write the story of the house"
+     * with `house.story` and "Attach material…" with
      * `house.material`. `opener`: the focus back.
      */
     houseMenuResearchItems(house: TreeHouse, opener?: HTMLElement | null): HouseMenuItem[] {
@@ -90,6 +91,10 @@ export const houseMaterialMethods = uiModule({
         const act = this.houseActionNow(house, 14);
         if (act) items.push({ key: `act-${act.action}`, label: '', html: act.html, run: () => this.runHouseAction(house, act.action, opener) });
         if (this.houseChatPossible()) items.push({ key: 'chat', label: '', html: this.houseChatLabel(), run: () => this.openHouseChat(house) });
+        // spec 145 T4: the agent writes the house's story, through the bridge (the AI badge alone).
+        if (this.houseStoryPossible()) {
+            items.push({ key: 'story', label: '', html: this.houseStoryLabel(this.housePageResearch(house)), run: () => { void this.askHouseStory(house, opener); } });
+        }
         if (houseFeature(b.features, 'house.material')) items.push({ key: 'attach', label: strings.houses.attach, run: () => this.showHouseMaterialDialog(house) });
         return items;
     },

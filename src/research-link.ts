@@ -147,7 +147,7 @@ function computerLinkMark(action: ResearchLinkAction, p: ResearchLinkMarkParams)
  * run and set the most runs at once (spec 126 U10, `run.stop`, `run.limit`).
  */
 export const RESEARCH_BRIDGE_ACTIONS = ['verify', 'verify-bulk', 'fact-confirm', 'verify-stop', 'sources-split', 'material-sort',
-    'run-stop', 'run-limit'] as const;
+    'run-stop', 'run-limit', 'house-story'] as const;
 export type ResearchBridgeAction = typeof RESEARCH_BRIDGE_ACTIONS[number];
 
 /**
@@ -164,6 +164,8 @@ export const RESEARCH_BRIDGE_MARKS: Readonly<Record<ResearchBridgeAction, Resear
     'material-sort': 'bridgeAgent',
     // spec 126 U10: stop one run (it finishes its task, its window closes) and the most runs at once — no terminal, no new agent.
     'run-stop': 'none', 'run-limit': 'none',
+    // spec 145 T4: the agent writes a house's story; its task goes on top of the queue, no terminal.
+    'house-story': 'bridgeAgent',
 };
 
 /**
@@ -322,8 +324,9 @@ const DEVICE_ALLOWS: Readonly<Record<ResearchDeviceAction, boolean | string>> = 
     open: false, review: false, research: false, new: false, update: false, sessions: false,
     story: false, 'sync-undo': false, setup: false, finish: false, archive: false, seal: false, experiment: false,
     doctor: false, 'history-kinds': false, 'history-align': false, 'run-limit': false,
-    // A house's research taken over from files on the computer (spec 030 §2.8): only there.
-    house: false,
+    // A house's research taken over from files on the computer (spec 030 §2.8): only there; so the house's story
+    // asked of the agent (spec 145 T4).
+    house: false, 'house-story': false,
     devices: false, 'research-tools': false, 'tree-settings': false, 'load-version': false, 'direction-new': false,
 };
 
@@ -457,7 +460,7 @@ const SHOWCASE_ALLOWS: Readonly<Record<ResearchShowcaseAction, ShowcaseShown>> =
     verify: 'hide', 'verify-bulk': 'hide', 'material-sort': 'hide', 'read-document': 'hide',
     open: 'hide', review: 'hide', research: 'hide', new: 'hide', update: 'hide', sessions: 'hide', story: 'hide',
     'sync-undo': 'hide', setup: 'hide', finish: 'hide', archive: 'hide', seal: 'hide', experiment: 'hide', doctor: 'hide',
-    'history-kinds': 'hide', 'history-align': 'hide', house: 'hide', devices: 'hide', 'research-tools': 'hide',
+    'history-kinds': 'hide', 'history-align': 'hide', house: 'hide', 'house-story': 'hide', devices: 'hide', 'research-tools': 'hide',
     'tree-settings': 'hide', 'load-version': 'hide',
     'waiting-defer': 'hide', 'queue-next': 'hide', 'branch-options': 'hide', 'merge-here': 'hide', 'research-follow': 'hide',
 };
@@ -819,7 +822,10 @@ export interface ResearchLinkParams {
      * or talk a house over with the agent (`chat` with `house`, spec 145 T2: the terminal asks, the agent's chat on a yes).
      */
     houseDo?: 'import' | 'search' | 'chat';
-    /** `house` with `do=search` or `do=chat`: the house by its key ("belokamen|16"). */
+    /**
+     * `house` with `do=search` or `do=chat`: the house by its key ("belokamen|16"); `story`: the house whose story is
+     * approved or kept, by its record (A…, spec 145 T4), never with `person`.
+     */
     house?: string;
     /** `house` with `do=search`: at most two more houses of the family in the same town, processed together. */
     houseWith?: string[];
@@ -1180,8 +1186,14 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             return what === 'decide' && CONFLICT_TAKES.includes(p.take) ? `${base}&id=${id}&do=decide&take=${p.take}` : null;
         }
         case 'story': {
-            const person = researchPersonRef(p.person);
             const what = p.storyDo ?? 'final';
+            // A house's story (spec 145 T4): the house by its record (A…), never with a person.
+            if (p.house !== undefined) {
+                const house = typeof p.house === 'string' ? p.house.toUpperCase() : '';
+                return /^A\d{1,9}$/.test(house) && p.person === undefined && p.partner === undefined && STORY_DOS.includes(what)
+                    ? `${base}&house=${house}&do=${what}` : null;
+            }
+            const person = researchPersonRef(p.person);
             if (!person || !STORY_DOS.includes(what)) return null;
             if (p.partner === undefined) return `${base}&person=${person}&do=${what}`;
             const partner = researchPersonRef(p.partner);
@@ -1272,7 +1284,7 @@ const LINK_QUERY_PARAMS: Partial<Record<ResearchLinkAction, Readonly<Record<stri
     media: { sha: 'sha' },
     task: { task: 'task', do: 'taskDo' },
     conflict: { id: 'conflict', do: 'conflictDo', take: 'take' },
-    story: { person: 'person', partner: 'partner', do: 'storyDo' },
+    story: { person: 'person', partner: 'partner', house: 'house', do: 'storyDo' },
     'sync-undo': { intake: 'intake' },
     review: { person: 'person', scope: 'scope' },
     research: { person: 'person', direction: 'direction' },
@@ -3226,9 +3238,11 @@ export interface LiveWaiting {
     /**
      * 'story': a new version of an approved story (the person's, or with `partner` the couple's), not a task.
      * 'permission': the research asks how it may download from an archive (`host`); `on` carries its terms.
+     * 'houseStory' (spec 145 T4): a house's story (or its new version) waits for approval — the research's `story`
+     * without a person, its id the house's record (A…), the house's key in `house`; never a person's story.
      * The rest only from a research with `waiting.groups` in its features (see below).
      */
-    kind?: 'story' | 'permission' | 'place' | 'branch' | 'hypothesis' | 'aside' | WaitingTaskKind;
+    kind?: 'story' | 'houseStory' | 'permission' | 'place' | 'branch' | 'hypothesis' | 'aside' | WaitingTaskKind;
     /**
      * 'aside' (`inbox.aside`): a file of a book's inbox folder the research set aside (`/status.books.aside`), made
      * an item here (asideWaiting): its id `aside:<book>/<file>`, its book in `book`, a decision (section 'decide').
@@ -3264,6 +3278,8 @@ export interface LiveWaiting {
     by?: PlaceRecordBy;
     /** form: the change of the facts' place text the research proposes. */
     change?: WaitingPlaceChange;
+    /** 'houseStory': the house's key ("belokamen|16"). */
+    house?: string;
     /** A couple's story: the other partner (REFN). */
     partner?: string;
     /** A permission: the archive's host name. */
@@ -3863,7 +3879,10 @@ export const CENSUS_FEATURE = 'census';
 export const HOUSE_FEATURES = ['house', 'house.material', 'house.confirm', 'house.import', 'house.auto', 'house.request',
     // spec 145: the agent's chat about a house (`do=chat`, only where the research has its agent); the look of houses
     // (`/status.houses.look`, `lookCheck`, the town's pictures and field names).
-    'house.chat', 'house.look'] as const;
+    'house.chat', 'house.look',
+    // spec 145 T4: the house's story (`story` of `GET /houses/<ref>`, `POST /houses/story`, `story?house=A…`; only where
+    // the research has its agent: never in an archive or the demo).
+    'house.story'] as const;
 export type HouseFeature = typeof HOUSE_FEATURES[number];
 /** `/status.features`: the houses' reads, `/status.houses` and the task kind `house` (`kind=house`, `known=house`). */
 export const HOUSE_FEATURE: HouseFeature = 'house';
@@ -5378,6 +5397,9 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
         // A story names whose it is; without the person it is just a line.
         const story = r.kind === 'story' && person;
         const partner = story ? researchPersonRef(r.partner) : null;
+        // A house's story (spec 145 T4): no person, the house's record as its id and its key.
+        const houseStory = r.kind === 'story' && !person && typeof r.id === 'string' && /^A\d{1,9}$/.test(r.id)
+            && typeof r.house === 'string' && r.house.includes('|') && r.house.length <= 400 && r.house === r.house.trim() ? r.house : null;
         // An archive's question names its host; without a valid one it is just a line. Its id is
         // made of the host (a full one fits, two archives never share it) and its terms stay whole.
         const host = !story && r.kind === 'permission' ? researchArchiveHost(r.host) : null;
@@ -5389,11 +5411,12 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
         const branch = branches && r.kind === 'branch' ? researchBranchRef(r.branch) : null;
         // A hypothesis to decide (spec 074, V13): it names the hypothesis by its id; without a valid one it is "other".
         const hypo = groups && !story && !host && r.kind === 'hypothesis' ? researchHypothesisRef(r.id) : null;
-        const kind: LiveWaiting['kind'] = story ? 'story' : host ? 'permission' : placeQ ? 'place' : branch ? 'branch' : hypo ? 'hypothesis' : task ?? undefined;
+        const kind: LiveWaiting['kind'] = story ? 'story' : houseStory ? 'houseStory' : host ? 'permission' : placeQ ? 'place' : branch ? 'branch' : hypo ? 'hypothesis' : task ?? undefined;
         out.push({
             id: host ? `permission:${host}` : cleanText(r.id, 40), what, on: cleanText(r.on, MAX_WAITING_ON), at: cleanText(r.at ?? r.since, 40),
             ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(story ? { kind: 'story' as const } : {}), ...(partner && partner !== person ? { partner } : {}),
+            ...(houseStory ? { kind: 'houseStory' as const, house: houseStory } : {}),
             ...(host ? { kind: 'permission' as const, host } : {}),
             ...(task && !placeQ && !branch && !hypo ? { kind: task } : {}),
             ...(hypo ? { kind: 'hypothesis' as const, ...waitingHypothesisFields(r) } : {}),

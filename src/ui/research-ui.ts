@@ -3951,6 +3951,8 @@ export const researchUiMethods = uiModule({
             if (url) this.launchResearchLink(url);
             return;
         }
+        // A house's story (spec 145 T4): its page at the story.
+        if (w.kind === 'houseStory') { this.openHouseStoryWaiting(w); return; }
         // An archive's question: the research asks it there (an older research only opens).
         if (w.kind === 'permission' && w.host) {
             const url = this.activeResearchLink('archive', { host: w.host }) ?? this.activeResearchLink('open');
@@ -5272,6 +5274,14 @@ export const researchUiMethods = uiModule({
                 const whyStory = waitingWhyEl(w);
                 if (whyStory) text.appendChild(whyStory);
                 li.append(text, compare);
+                return li;
+            }
+            if (w.kind === 'houseStory') {
+                // A house's story (spec 145 T4): its page at the story, where it is approved or compared.
+                const open = this.appendHouseStoryWaiting(text, w);
+                const at = timeEl(w.at, 'ago');
+                if (at) text.appendChild(at);
+                li.append(text, open);
                 return li;
             }
             const what = text.appendChild(el('span', 'live-waiting-what'));

@@ -15,17 +15,19 @@ import { DataManager } from '../data.js';
 import type { HouseId, HouseUserData } from '../types.js';
 import { houseTitle, type TreeHouse } from '../houses.js';
 import {
-    confirmHouse, fetchHouse, houseCache, houseFeature, houseStatus, type HouseResearch, type HouseWriteResult,
+    confirmHouse, fetchHouse, houseCache, houseFeature, houseStatus, requestHouseStory, type HouseResearch, type HouseStoryWriteResult,
+    type HouseWriteResult,
 } from '../house-bridge.js';
-import { houseImportLink, researchDeviceAllows, researchLinkMark } from '../research-link.js';
+import { houseImportLink, researchDeviceAllows, researchLinkMark, type ResearchStoryDo } from '../research-link.js';
+import { houseStoryTarget } from './story-compare-ui.js';
 import { announcedResearchScheme } from '../research-device.js';
-import { buildHousePage, buildHousePageDocument, housePageFileName, housePageSections } from '../house-page.js';
+import { buildHousePage, buildHousePageDocument, housePageFileName, housePageSectionId, housePageSections, type HousePageSectionKey } from '../house-page.js';
 import { HOUSE_PAGE_CSS } from '../house-page-css.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
 import { appFontFaceCss, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { houseStateHtml, withRevealed } from './house-state-ui.js';
 import { houseMaterialError } from './house-material-ui.js';
-import { researchActionLabel } from './research-open-mark.js';
+import { researchActionLabel, researchBridgeActionLabel } from './research-open-mark.js';
 import { runBusy } from './busy.js';
 import { mountHouseMap, resetHouseMapState } from './house-map-ui.js';
 import { uiModule } from './module.js';
@@ -44,6 +46,8 @@ interface PageState {
     userChange: () => void;
     /** The name after the farm being written (the redraw keeps the field). */
     editingName: boolean;
+    /** A section to show once it is drawn (What waits opens the page at the story, spec 145 T4). */
+    section?: HousePageSectionKey;
 }
 
 let page: PageState | null = null;
@@ -73,7 +77,7 @@ export const housePageMethods = uiModule({
     },
 
     /** Open the page of a house of the tree (its id or a number joined into it): false when the tree has no such house. */
-    openHousePage(id: string, parent?: string): boolean {
+    openHousePage(id: string, parent?: string, opts: { section?: HousePageSectionKey } = {}): boolean {
         const house = this.treeHouseOf(id);
         if (!house) return false;
         const keepParent = page?.parent ?? null;
@@ -117,7 +121,7 @@ export const housePageMethods = uiModule({
                 if (overlayEl()) this.renderHousePage();
             });
         };
-        page = { id: house.id, parent: parentId, userChange, editingName: false };
+        page = { id: house.id, parent: parentId, userChange, editingName: false, ...(opts.section ? { section: opts.section } : {}) };
         window.addEventListener('strom:user-change', userChange);
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) { this.closeHousePage(); return; }
@@ -214,11 +218,18 @@ export const housePageMethods = uiModule({
         // Attach material… under a look not known (spec 145 T1): the same action, only for a tree that can be changed.
         const lookAttach = b && canEdit && houseFeature(b.features, 'house.material')
             ? `<button type="button" class="hp-mini house-attach">${esc(H.attach)}</button>` : '';
+        // The story's decisions (spec 145 T4): a draft approved in the research, a new version compared here.
+        const story = research?.story;
+        const storyApprove = story?.status === 'draft' && this.houseStoryUrl(research, 'final')
+            ? `<button type="button" class="hp-mini hp-mini--primary" data-hp-act="story-approve">${researchActionLabel(strings.research.approveStory, researchLinkMark('story'))}</button>` : '';
+        const storyCompare = story?.status === 'final' && story.draft
+            ? `<button type="button" class="hp-mini" data-hp-act="story-compare">${esc(strings.story.compare)}</button>` : '';
         const body = buildHousePage(data, house, research, 'app', {
             lang, now: new Date(), research: !!b, state: row?.state ?? null, layers, look: !!b && houseFeature(b.features, 'house.look'),
             app: {
                 stateHtml, materialActionsHtml: materialActions, lookAttachHtml: lookAttach, canEdit,
                 canConfirm: canEdit && !!b && houseFeature(b.features, 'house.confirm'),
+                storyApproveHtml: storyApprove, storyCompareHtml: storyCompare,
             },
         });
         const sections = housePageSections(body, lang);
@@ -246,6 +257,12 @@ export const housePageMethods = uiModule({
             redraw: () => this.renderHousePage(),
         });
         if (page.editingName) this.startHouseNameEdit();
+        // The section asked for, once the research's result drew it.
+        const want = page.section ? scroller.querySelector<HTMLElement>(`#${housePageSectionId(page.section)}`) : null;
+        if (want) {
+            delete page.section;
+            want.scrollIntoView({ block: 'start' });
+        }
     },
 
     onHousePageKey(e: KeyboardEvent): void {
@@ -342,6 +359,17 @@ export const housePageMethods = uiModule({
     /** An action inside the page: the name after the farm, a reveal, Confirm / Not the same house. */
     async housePageAct(house: TreeHouse, el: HTMLElement): Promise<void> {
         const act = el.dataset.hpAct;
+        if (act === 'story-approve') {
+            const url = this.houseStoryUrl(this.housePageResearch(house), 'final');
+            if (url) this.launchResearchLink(url);
+            return;
+        }
+        if (act === 'story-compare') {
+            const research = this.housePageResearch(house);
+            const target = research ? houseStoryTarget(research, houseTitle(house)) : null;
+            if (target) this.showStoryCompare(target);
+            return;
+        }
         if (act === 'name') {
             if (DataManager.housesReadOnly() || !page) return;
             page.editingName = true;
@@ -473,6 +501,49 @@ export const housePageMethods = uiModule({
         }
     },
 
+    // ── The house's story (spec 145 T4) ──
+
+    /** "Write the story of the house": only with `house.story` (a research with its agent; never an archive or the demo). */
+    houseStoryPossible(): boolean {
+        const b = this.houseResearchBridge();
+        return !!b && houseFeature(b.features, 'house.story') && researchDeviceAllows('house-story');
+    },
+
+    /** Its label with its mark (the AI badge alone): a new version once the house has a story. */
+    houseStoryLabel(research: HouseResearch | null): string {
+        const again = !!research?.story && research.story.status !== null;
+        return researchBridgeActionLabel(again ? strings.houses.writeStoryAgain : strings.houses.writeStory, 'house-story');
+    },
+
+    /** The link that approves the house's story or keeps the approved one (`story?house=A…`), or null. */
+    houseStoryUrl(research: HouseResearch | null, how: ResearchStoryDo): string | null {
+        return research?.id && research.story ? this.activeResearchLink('story', { house: research.id, storyDo: how }) : null;
+    },
+
+    /**
+     * Ask the research's agent for the house's story (`POST /houses/story`): its task on top of the queue; the page
+     * shows its state then. `el`: the button that waits.
+     */
+    async askHouseStory(house: TreeHouse, el?: HTMLElement | null): Promise<void> {
+        const b = this.houseResearchBridge();
+        if (!b || !houseFeature(b.features, 'house.story')) return;
+        const research = this.housePageResearch(house) ?? this.houseResearchRead(house);
+        const ref = research?.id ?? this.houseResearchRow(house)?.key;
+        if (!ref) { this.showToast(strings.houses.errStoryNone, 6000); return; }
+        const send = (): Promise<HouseStoryWriteResult> => requestHouseStory(b.base, ref, b.features);
+        const r: HouseStoryWriteResult | undefined = el ? await runBusy(el, send, { label: strings.busy.sending, kind: 'write' }) : await send();
+        if (!r) return;
+        if (!r.ok) {
+            this.showToast(r.code === 'none' ? strings.houses.errStoryNone
+                : houseMaterialError(r, () => (r.held ? this.researchWriteHeldText(r.held, false).toast : '')), 6000);
+            return;
+        }
+        this.showToast(r.made ? strings.houses.storyAsked : strings.houses.storyMoved, 5000);
+        if (r.house) read.set(r.house.key, { rev: this.houseStatesRev(), house: r.house });
+        void this.loadHouseStates();
+        if (overlayEl()) this.renderHousePage();
+    },
+
     // ── The ⋯ menu ──
 
     toggleHousePageMenu(house: TreeHouse): void {
@@ -499,6 +570,8 @@ export const housePageMethods = uiModule({
                 ((a) => a ? item(`act-${a.action}`, a.html, false, true) : '')(this.houseActionNow(house, 14)),
                 // spec 145 T2: the agent's chat about the house, only with `house.chat`.
                 this.houseChatPossible() ? item('chat', this.houseChatLabel(), false, true) : '',
+                // spec 145 T4: the agent writes the house's story, through the bridge (the AI badge alone).
+                this.houseStoryPossible() ? item('story', this.houseStoryLabel(this.housePageResearch(house)), false, true) : '',
                 houseFeature(b.features, 'house.material') ? item('attach', H.attach) : '',
                 houseFeature(b.features, 'house.import') && researchDeviceAllows('house')
                     ? item('import', researchActionLabel(H.import, researchLinkMark('house', { houseDo: 'import' })), false, true) : '',
@@ -546,6 +619,7 @@ export const housePageMethods = uiModule({
             return;
         }
         if (key === 'chat') { this.openHouseChat(house, el); return; }
+        if (key === 'story') { void this.askHouseStory(house, overlayEl()?.querySelector<HTMLElement>('.pp-more')); return; }
         if (key === 'attach') { this.showHouseMaterialDialog(house); return; }
         if (key === 'import') {
             const b = this.houseResearchBridge();

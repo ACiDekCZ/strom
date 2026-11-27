@@ -169,6 +169,11 @@ describe('the map of research actions to their marks', () => {
         expect(bulk).not.toContain('research-open-mark');
         expect(researchBridgeActionLabel(strings.verify.scan, 'fact-confirm')).toBe(strings.verify.scan);
         expect(researchBridgeActionLabel(strings.verify.stop, 'verify-stop')).toBe(strings.verify.stop);
+        // The story of a house (spec 145 T4): the agent writes it, its task on top of the queue, through the bridge.
+        expect(RESEARCH_BRIDGE_MARKS['house-story']).toBe('bridgeAgent');
+        const story = researchBridgeActionLabel(strings.houses.writeStory, 'house-story');
+        expect(story).toContain('research-ai-badge');
+        expect(story).not.toContain('research-open-mark');
     });
 });
 
@@ -195,7 +200,7 @@ describe('on a device of the home network (spec 094 §6)', () => {
         for (const a of ['open', 'chat', 'work', 'places', 'history', 'story', 'review', 'sessions', 'experiment', 'setup',
             'update', 'fixes', 'doctor', 'seal', 'archive', 'finish', 'task', 'new', 'research', 'sync-undo', 'verify',
             'verify-bulk', 'material-sort', 'run-limit', 'read-document', 'devices', 'research-tools', 'tree-settings',
-            'load-version', 'direction-new', 'direction-work', 'conflict-agent'] as const) expect(researchDeviceAllows(a)).toBe(false);
+            'load-version', 'direction-new', 'direction-work', 'conflict-agent', 'house-story'] as const) expect(researchDeviceAllows(a)).toBe(false);
         // A decision only once the gateway announces it in status.device.actions.
         for (const a of ['conflict', 'hypothesis', 'hypotheses', 'sync-undo-this'] as const) expect(researchDeviceAllows(a)).toBe(false);
         expect(deviceAllows('conflict', ['conflict.decide'])).toBe(true);

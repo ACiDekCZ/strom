@@ -13476,6 +13476,13 @@ const stringsEN = {
         matKind: { file: 'file', photo: 'photo', text: 'text' },
         errTown: 'The research has no record of this town yet; material can be attached once the town is among its places.',
         errArchive: 'An archive does not take material.',
+        // spec 145 T4: the house's story, written by the research's agent.
+        writeStory: 'Write the story of the house',
+        writeStoryAgain: 'Write a new version of the story',
+        storyAsked: 'The agent’s task to write the story is at the top of the research queue.',
+        storyMoved: 'The task already existed; it moved to the top of the research queue.',
+        errStoryNone: 'Nothing of this house is in the research yet; its story is written from its research.',
+        storyWaiting: (n: string) => `The story of house ${n} waits for approval`,
         // Protection in outputs (spec 030 §10): a sensitive event of the research, hidden until shown.
         hiddenOut: 'hidden in outputs',
         reveal: 'Show in outputs',
@@ -13508,7 +13515,7 @@ const stringsEN = {
             sec: {
                 numbers: 'Numbers over time', timeline: 'Timeline', people: 'Holders and residents', look: 'The building',
                 map: 'Map', unknown: 'What is not known', passed: 'What was searched', archiveOnly: 'Only in the reading room',
-                sources: 'Sources and materials', treeResidents: 'Residents from the tree',
+                story: 'Story', sources: 'Sources and materials', treeResidents: 'Residents from the tree',
             },
             map: {
                 layers: 'Map layer', today: 'Today', ortho: 'Orthophoto today', aerial: 'Aerial 1950s',
@@ -13565,6 +13572,13 @@ const stringsEN = {
             lookMore: (why: string) => `The look of the house is still being researched: ${why}.`,
             lookQueued: 'Its task is in the research queue.',
             lookUnknown: 'What the house looked like is not known.',
+            // The house's story (spec 145 T4).
+            storyDraft: 'draft, waiting for approval',
+            storyNew: (d?: string) => `A new version of the story${d ? ` (${d})` : ''} waits for approval; the page shows the approved text.`,
+            storyTask: (state: string): string => state === 'doing' ? 'The story of the house is being written.'
+                : state === 'parked' ? 'The task of the story is set aside in the research.'
+                    : state === 'waiting' ? 'The task of the story waits for an answer in the research.'
+                        : 'The story of the house is in the research queue.',
             materials: 'House materials',
             save: 'Save HTML',
             saved: (name: string) => `Saved: ${name}`,
@@ -26467,6 +26481,13 @@ const stringsCZ: StringsType = {
         matKind: { file: 'soubor', photo: 'foto', text: 'text' },
         errTown: 'Obec zatím nemá ve výzkumu záznam místa; materiál půjde přiložit, až ji výzkum bude mít mezi místy.',
         errArchive: 'Archiv materiál nepřijímá.',
+        // spec 145 T4: the house's story, written by the research's agent.
+        writeStory: 'Napsat vyprávění o domě',
+        writeStoryAgain: 'Napsat novou verzi vyprávění',
+        storyAsked: 'Úkol agenta napsat vyprávění je na začátku fronty výzkumu.',
+        storyMoved: 'Úkol už existoval; posunul se na začátek fronty výzkumu.',
+        errStoryNone: 'Ve výzkumu zatím o domě nic není; vyprávění se píše z jeho výzkumu.',
+        storyWaiting: (n: string) => `Vyprávění o domě ${n} čeká na schválení`,
         hiddenOut: 'skryto ve výstupech',
         reveal: 'Ukázat ve výstupech',
         hide: 'Skrýt ve výstupech',
@@ -26498,7 +26519,7 @@ const stringsCZ: StringsType = {
             sec: {
                 numbers: 'Čísla v čase', timeline: 'Časová osa', people: 'Držitelé a obyvatelé', look: 'Podoba domu',
                 map: 'Mapa', unknown: 'Co nevíme', passed: 'Co se prošlo', archiveOnly: 'Jen v badatelně',
-                sources: 'Prameny a materiály', treeResidents: 'Obyvatelé ze stromu',
+                story: 'Vyprávění', sources: 'Prameny a materiály', treeResidents: 'Obyvatelé ze stromu',
             },
             map: {
                 layers: 'Vrstva mapy', today: 'Dnes', ortho: 'Ortofoto dnes', aerial: 'Letecké 50. léta',
@@ -26554,6 +26575,13 @@ const stringsCZ: StringsType = {
             lookMore: (why: string) => `Podoba domu se ještě zkoumá: ${why}.`,
             lookQueued: 'Úkol je ve frontě výzkumu.',
             lookUnknown: 'Jak dům vypadal, není známo.',
+            // The house's story (spec 145 T4).
+            storyDraft: 'koncept, čeká na schválení',
+            storyNew: (d?: string) => `Nová verze vyprávění${d ? ` (${d})` : ''} čeká na schválení; stránka ukazuje schválený text.`,
+            storyTask: (state: string): string => state === 'doing' ? 'Vyprávění o domě se právě píše.'
+                : state === 'parked' ? 'Úkol vyprávění je ve výzkumu odložený.'
+                    : state === 'waiting' ? 'Úkol vyprávění ve výzkumu čeká na odpověď.'
+                        : 'Vyprávění o domě je ve frontě výzkumu.',
             materials: 'Materiály domu',
             save: 'Uložit HTML',
             saved: (name: string) => `Uloženo: ${name}`,
@@ -39363,6 +39391,13 @@ const stringsDE: StringsType = {
         matKind: { file: 'Datei', photo: 'Foto', text: 'Text' },
         errTown: 'Der Ort hat in der Forschung noch keinen Ortseintrag; Material lässt sich anhängen, sobald er unter ihren Orten ist.',
         errArchive: 'Ein Archiv nimmt kein Material an.',
+        // spec 145 T4: the house's story, written by the research's agent.
+        writeStory: 'Erzählung über das Haus schreiben',
+        writeStoryAgain: 'Neue Fassung der Erzählung schreiben',
+        storyAsked: 'Die Aufgabe des Agenten, die Erzählung zu schreiben, steht oben in der Warteschlange der Forschung.',
+        storyMoved: 'Die Aufgabe gab es schon; sie steht jetzt oben in der Warteschlange der Forschung.',
+        errStoryNone: 'In der Forschung steht noch nichts über dieses Haus; die Erzählung entsteht aus seiner Erforschung.',
+        storyWaiting: (n: string) => `Die Erzählung über Haus ${n} wartet auf Freigabe`,
         hiddenOut: 'in Ausgaben verborgen',
         reveal: 'In Ausgaben zeigen',
         hide: 'In Ausgaben verbergen',
@@ -39394,7 +39429,7 @@ const stringsDE: StringsType = {
             sec: {
                 numbers: 'Nummern im Lauf der Zeit', timeline: 'Zeitleiste', people: 'Besitzer und Bewohner', look: 'Das Gebäude',
                 map: 'Karte', unknown: 'Was nicht bekannt ist', passed: 'Was durchsucht wurde', archiveOnly: 'Nur im Lesesaal',
-                sources: 'Quellen und Materialien', treeResidents: 'Bewohner aus dem Stammbaum',
+                story: 'Erzählung', sources: 'Quellen und Materialien', treeResidents: 'Bewohner aus dem Stammbaum',
             },
             map: {
                 layers: 'Kartenebene', today: 'Heute', ortho: 'Orthofoto heute', aerial: 'Luftbilder 1950er',
@@ -39450,6 +39485,13 @@ const stringsDE: StringsType = {
             lookMore: (why: string) => `Das Aussehen des Hauses wird noch erforscht: ${why}.`,
             lookQueued: 'Die Aufgabe steht in der Warteschlange der Forschung.',
             lookUnknown: 'Wie das Haus aussah, ist nicht bekannt.',
+            // The house's story (spec 145 T4).
+            storyDraft: 'Entwurf, wartet auf Freigabe',
+            storyNew: (d?: string) => `Eine neue Fassung der Erzählung${d ? ` (${d})` : ''} wartet auf Freigabe; die Seite zeigt den freigegebenen Text.`,
+            storyTask: (state: string): string => state === 'doing' ? 'Die Erzählung über das Haus wird gerade geschrieben.'
+                : state === 'parked' ? 'Die Aufgabe der Erzählung ist in der Forschung zurückgestellt.'
+                    : state === 'waiting' ? 'Die Aufgabe der Erzählung wartet in der Forschung auf eine Antwort.'
+                        : 'Die Erzählung über das Haus steht in der Warteschlange der Forschung.',
             materials: 'Materialien des Hauses',
             save: 'HTML speichern',
             saved: (name: string) => `Gespeichert: ${name}`,

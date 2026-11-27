@@ -25,10 +25,12 @@ import type {
     HouseCertainty, HouseEvent, HouseHolder, HouseMaterial, HouseNumberItem, HouseResearch, HouseResident, HouseSource, HouseState,
     HouseUnknown,
 } from './house-bridge.js';
+import type { HouseStoryText } from './house-bridge.js';
+import { storyProseHtml } from './story-text.js';
 import type { LiveHouseLayer } from './research-link.js';
 import { houseFacts, houseLabel, houseTitle, type HouseFact, type TreeHouse } from './houses.js';
 import { houseKey } from './places.js';
-import { houseOutputFilter, housePrivacyContext, type HouseOutput, type HousePrivacyContext } from './house-privacy.js';
+import { houseOutputFilter, housePrivacyContext, houseStoryForOutput, type HouseOutput, type HousePrivacyContext } from './house-privacy.js';
 import { applyLivingPrivacy } from './privacy.js';
 import { getStringsForLang, joinAnd, type Language } from './strings.js';
 import { formatFlexDate, yearOf } from './dates.js';
@@ -55,6 +57,12 @@ export interface HousePageApp {
     canConfirm?: boolean;
     /** The name after the farm, the reveal of a sensitive event: a tree that can be changed. */
     canEdit?: boolean;
+    /**
+     * The story's actions, drawn by the window (spec 145 T4): Approve under a draft, Compare beside the notice of a
+     * new version (the research's links; '' none).
+     */
+    storyApproveHtml?: string;
+    storyCompareHtml?: string;
 }
 
 export interface HousePageOptions {
@@ -100,9 +108,9 @@ export interface HousePageSection {
     label: string;
 }
 
-export type HousePageSectionKey = 'sum' | 'numbers' | 'timeline' | 'people' | 'treeResidents' | 'look' | 'map' | 'unknown' | 'passed' | 'sources';
+export type HousePageSectionKey = 'sum' | 'story' | 'numbers' | 'timeline' | 'people' | 'treeResidents' | 'look' | 'map' | 'unknown' | 'passed' | 'sources';
 
-const SECTION_KEYS: readonly HousePageSectionKey[] = ['sum', 'numbers', 'timeline', 'people', 'treeResidents', 'look', 'map', 'unknown', 'passed', 'sources'];
+const SECTION_KEYS: readonly HousePageSectionKey[] = ['sum', 'story', 'numbers', 'timeline', 'people', 'treeResidents', 'look', 'map', 'unknown', 'passed', 'sources'];
 
 export const housePageSectionId = (key: HousePageSectionKey): string => `hp-sec-${key}`;
 
@@ -132,6 +140,7 @@ interface Ctx {
     recentHouse: boolean;
     /** The file: the first year of the last ~100 years (the tree's years from it stay out); null in the app. */
     recentFrom: number | null;
+    privacy: HousePrivacyContext;
 }
 
 const cap = (s: string, lang: Language): string => (s ? s.charAt(0).toLocaleUpperCase(lang) + s.slice(1) : s);
@@ -342,7 +351,7 @@ function makeCtx(data: StromData, house: TreeHouse, research: HouseResearch | nu
     return {
         mode, app, lang: opts.lang, H: S.houses, P: S.houses.page,
         names: app ? data : opts.names ?? applyLivingPrivacy(data, 'initials', opts.now.getFullYear()),
-        data, house, research, out, opts, personOfRef: pctx.personOfRef, recentHouse, recentFrom: app ? null : pctx.from,
+        data, house, research, out, opts, personOfRef: pctx.personOfRef, recentHouse, recentFrom: app ? null : pctx.from, privacy: pctx,
     };
 }
 
@@ -756,6 +765,43 @@ function lookHtml(c: Ctx): string {
     return body ? section('look', P.sec.look, body) : '';
 }
 
+// ==================== THE STORY (spec 145 T4) ====================
+
+/**
+ * The story's text the page shows: in the app the approved one or the draft (a new version beside an approved one
+ * only through its notice); in the file the approved one alone, and only as the output's filter lets it
+ * (houseStoryForOutput: none when it names a protected person).
+ */
+function shownStory(c: Ctx): HouseStoryText | null {
+    const st = c.research?.story;
+    if (!st || st.status === null) return null;
+    return c.out ? houseStoryForOutput(c.research, c.out, c.privacy) : st;
+}
+
+const STORY_TASK_LIVE: readonly string[] = ['open', 'doing', 'parked', 'waiting'];
+
+function storyHtml(c: Ctx): string {
+    const st = c.research?.story;
+    if (!st) return '';
+    const { P } = c;
+    const app = c.opts.app;
+    const live = c.app && st.task && STORY_TASK_LIVE.includes(st.task.state)
+        ? `<p class="hp-note hp-story-task">${esc(P.storyTask(st.task.state))}</p>` : '';
+    if (st.status === null) return live ? section('story', P.sec.story, live) : '';
+    const shown = shownStory(c);
+    if (!shown) return '';
+    const draft = c.app && st.status === 'draft';
+    const tag = draft ? `<span class="hp-story-tag">${esc(P.storyDraft)}</span>` : '';
+    const nv = c.app && st.status === 'final' && st.draft
+        ? `<div class="hp-story-nv" role="status"><span>${esc(P.storyNew(dayText(st.draft.at, c.lang) || undefined))}</span>${app?.storyCompareHtml ?? ''}</div>` : '';
+    const title = shown.title ? `<h3 class="hp-story-title">${esc(shown.title)}</h3>` : '';
+    const cites = citesHtml(c, shown.sources);
+    const approve = draft && app?.storyApproveHtml ? `<div class="hp-acts">${app.storyApproveHtml}</div>` : '';
+    const body = `${nv}<div class="hp-story${draft ? ' hp-story--draft' : ''}">${title}<div class="hp-story-prose pp-prose">${storyProseHtml(shown.text, { headingLevel: 4 })}</div>`
+        + `${cites ? `<div class="hp-story-src">${cites}</div>` : ''}</div>${approve}${live}`;
+    return section('story', P.sec.story, body, tag);
+}
+
 function unknownHtml(c: Ctx): string {
     const list = [...(c.research?.unknown ?? []).filter(u => u.about !== 'look'), ...(c.research?.town?.unknown ?? [])];
     if (!list.length) return '';
@@ -791,6 +837,7 @@ function citedSources(c: Ctx): CitedSource[] {
         ...r.numbers.flatMap(n => n.sources), ...timelineOf(c).flatMap(e => e.sources),
         ...holdersOf(c).flatMap(h => h.item.sources), ...residentsOf(c).flatMap(h => h.item.sources),
         ...(c.out && !c.out.location ? [] : r.location?.sources ?? []),
+        ...(shownStory(c)?.sources ?? []),
     ];
     const map = new Map<string, CitedSource>();
     for (const s of all) {
@@ -857,7 +904,9 @@ function footerHtml(c: Ctx): string {
  */
 export function buildHousePage(data: StromData, house: TreeHouse, research: HouseResearch | null, mode: HousePageMode, opts: HousePageOptions): string {
     const c = makeCtx(data, house, research, mode, opts);
-    const result = hasResult(research);
+    // The story counts as a result only where the page shows it (a draft or a task in the app, the file's filter).
+    const story = storyHtml(c);
+    const result = hasResult(research) || !!story;
     const location = c.out ? c.out.location
         : data.houses?.[house.id]?.location ? { lat: data.houses[house.id]!.location!.lat, lng: data.houses[house.id]!.location!.lng }
             : research?.location ? { lat: research.location.lat, lng: research.location.lon } : null;
@@ -869,7 +918,7 @@ export function buildHousePage(data: StromData, house: TreeHouse, research: Hous
         canEdit: !!opts.app?.canEdit, hasResearch: !!opts.research,
     });
     const parts = result
-        ? [heroHtml(c), summaryHtml(c), numbersHtml(c), timelineHtml(c), peopleHtml(c), lookHtml(c),
+        ? [heroHtml(c), summaryHtml(c), story, numbersHtml(c), timelineHtml(c), peopleHtml(c), lookHtml(c),
             map ? section('map', c.P.sec.map, map) : '', unknownHtml(c), passedHtml(c), sourcesHtml(c)]
         : [heroHtml(c), summaryHtml(c), numbersHtml(c), timelineHtml(c), treeResidentsHtml(c),
             map ? section('map', c.P.sec.map, map) : '', noResultHtml(c)];

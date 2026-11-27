@@ -20,7 +20,7 @@
  */
 
 import type { HouseUserData, Person, PersonId, StromData } from './types.js';
-import type { HouseEvent, HouseHolder, HouseResearch, HouseResident } from './house-bridge.js';
+import type { HouseEvent, HouseHolder, HouseResearch, HouseResident, HouseStoryText } from './house-bridge.js';
 import type { HouseFact, TreeHouse } from './houses.js';
 import { inferBirthUpperBounds, isLivingPerson, isRecentPerson, recentFrom } from './privacy.js';
 import { personResearchRef } from './verify.js';
@@ -176,5 +176,30 @@ export function houseOutputFilter(house: TreeHouse, research: HouseResearch | nu
     return {
         persons, facts, timeline, holders, residents, location, sensitiveHidden,
         hidden: { events: hiddenEvents, facts: hiddenFacts, location: !!loc && !location },
+    };
+}
+
+/**
+ * The house's story an output may show (spec 145 T4): its approved text only, never a draft or a version waiting
+ * beside it. None when it names a protected person — living or of the last ~100 years, or a person of the research
+ * the tree does not know and whose death is not known — or rests on what the output leaves out (an event hidden, a
+ * holder or resident left out or shown without years): the story is left out whole, as the book leaves out a
+ * protected person's story; its text is never rewritten.
+ */
+export function houseStoryForOutput(research: HouseResearch | null, out: HouseOutput, ctx: HousePrivacyContext): HouseStoryText | null {
+    const story = research?.story;
+    if (!story || story.status !== 'final') return null;
+    for (const p of story.people) {
+        const id = ctx.personOfRef(p.id);
+        if (id ? ctx.living(id) || ctx.recent(id) : !p.died) return null;
+    }
+    const low = (id: string): string => id.toLowerCase();
+    const items = new Set([...research.timeline, ...research.holders, ...research.residents].map(x => low(x.id)));
+    const shown = new Set([...out.timeline.map(e => low(e.id)),
+        ...[...out.holders, ...out.residents].filter(h => !h.noYears).map(h => low(h.item.id))]);
+    if (story.facts.some(f => items.has(low(f)) && !shown.has(low(f)))) return null;
+    return {
+        ...(story.title ? { title: story.title } : {}), text: story.text, facts: story.facts, sources: story.sources,
+        ...(story.at ? { at: story.at } : {}), people: story.people,
     };
 }

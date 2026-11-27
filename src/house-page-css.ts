@@ -105,6 +105,17 @@ export const HOUSE_PAGE_CSS = `
 .hp .hp-mat-s, .hp .hp-mat-k { font-size: 12.5px; color: var(--text-faint); }
 .hp .hp-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
+/* The house's story (spec 145 T4): a draft's tag in the heading, a new version's notice above the approved text. */
+.hp .hp-story-tag { display: inline-block; font-family: var(--font-sans); font-weight: 600; padding: 1px 6px; border-radius: var(--r-tag, 3px); background: var(--surface-2); color: var(--text-light); font-size: 11.5px; line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
+.hp .hp-story-title { font-size: clamp(19px, 3.2cqi, 23px); line-height: 1.3; margin: 0 0 10px; overflow-wrap: anywhere; hyphens: auto; }
+.hp .hp-story-prose { max-width: 68ch; }
+.hp .hp-story-prose p:last-child { margin-bottom: 0; }
+.hp .hp-story-src { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; font-size: 13px; }
+.hp .hp-story-nv { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-md, 6px); background: var(--surface-2); font-size: 14px; }
+.hp .hp-story-nv > span { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.hp .hp-story-task { margin-top: 12px; }
+.hp .hp-story-task:first-child { margin-top: 0; }
+
 /* The map (§4): the frame the window draws tiles into, the point, the line under it. */
 .hp .hmap-wrap { display: flex; flex-direction: column; gap: 10px; }
 .hp .hmap-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -159,6 +170,7 @@ export const HOUSE_PAGE_CSS = `
 }
 @media (max-width: 640px) {
     .hp .hp-num { grid-template-columns: auto minmax(0, 1fr); }
+    .hp .hp-story-nv > span { flex-basis: 100%; }
     .hp .hp-num-w { grid-column: 1 / -1; }
     .hp .hp-tl::before { left: 55px; }
     .hp .hp-tl-r { grid-template-columns: 42px 28px minmax(0, 1fr); }
@@ -184,5 +196,6 @@ export const HOUSE_PAGE_CSS = `
 @media print {
     .hp .hp-name-edit, .hp .hp-reveal, .hp .hp-mini, .hp .hp-acts, .hp .hp-out, .hp .hmap-zoom, .hp .hmap-acts, .hp .hmap-top { display: none !important; }
     .hp .hp-num, .hp .hp-tl-r, .hp .hp-table tr, .hp .hp-sr, .hp .hp-mat { break-inside: avoid; }
+    .hp .hp-story-nv { display: none !important; }
 }
 `;

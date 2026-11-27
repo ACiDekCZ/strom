@@ -1871,10 +1871,11 @@ export const researchOverviewMethods = uiModule({
      * all of it is seen in its row, its detail or its group's heading.
      */
     waitingSearchDoc(s: LiveSession, w: LiveWaiting): SearchDoc {
-        const people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
+        const people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : w.kind === 'houseStory' ? [this.houseStoryWaitingWho(w)].filter(Boolean)
+            : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
         const task = researchTaskRef(w.id);
         const hypo = w.kind === 'hypothesis' ? w.id : /\bH\d+\b/.exec(w.on)?.[0];
-        const what = w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s) : w.what;
+        const what = w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'houseStory' ? this.houseStoryWaitingText(w) : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s) : w.what;
         const place = w.kind === 'place' ? strings.places.waiting.group : w.group?.name;
         // Its book's title and archive (spec 105 §1), as its book's heading says them.
         const book = booksOn(s) ? bookById(s, w.book) : null;
@@ -2320,20 +2321,20 @@ export const researchOverviewMethods = uiModule({
         const head = el('span', 'research-overview__waiting-what');
         // A finding of how the task is recorded (spec 109 §1.2): its mark before the title.
         if (waitingAuditShown(s, w)) head.appendChild(waitingAuditMarkEl(L.waitingAudit.auditHead));
-        if (w.kind === 'story') head.appendChild(el('span', 'live-kind-story', L.kindStory));
+        if (w.kind === 'story' || w.kind === 'houseStory') head.appendChild(el('span', 'live-kind-story', L.kindStory));
         else if (w.kind === 'branch') head.appendChild(el('span', 'live-kind live-kind--decide', L.waitBranchKind));
         else if (w.section || w.kind) head.appendChild(waitingKindLabel(w));
         // A question of a house (spec 030 §14): the kind "Houses" with it.
-        const houseQ = w.kind === 'story' || w.kind === 'branch' || w.kind === 'aside' ? null : this.houseOfWaiting(w.id);
+        const houseQ = w.kind === 'story' || w.kind === 'houseStory' || w.kind === 'branch' || w.kind === 'aside' ? null : this.houseOfWaiting(w.id);
         if (houseQ) {
             const tag = el('span', 'live-kind live-kind--house', strings.live.taskKinds.house ?? '');
             tag.dataset.house = houseQ.key;
             head.appendChild(tag);
         }
-        head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s) : w.what);
+        head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'houseStory' ? this.houseStoryWaitingText(w) : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s) : w.what);
         row.appendChild(head);
         const meta = el('span', 'research-overview__waiting-meta');
-        let people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
+        let people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : w.kind === 'houseStory' ? [this.houseStoryWaitingWho(w)].filter(Boolean) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
         // A number the section's search matched (spec 083 §1): the amber tag, that part left out of the line.
         if (hit?.t) meta.appendChild(searchHitTag(researchTaskRef(w.id) ?? w.id));
         if (hit?.p && w.person) {
@@ -2468,6 +2469,15 @@ export const researchOverviewMethods = uiModule({
             const compare = this.appendStoryWaiting(text, w, (id) => this.overviewShowPerson(id, mode));
             const actions = el('div', 'research-overview__waiting-actions');
             actions.appendChild(compare);
+            detail.append(text, actions);
+            return detail;
+        }
+        if (w.kind === 'houseStory') {
+            // A house's story (spec 145 T4): "House čp. N ›" to its page at the story, approved or compared there.
+            const text = el('div', 'research-overview__waiting-text');
+            const open = this.appendHouseStoryWaiting(text, w);
+            const actions = el('div', 'research-overview__waiting-actions');
+            actions.appendChild(open);
             detail.append(text, actions);
             return detail;
         }

@@ -115,6 +115,7 @@ describe('a set of a line with houses', () => {
 });
 
 describe('houses in the family pages (spec 145 T6)', () => {
+    const set0 = () => prouzalSet();
     const research = (edit?: (r: ReturnType<typeof houseResearch>) => void) => {
         const r = houseResearch();
         edit?.(r);
@@ -131,6 +132,20 @@ describe('houses in the family pages (spec 145 T6)', () => {
         for (const text of [SENSITIVE_TEXT, 'Přestavba stodoly', 'Kvido Stranný', LIVING_NAME]) expect(page).not.toContain(text);
         // Without the research's results the page is the tree's alone.
         expect(section(buildPageSetHtml(prouzalSet()), set.houseSlug!.get(HOUSE_ID)!)).not.toContain('hp-sec--people');
+    });
+
+    it('the house\'s page shows its approved story through the same filter (spec 145 T4), never a draft', () => {
+        const story = (status: 'draft' | 'final', people: { id: string; died: boolean }[]) => research(r => {
+            r.story = { status, title: 'Grunt na návsi', text: 'Grunt založil Svatobor Prouzal.', facts: ['h1'], sources: [], people };
+        });
+        const slug = set0().houseSlug!.get(HOUSE_ID)!;
+        const page = (extra: Record<string, unknown>) => section(buildPageSetHtml(prouzalSet(undefined, extra)), slug);
+        const shown = page(story('final', [{ id: 'P0001', died: true }]));
+        expect(shown).toContain('hp-sec--story');
+        expect(shown).toContain('Grunt založil Svatobor Prouzal.');
+        expect(page(story('draft', [{ id: 'P0001', died: true }]))).not.toContain('Grunt založil');
+        // A story naming a person of the last ~100 years is left out whole.
+        expect(page(story('final', [{ id: 'P0001', died: true }, { id: 'P0003', died: true }]))).not.toContain('Grunt založil');
     });
 
     it('the house\'s people link to their pages in the set; one without a page stays text', () => {
