@@ -36,6 +36,7 @@ import { buildGiftCover, giftMessage } from './gift-cover.js';
 import { shownName } from './person-name.js';
 import { unicodeFileName } from './filenames.js';
 import { ZipBlobSink, ZipWriter, type ZipAdded } from './zip.js';
+import type { Spool } from './spool.js';
 import { buildPageSet, type PageSetOptions } from './family-pages.js';
 import { buildPageSetFilesAsync, pageSetRenderedPages } from './family-pages-html.js';
 import { buildFamilyBookAsync, defaultBookOptions, type BookOptions } from './book.js';
@@ -252,7 +253,7 @@ export interface GiftFanOptions {
 /** What the making needs from the window (all optional where tests can do without). */
 export interface GiftPackageEnv {
     /** The app with these data embedded, as a Blob (AppExporter.buildFocusAppBlob); required for the app part. `cards` the detail its cards open with (K5.7). */
-    app?: (data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string; cards: GiftCards }) => Promise<Blob>;
+    app?: (data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string; cards: GiftCards; spool?: Spool | null }) => Promise<Blob>;
     /** An SVG (as a Blob, its images whole) drawn to a PNG (svgBlobToPngBlob); none or null: the fan only as SVG. */
     png?: (svg: Blob, widthPx: number, heightPx: number) => Promise<Blob | null>;
     /** The cover page; default: buildGiftCover. */
@@ -285,6 +286,12 @@ export interface GiftPackageInput {
     signal?: AbortSignal;
     onProgress?: (p: GiftProgress) => void;
     env?: GiftPackageEnv;
+    /**
+     * The large files (the archive, the app, the book, the GEDCOM) written to
+     * this spool's files rather than as Blobs in memory (a large tree, 1127,
+     * spool.ts); the result's Blob is good while the spool is.
+     */
+    spool?: Spool | null;
 }
 
 /** One file of the finished package (paths below the folder). */
@@ -413,8 +420,11 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
     let index = 0;
     let stepStart = 0;
 
-    const sink = new ZipBlobSink();
-    const writer = new ZipWriter(sink.write, now, { blobParts: true });
+    const spool = input.spool ?? null;
+    // With a spool the archive is a file of it (written as it goes, its headers rewritten), else Blobs in memory.
+    const file = spool ? await spool.file() : null;
+    const sink = file ? null : new ZipBlobSink();
+    const writer = file ? new ZipWriter(file.write, now, { blobParts: true, seek: file }) : new ZipWriter(sink!.write, now, { blobParts: true });
     const files: GiftPackageFile[] = [];
     const cover: GiftCoverFile[] = [];
 
@@ -435,10 +445,15 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
     let folder = '';
     const put = async (path: string, data: Uint8Array | string | Blob, part?: GiftPartKey): Promise<ZipAdded> => {
         checkAbort(signal);
-        // A text with stand-ins: a Blob with its images in place, read a few at a time.
-        const body = typeof data === 'string' && data.includes('STROMPOOL') ? await textBlobWithImages(data) : data;
+        // A text with stand-ins: a Blob with its images in place, read a few at a time (the book a file of the spool;
+        // a page, the cover: small, in memory).
+        const body = typeof data === 'string' && data.includes('STROMPOOL')
+            ? await textBlobWithImages(data, '', part === 'book' ? spool : null)
+            : data;
         checkAbort(signal);
         const added = await writer.addAsync(`${folder}/${path}`, body);
+        // In the archive now: the spool's file of it is let go of.
+        if (spool && body instanceof Blob) await spool.drop(body);
         files.push({ path, bytes: added.size, zipBytes: added.csize });
         if (part) cover.push({ part, path, bytes: added.size });
         return added;
@@ -474,6 +489,7 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
             let blob: Blob | null = await env.app(withRefs, {
                 treeName: input.treeName,
                 cards: settings.cards ?? 'detailed',
+                ...(spool ? { spool } : {}),
                 ...(signature ? { senderName: signature } : {}),
                 ...(message ? { senderMessage: message } : {}),
             });
@@ -577,7 +593,7 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
             begin('gedcom');
             await hold();
             // From the references: the file reads its images a few at a time (ged-export-images.ts).
-            const ged = hasPoolRefs(withRefs) ? await exportGedcomBlobWithImages(withRefs, input.treeName) : exportToGedcom(withRefs, input.treeName).content;
+            const ged = hasPoolRefs(withRefs) ? await exportGedcomBlobWithImages(withRefs, input.treeName, {}, spool) : exportToGedcom(withRefs, input.treeName).content;
             await put(names.gedcom, ged, 'gedcom');
             end();
         }
@@ -595,11 +611,12 @@ export async function buildGiftPackage(input: GiftPackageInput): Promise<GiftPac
         checkAbort(signal);
         await put(names.start, coverHtml);
         await writer.finishAsync();
-        const blob = sink.blob();
+        const blob = file ? await file.close('application/zip') : sink!.blob();
         end();
         return { blob, fileName: names.zip, folder, files, persons, bytes: blob.size };
     } catch (e) {
-        sink.clear();
+        sink?.clear();
+        await file?.abort();
         if (isAbortError(e) || e instanceof GiftOutOfMemory) throw e;
         if (isOutOfMemory(e)) throw new GiftOutOfMemory(current, e);
         throw e;
@@ -647,6 +664,8 @@ export interface GiftBatchInput {
     /** A person finished (made or not): its row, 0-based index. */
     onPersonDone?: (row: GiftBatchRow, index: number) => void;
     env?: GiftPackageEnv;
+    /** As GiftPackageInput's: each package and the outer archive written to its files. */
+    spool?: Spool | null;
 }
 
 export interface GiftBatchResult {
@@ -676,8 +695,11 @@ export async function buildGiftBatch(input: GiftBatchInput): Promise<GiftBatchRe
     const now = env.now ?? new Date();
     const whole = dataOf(input.data);
     const fileName = giftBatchFileName(input.lang, now.getFullYear());
-    const sink = input.onPersonZip ? null : new ZipBlobSink();
-    const outer = sink ? new ZipWriter(sink.write, now, { blobParts: true }) : null;
+    const spool = input.spool ?? null;
+    const file = !input.onPersonZip && spool ? await spool.file() : null;
+    const sink = input.onPersonZip || file ? null : new ZipBlobSink();
+    const outer = file ? new ZipWriter(file.write, now, { blobParts: true, seek: file })
+        : sink ? new ZipWriter(sink.write, now, { blobParts: true }) : null;
     const rows: GiftBatchRow[] = [];
     const used = new Set<string>();
     const total = input.items.length;
@@ -692,7 +714,7 @@ export async function buildGiftBatch(input: GiftBatchInput): Promise<GiftBatchRe
             let stopped: GiftStep = 'cut';
             try {
                 let result: GiftPackageResult | null = await buildGiftPackage({
-                    data: input.data, settings, treeName: input.treeName, signal, env,
+                    data: input.data, settings, treeName: input.treeName, signal, env, spool,
                     onProgress: (p) => {
                         stopped = p.step;
                         input.onProgress?.({ ...p, person: i + 1, persons: total, name });
@@ -701,6 +723,7 @@ export async function buildGiftBatch(input: GiftBatchInput): Promise<GiftBatchRe
                 row.fileName = uniqueName(result.fileName, used);
                 if (outer) await outer.addAsync(row.fileName, result.blob, 'store');
                 else await input.onPersonZip!(row.fileName, result.blob);
+                await spool?.drop(result.blob);
                 row.ok = true;
                 row.bytes = result.bytes;
                 row.persons = result.persons;
@@ -718,15 +741,17 @@ export async function buildGiftBatch(input: GiftBatchInput): Promise<GiftBatchRe
             await (env.pause ?? defaultPause)();
         }
         checkAbort(signal);
-        if (!outer || !sink) return { blob: null, fileName, rows };
+        if (!outer) return { blob: null, fileName, rows };
         if (!rows.some(r => r.ok)) {
-            sink.clear();
+            sink?.clear();
+            await file?.abort();
             return { blob: null, fileName, rows };
         }
         await outer.finishAsync();
-        return { blob: sink.blob(), fileName, rows };
+        return { blob: file ? await file.close('application/zip') : sink!.blob(), fileName, rows };
     } catch (e) {
         sink?.clear();
+        await file?.abort();
         throw e;
     }
 }

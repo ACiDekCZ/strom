@@ -126,6 +126,13 @@ export type ZipCompress = 'auto' | 'store';
 /** What an entry became: its size, its size in the archive and how it went in. */
 export interface ZipAdded { size: number; csize: number; method: ZipMethod }
 
+/** A file a ZipWriter writes to that can rewrite what it wrote (spool.ts SpoolFile). */
+export interface ZipSeek {
+    patch(at: number, bytes: Uint8Array<ArrayBuffer>, resume: number): void;
+    truncate(at: number): void;
+    ready(): Promise<void>;
+}
+
 /** Files already compressed (images, archives, PDF, fonts): stored, deflating them gains nothing. */
 const STORED_EXT = /\.(jpe?g|png|gif|webp|avif|zip|gz|pdf|woff2?|mp[34]|m4a|ogg|webm)$/i;
 
@@ -167,7 +174,9 @@ async function* blobChunks(blob: Blob): AsyncGenerator<Uint8Array> {
  * Deflate (raw, as zip's method 8) the chunks while their CRC-32 is counted;
  * null when the browser cannot. The deflated bytes come as chunks too.
  */
-async function deflateChunks(chunks: AsyncIterable<Uint8Array>, fold = false): Promise<{ out: ZipPart[]; crc: number; size: number; csize: number } | null> {
+async function deflateChunks(
+    chunks: AsyncIterable<Uint8Array>, fold = false, onChunk?: (c: Uint8Array<ArrayBuffer>) => Promise<void>,
+): Promise<{ out: ZipPart[]; crc: number; size: number; csize: number } | null> {
     if (!canDeflate()) return null;
     const cs = new CompressionStream('deflate-raw');
     const out: ZipPart[] = [];
@@ -180,9 +189,11 @@ async function deflateChunks(chunks: AsyncIterable<Uint8Array>, fold = false): P
         for (;;) {
             const r = await reader.read();
             if (r.done) break;
+            csize += r.value.length;
+            // `onChunk`: each deflated chunk handed on as it comes (an archive written to a file), nothing kept.
+            if (onChunk) { await onChunk(r.value as Uint8Array<ArrayBuffer>); continue; }
             run.push(r.value as Uint8Array<ArrayBuffer>);
             runBytes += r.value.length;
-            csize += r.value.length;
             if (fold && runBytes >= FOLD_BYTES) { out.push(new Blob(run)); run = []; runBytes = 0; }
         }
         if (fold && run.length) out.push(new Blob(run));
@@ -218,6 +229,12 @@ async function deflateChunks(chunks: AsyncIterable<Uint8Array>, fold = false): P
  * the Blob itself, read only for its CRC); its entries are written in the
  * order of the calls, one after another. `finishAsync` waits for them.
  * Mixing `add` with `addAsync` still running is not allowed.
+ *
+ * `seek` (1127): `out` is a file that can rewrite what it wrote (spool.ts).
+ * A deflated entry then goes out as it is deflated, its local header
+ * written first with the sizes unknown and rewritten once they are known —
+ * the same bytes as without it, never the entry held whole; `ready` keeps
+ * the page from running ahead of the file.
  */
 export class ZipWriter {
     private readonly enc = new TextEncoder();
@@ -232,15 +249,17 @@ export class ZipWriter {
     private readonly blobParts: boolean;
     /** From this size or offset on the ZIP64 fields are written (4 GB; smaller only in tests). */
     private readonly limit: number;
+    private readonly seek: ZipSeek | null;
 
     constructor(out: (part: Uint8Array<ArrayBuffer>) => void, when?: Date, opts?: { zip64At?: number });
-    constructor(out: (part: ZipPart) => void, when: Date | undefined, opts: { blobParts: true; zip64At?: number });
+    constructor(out: (part: ZipPart) => void, when: Date | undefined, opts: { blobParts: true; zip64At?: number; seek?: ZipSeek });
     constructor(
         out: ((part: Uint8Array<ArrayBuffer>) => void) | ((part: ZipPart) => void),
-        when: Date = new Date(), opts?: { blobParts?: boolean; zip64At?: number },
+        when: Date = new Date(), opts?: { blobParts?: boolean; zip64At?: number; seek?: ZipSeek },
     ) {
         this.out = out as (part: ZipPart) => void;
         this.blobParts = !!opts?.blobParts;
+        this.seek = opts?.seek ?? null;
         this.limit = Math.min(MAX32, opts?.zip64At ?? MAX32);
         ({ time: this.time, date: this.date } = dosDateTime(when));
     }
@@ -319,6 +338,10 @@ export class ZipWriter {
 
     private async addNow(path: string, data: Uint8Array | string | Blob, compress: ZipCompress): Promise<ZipAdded> {
         const deflate = compress === 'auto' && isCompressible(path) && canDeflate();
+        if (deflate && this.seek) {
+            const added = await this.deflatedToFile(path, data);
+            if (added) return added;
+        }
         if (data instanceof Blob) {
             if (deflate) {
                 const d = await deflateChunks(blobChunks(data), this.blobParts);
@@ -337,6 +360,45 @@ export class ZipWriter {
             if (d && d.csize < d.size) return this.entry(path, { crc: d.crc, size: d.size, csize: d.csize, method: 8 }, d.out);
         }
         return this.entry(path, { crc: crc32(bytes), size: bytes.length, csize: bytes.length, method: 0 }, [bytes]);
+    }
+
+    /**
+     * A deflated entry straight into a `seek` file: the header with the sizes
+     * still unknown, the deflated chunks as they come, then the header again
+     * with them. Null (the file cut back to where the entry began) when it
+     * does not deflate smaller or the browser cannot: the caller stores it.
+     */
+    private async deflatedToFile(path: string, data: Uint8Array | string | Blob): Promise<ZipAdded | null> {
+        const seek = this.seek!;
+        const bytes = data instanceof Blob ? null : (typeof data === 'string' ? this.enc.encode(data) : data) as Uint8Array<ArrayBuffer>;
+        const size = data instanceof Blob ? data.size : bytes!.length;
+        if (size === 0) return null;
+        const start = this.at;
+        const f: ZipFile = { name: this.enc.encode(path), size, csize: 0, crc: 0, offset: start, method: 8 };
+        // The header's length is the same with the sizes known: ZIP64 in it depends on the size (a deflated entry is smaller).
+        const first = header(false, f, this.time, this.date, this.limit);
+        this.write(first.head);
+        this.write(f.name as Uint8Array<ArrayBuffer>);
+        const extraAt = this.at;
+        this.write(first.extra);
+        const chunks = bytes ? (async function* () { yield bytes; })() : blobChunks(data as Blob);
+        const d = await deflateChunks(chunks, false, async (c) => {
+            this.write(c);
+            await seek.ready();
+        });
+        if (!d || d.csize >= d.size) {
+            seek.truncate(start);
+            this.at = start;
+            return null;
+        }
+        f.crc = d.crc;
+        f.csize = d.csize;
+        const h = header(false, f, this.time, this.date, this.limit);
+        seek.patch(start, h.head, this.at);
+        if (h.extra.length) seek.patch(extraAt, h.extra, this.at);
+        this.files.push(f);
+        await seek.ready();
+        return { size: f.size, csize: f.csize, method: f.method };
     }
 
     private entry(path: string, e: Omit<ZipFile, 'name' | 'offset'>, body: readonly ZipPart[]): ZipAdded {

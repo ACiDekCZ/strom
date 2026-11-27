@@ -23,6 +23,7 @@ import { headMime, imageMetaOf } from './image-meta.js';
 import { ensureImageMeta, loadImageUrls, pooledIds } from './media-pool.js';
 import { withExifOrientation } from './excerpts.js';
 import { dataUrlBytes } from './zip.js';
+import { blobOut, type BlobOut, type Spool } from './spool.js';
 import type { StromData } from './types.js';
 
 /** Images read per read of the pool while a text is written: the page holds only these besides the text. */
@@ -60,13 +61,24 @@ function shown(url: string | undefined, orient: string | undefined): string {
 /**
  * A text with stand-ins as a Blob of `type` with every image in its place
  * (fillStandIns' text), read STAND_IN_IMAGES_PER_READ images at a time.
+ * `spool`: written to its file (a large output, spool.ts), else in memory.
  */
-export async function textBlobWithImages(text: string, type = ''): Promise<Blob> {
+export async function textBlobWithImages(text: string, type = '', spool?: Spool | null): Promise<Blob> {
     const opts = type ? { type } : undefined;
     if (!text.includes('STROMPOOL')) return new Blob([text], opts);
     const matches = [...text.matchAll(STAND_IN_IN_TEXT)];
     if (matches.length === 0) return new Blob([text], opts);
-    const parts: Blob[] = [];
+    const out = await blobOut(spool);
+    try {
+        await writeTextWithImages(text, matches, out);
+        return await out.close(type);
+    } catch (e) {
+        await out.abort();
+        throw e;
+    }
+}
+
+async function writeTextWithImages(text: string, matches: RegExpExecArray[] | RegExpMatchArray[], out: BlobOut): Promise<void> {
     let from = 0;
     for (let i = 0; i < matches.length;) {
         // The next few distinct images, and every stand-in up to the last of them.
@@ -79,18 +91,18 @@ export async function textBlobWithImages(text: string, type = ''): Promise<Blob>
             j++;
         }
         const urls = await loadImageUrls([...group]);
-        const out: string[] = [];
         for (let k = i; k < j; k++) {
             const m = matches[k];
-            out.push(text.slice(from, m.index), shown(urls.get(`${m[1]}:${m[2]}`), m[3]));
+            out.write(text.slice(from, m.index));
+            out.write(shown(urls.get(`${m[1]}:${m[2]}`), m[3]));
             from = m.index! + m[0].length;
         }
-        // Into a Blob at once: the images of this read leave the page's memory.
-        parts.push(new Blob(out));
+        // Out at once (a Blob, the disk): the images of this read leave the page's memory.
+        await out.ready();
         i = j;
     }
-    parts.push(new Blob([text.slice(from)]));
-    return new Blob(parts, opts);
+    out.write(text.slice(from));
+    await out.ready();
 }
 
 /**

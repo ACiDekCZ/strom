@@ -56,6 +56,7 @@ import { barEl } from './prog-bar.js';
 import { spinEl } from './busy.js';
 import { svgBlobToPngBlob } from './svg-png.js';
 import { textBlobWithImages } from '../image-standin.js';
+import { spoolFor } from '../spool.js';
 import { FAN_STYLES, type FanStyle } from '../fan-colors.js';
 import type { FanShape } from '../fan-chart.js';
 import { fanPhotoPortrait } from './fan-view.js';
@@ -856,8 +857,11 @@ export const giftTreeMethods = uiModule({
         const treeId = TreeManager.getActiveTreeId();
         const treeName = (treeId ? TreeManager.getTreeMetadata(treeId)?.name : '') || strings.giftTree.title;
         try {
+            // A large package is written to the page's own files, not held as Blobs in memory (1127); its file stays for "Download again".
+            const spool = await spoolFor('gift', estimateGiftSize(u.data, settings, { now: new Date() }).total);
+            if (ui !== u || u.run !== run) return;
             const result = await buildGiftPackage({
-                data: u.data, settings, treeName, signal: run.ctrl!.signal,
+                data: u.data, settings, treeName, signal: run.ctrl!.signal, spool,
                 onProgress: (p) => {
                     run.progress = p;
                     if (p.size !== undefined) run.sizes.set(p.step, p.size);
@@ -944,8 +948,10 @@ export const giftTreeMethods = uiModule({
         const treeId = TreeManager.getActiveTreeId();
         const treeName = (treeId ? TreeManager.getTreeMetadata(treeId)?.name : '') || strings.giftTree.title;
         try {
+            const spool = await spoolFor('gift', rows.reduce((n, r) => n + (stats.get(r.key)?.bytes ?? 0), 0));
+            if (ui !== u || u.run !== run) return;
             const result = await buildGiftBatch({
-                data: u.data, items: plain.map(s => ({ settings: giftResolvedSettings(u.data, s) })), treeName,
+                data: u.data, items: plain.map(s => ({ settings: giftResolvedSettings(u.data, s) })), treeName, spool,
                 lang: common.letter.lang, signal: run.ctrl!.signal,
                 onProgress: (p) => { info.progress = p; this.giftRunTick(run); },
                 onPersonDone: (row) => { info.done.push(row); this.giftRunTick(run); },

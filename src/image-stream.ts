@@ -22,6 +22,7 @@
 import { poolIdOf } from './image-ref.js';
 import { loadImageUrls } from './media-pool.js';
 import { expandedData } from './image-expand.js';
+import { blobOut, type BlobOut, type Spool } from './spool.js';
 
 /** Images read per read of the pool: an output holds only these at a time besides its text. */
 export const IMAGES_PER_READ = 8;
@@ -74,25 +75,39 @@ function cut(text: string): CutText {
     return { pieces, ids };
 }
 
-/** The parts of a file: Blobs of the pieces with the images (JSON strings, `script`: safe in a script) in place. */
-async function partsWithImages(c: CutText, script: boolean): Promise<{ parts: Blob[]; missing: Set<string> }> {
-    const parts: Blob[] = [];
+/** The pieces with the images (JSON strings, `script`: safe in a script) in place, written to `out`; the images the pool did not give. */
+async function writeWithImages(out: BlobOut, c: CutText, script: boolean): Promise<Set<string>> {
     const missing = new Set<string>();
     for (let i = 0; i < c.ids.length; i += IMAGES_PER_READ) {
         const group = c.ids.slice(i, i + IMAGES_PER_READ);
         const urls = await loadImageUrls([...new Set(group)]);
-        const out: string[] = [];
         for (let k = 0; k < group.length; k++) {
             const url = urls.get(group[k]);
             if (url === undefined) missing.add(group[k]);
             const json = JSON.stringify(url ?? '');
-            out.push(c.pieces[i + k], script ? scriptSafeJson(json) : json);
+            out.write(c.pieces[i + k]);
+            out.write(script ? scriptSafeJson(json) : json);
         }
-        // Into a Blob at once: the images of this read leave the page's memory.
-        parts.push(new Blob(out));
+        // Out at once (a Blob, the disk): the images of this read leave the page's memory.
+        await out.ready();
     }
-    parts.push(new Blob([c.pieces[c.pieces.length - 1]]));
-    return { parts, missing };
+    out.write(c.pieces[c.pieces.length - 1]);
+    await out.ready();
+    return missing;
+}
+
+/** The file made of `head`, the pieces with their images and `tail`, written to `spool`'s file or as Blobs in memory. */
+async function fileWithImages(c: CutText, script: boolean, type: string, spool: Spool | null | undefined, head: string[] = [], tail: string[] = []): Promise<DataFile> {
+    const out = await blobOut(spool);
+    try {
+        for (const h of head) out.write(h);
+        const missing = await writeWithImages(out, c, script);
+        for (const t of tail) out.write(t);
+        return { blob: await out.close(type), missing: missing.size };
+    } catch (e) {
+        await out.abort();
+        throw e;
+    }
 }
 
 /** A file made of tree data: its Blob and the images the pool did not give (empty text in it). */
@@ -106,7 +121,7 @@ export interface DataFile {
  * Blob of `type` (see the module's comment). `script`: the JSON as an
  * inline script embeds it (scriptSafeJson).
  */
-export async function jsonFileWithImages(value: unknown, o: { indent?: number; type?: string; script?: boolean } = {}): Promise<DataFile> {
+export async function jsonFileWithImages(value: unknown, o: { indent?: number; type?: string; script?: boolean; spool?: Spool | null } = {}): Promise<DataFile> {
     const text = written(value, o.indent, o.script);
     const expected = countPoolRefs(value);
     const type = o.type ?? 'application/json';
@@ -116,8 +131,7 @@ export async function jsonFileWithImages(value: unknown, o: { indent?: number; t
         const whole = written(await expandedData(value), o.indent, o.script);
         return { blob: new Blob([whole], { type }), missing: 0 };
     }
-    const { parts, missing } = await partsWithImages(c, !!o.script);
-    return { blob: new Blob(parts, { type }), missing: missing.size };
+    return fileWithImages(c, !!o.script, type, o.spool);
 }
 
 function written(value: unknown, indent?: number, script?: boolean): string {
@@ -131,8 +145,9 @@ function written(value: unknown, indent?: number, script?: boolean): string {
  * holding the values' pooled images as references; the page comes as a
  * Blob with the images whole in the script. Only the script is read for
  * references — the page's own code is written as it is. Taken at the call.
+ * `spool`: the file written there (a large one, spool.ts), else in memory.
  */
-export async function htmlFileWithImages<T>(html: string, values: T, script: (values: T) => string): Promise<DataFile> {
+export async function htmlFileWithImages<T>(html: string, values: T, script: (values: T) => string, spool?: Spool | null): Promise<DataFile> {
     const type = 'text/html';
     const text = `${script(values)}\n`;
     const expected = countPoolRefs(values);
@@ -146,6 +161,5 @@ export async function htmlFileWithImages<T>(html: string, values: T, script: (va
     if (c.ids.length !== expected) {
         return { blob: new Blob([head, `${script(await expandedData(values))}\n`, rest], { type }), missing: 0 };
     }
-    const { parts, missing } = await partsWithImages(c, true);
-    return { blob: new Blob([head, ...parts, rest], { type }), missing: missing.size };
+    return fileWithImages(c, true, type, spool, [head], [rest]);
 }

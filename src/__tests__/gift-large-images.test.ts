@@ -26,7 +26,7 @@ import { htmlFileWithImages, scriptSafeJson } from '../image-stream.js';
 import { POOL_REF } from '../image-ref.js';
 import { clearImageMeta, computeImageMeta, setImageMeta } from '../image-meta.js';
 import { defaultGiftParts, defaultGiftPrivacy, type GiftSettings } from '../gift-tree.js';
-import { buildGiftPackage, type GiftPackageEnv } from '../gift-package.js';
+import { buildGiftBatch, buildGiftPackage, type GiftPackageEnv } from '../gift-package.js';
 import { STAND_IN_IMAGES_PER_READ, textBlobWithImages, textWithImageUrls, treeWithPoolStandIns } from '../image-standin.js';
 import { buildFamilyBook } from '../book.js';
 import { defaultBookOptions } from '../book-options.js';
@@ -34,6 +34,8 @@ import { resolveObjectURL } from 'node:buffer';
 import { blobBytes, zipFiles } from './helpers/zip-read.js';
 import { buildPagesFile } from '../ui/family-pages-ui.js';
 import type { PersonId, StromData } from '../types.js';
+import { Spool } from '../spool.js';
+import { countMemoryBlobs, fakeSpoolFolders } from './helpers/fake-opfs.js';
 
 const NOW = new Date(2026, 11, 20, 14, 0, 0);
 const P = (key: string) => `demo_${key}` as PersonId;
@@ -114,7 +116,7 @@ function env(extra: Partial<GiftPackageEnv> = {}): GiftPackageEnv {
     return {
         now: NOW,
         // The app as the window writes it: its embedded data with the pooled images read as the file is written.
-        app: async (data) => (await htmlFileWithImages('<html><head></head><body></body></html>', data, v => `<script>window.D=${scriptSafeJson(JSON.stringify(v))}</script>`)).blob,
+        app: async (data, o) => (await htmlFileWithImages('<html><head></head><body></body></html>', data, v => `<script>window.D=${scriptSafeJson(JSON.stringify(v))}</script>`, o.spool)).blob,
         // The PNG stands for the SVG it is drawn from (its text as it is).
         png: async (svg) => new Blob([await svg.text()]),
         fan: { portrait: (p) => (typeof p.photo === 'string' && p.photo.startsWith('data:image/') ? { href: p.photo } : null) },
@@ -175,6 +177,42 @@ describe('the gift package of a tree with many photos (1127)', () => {
         for (const re of [/\.html$/, /\.ged$/, /\.svg$/]) expect(text(re)).not.toContain('STROMPOOL');
         expect(paths.some(p => /\.svg$/.test(p) && dec.decode(b.get(p)!).includes(HEAD))).toBe(true);
         for (const [, bytes] of b) expect(dec.decode(bytes)).not.toMatch(/STROMPOOL|data-pool-ref|\\u0000sm:/);
+    });
+
+    it('with a spool: the archive, the app, the book and the GEDCOM are its files, not Blobs in memory, and the ZIP is the same', async () => {
+        const { data } = await treeWithPhotos();
+        // Chrome breaks Blobs made in memory faster than it moves them to its disk (gigabytes of photos: "network error").
+        const plainCount = countMemoryBlobs();
+        let plain;
+        try {
+            plain = await buildGiftPackage({ data, settings: settings(), treeName: 'Berg', env: env() });
+        } finally {
+            plainCount.restore();
+        }
+        const [parent, dir, name, fake] = fakeSpoolFolders();
+        const spool = new Spool(parent, dir, name);
+        const spooledCount = countMemoryBlobs();
+        let spooled;
+        try {
+            spooled = await buildGiftPackage({ data, settings: settings(), treeName: 'Berg', env: env(), spool });
+        } finally {
+            spooledCount.restore();
+        }
+        expect(Buffer.from(await blobBytes(spooled.blob)).equals(Buffer.from(await blobBytes(plain.blob)))).toBe(true);
+        expect(spooled.files).toEqual(plain.files);
+        expect(spool.holds(spooled.blob)).toBe(true);
+        // Only the package's own file is left: the app's, the book's and the GEDCOM's went once in the archive.
+        expect(fake.files()).toHaveLength(1);
+        expect(fake.files()[0].bytes.length).toBe(plain.blob.size);
+        // In memory only the small ones (the fan's posters, a page, the cover).
+        expect(spooledCount.bytes()).toBeLessThan(plainCount.bytes() / 4);
+        // The batch: each package into the outer archive, then let go of.
+        const batchSpool = new Spool(...fakeSpoolFolders('batch').slice(0, 3) as [FileSystemDirectoryHandle, FileSystemDirectoryHandle, string]);
+        const batch = await buildGiftBatch({ data, items: [{ settings: settings() }, { settings: settings() }], treeName: 'Berg', lang: 'en', env: env(), spool: batchSpool });
+        expect(batch.rows.every(r => r.ok)).toBe(true);
+        expect(batchSpool.holds(batch.blob!)).toBe(true);
+        const inner = zipFiles(await blobBytes(batch.blob!));
+        expect([...inner.values()].map(b => b.length)).toEqual([plain.blob.size, plain.blob.size]);
     });
 
     it('the family pages file (one HTML, or the ZIP with the images folder): a few images per read, byte for byte as from the expanded tree', async () => {

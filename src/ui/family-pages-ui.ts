@@ -25,6 +25,7 @@ import { PartnershipId, PersonId, StromData } from '../types.js';
 import { BookSelectionSpec } from '../book-options.js';
 import { PAGE_SET_SPLIT_BYTES, PageSet, PageSetOptions, SetPage, buildPageSet, pageSetFileName, pageSetImages } from '../family-pages.js';
 import { ZipBlobSink, ZipWriter } from '../zip.js';
+import { spoolFor, type SpoolFile } from '../spool.js';
 import { imageFileBytes, standInImage, textBlobWithImages, treeWithPoolStandIns } from '../image-standin.js';
 import { buildPageSetFilesAsync, buildPageSetHtmlAsync, pageSetZipName, pageSetRenderedPages, renderPage, renderPageBar, renderPageSearch } from '../family-pages-html.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
@@ -43,7 +44,7 @@ import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-l
 import { pageImageWait } from './image-slot.js';
 import { hasPoolRefs } from '../image-expand.js';
 import { pageSetImageIds } from '../page-images.js';
-import { poolImagesChars } from '../memory-limit.js';
+import { poolImagesChars, treeImageChars } from '../memory-limit.js';
 import { forEachImagePlace } from '../image-intern.js';
 import { treeWithStandIns, withFamilyPageImages } from './family-pages-images.js';
 
@@ -387,6 +388,8 @@ export async function buildPagesFile(
         check();
     };
     onStep(0, 0, F.step.prepare);
+    // A large file is written to the page's own files, not held as Blobs in memory (1127, spool.ts).
+    const spool = await spoolFor('pages', treeImageChars(data));
     await idle();
     check();
     // The pooled images as stand-ins (image-standin.ts, 1127): the file gets each image put in as it is
@@ -419,12 +422,14 @@ export async function buildPagesFile(
     };
     const title = set.bySlug.get(set.introSlug)?.title ?? '';
     if (zip) {
-        // Gathered into Blobs as it is written; each image file read from the pool by itself (1127).
+        // Gathered into Blobs (a large set: a file of the spool) as it is written; each image file read from the pool by itself (1127).
         const sink = new ZipBlobSink();
+        let file: SpoolFile | null = null;
         let writer: ZipWriter;
         let blob: Blob;
         try {
-            writer = new ZipWriter(sink.write, set.options.now, { blobParts: true });
+            file = spool ? await spool.file() : null;
+            writer = file ? new ZipWriter(file.write, set.options.now, { blobParts: true, seek: file }) : new ZipWriter(sink.write, set.options.now, { blobParts: true });
             await buildPageSetFilesAsync(set, {
                 ...build,
                 imageBytes: imageFileBytes,
@@ -434,9 +439,10 @@ export async function buildPagesFile(
                 },
             });
             check();
-            writer.finish();
-            blob = sink.blob();
+            await writer.finishAsync();
+            blob = file ? await file.close('application/zip') : sink.blob();
         } catch (e) {
+            await file?.abort();
             if (e instanceof PagesCancelled) throw e;
             throw new PagesZipFailed(e);
         }
@@ -445,7 +451,7 @@ export async function buildPagesFile(
     const html = await buildPageSetHtmlAsync(set, build);
     check();
     // One file with its images: a Blob of its pieces, the images put in a few at a time (1127).
-    const data2: string | Blob = html.includes('STROMPOOL') ? await textBlobWithImages(html, 'text/html;charset=utf-8') : html;
+    const data2: string | Blob = html.includes('STROMPOOL') ? await textBlobWithImages(html, 'text/html;charset=utf-8', spool) : html;
     check();
     return { data: data2, type: 'text/html', name: pageSetFileName(set), bytes: data2 instanceof Blob ? data2.size : new Blob([html]).size, title, pages: pages.length };
 }

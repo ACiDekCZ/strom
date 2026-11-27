@@ -18,6 +18,7 @@ import { imageMetaOf } from './image-meta.js';
 import { ensureImageMeta, loadImageUrls } from './media-pool.js';
 import { poolIdOf, POOL_REF } from './image-ref.js';
 import type { StromData } from './types.js';
+import { blobOut, type BlobOut, type Spool } from './spool.js';
 
 /** exportToGedcom's result with its text in parts: `parts.join('')` is the content. */
 export interface GedcomWithImages extends Omit<GedcomExportResult, 'content'> {
@@ -45,33 +46,40 @@ function slotsOf(content: string): Slot[] | null {
 }
 
 /**
- * The parts with every slot filled, or null when an image is not readable now.
- * `fold`: each read's parts gathered into one Blob at once (a large tree's
- * images never held together); the strings as they are without it.
+ * The text with every slot filled, a few images read at a time, written
+ * piece by piece to `put` (`flush` after each read: a file's parts let go of
+ * at once); false when an image is not readable now.
  */
-async function filled(content: string): Promise<string[] | null>;
-async function filled(content: string, fold: true): Promise<Blob[] | null>;
-async function filled(content: string, fold = false): Promise<(string | Blob)[] | null> {
+async function fillSlots(content: string, put: (piece: string) => void, flush: () => Promise<void>): Promise<boolean> {
     const slots = slotsOf(content);
-    if (!slots) return null;
-    const parts: (string | Blob)[] = [];
+    if (!slots) return false;
     let from = 0;
     for (let i = 0; i < slots.length; i += IMAGES_PER_READ) {
         const group = slots.slice(i, i + IMAGES_PER_READ);
         const urls = await loadImageUrls([...new Set(group.map(s => s.id))]);
-        const out: string[] = [];
         for (const s of group) {
             const url = urls.get(s.id);
-            if (!url) return null;
-            out.push(content.slice(from, s.start), gedcomFileLines(s.level, url));
+            if (!url) return false;
+            put(content.slice(from, s.start));
+            put(gedcomFileLines(s.level, url));
             from = s.end;
         }
-        if (fold) parts.push(new Blob(out));
-        else parts.push(...out);
+        await flush();
     }
-    const last = content.slice(from);
-    parts.push(fold ? new Blob([last]) : last);
-    return parts;
+    put(content.slice(from));
+    await flush();
+    return true;
+}
+
+/** The parts with every slot filled, or null when an image is not readable now. */
+async function filled(content: string): Promise<string[] | null> {
+    const parts: string[] = [];
+    return (await fillSlots(content, p => { parts.push(p); }, async () => { /* kept as strings */ })) ? parts : null;
+}
+
+/** The text with every slot filled written to `out` (a file, its images never held together); false when an image is not readable now. */
+function filledInto(content: string, out: BlobOut): Promise<boolean> {
+    return fillSlots(content, p => out.write(p), () => out.ready());
 }
 
 function withParts(r: GedcomExportResult, parts: string[] = [r.content]): GedcomWithImages {
@@ -108,14 +116,20 @@ export function gedcomText(g: GedcomWithImages): string {
  * 1127: its images never held together). An image not readable now: the
  * export of the expanded tree, as there.
  */
-export async function exportGedcomBlobWithImages(data: StromData, treeName?: string, options: GedcomExportOptions = {}): Promise<Blob> {
+export async function exportGedcomBlobWithImages(data: StromData, treeName?: string, options: GedcomExportOptions = {}, spool?: Spool | null): Promise<Blob> {
     const ids = poolRefIds(data);
     if (ids.size === 0) return new Blob([exportToGedcom(data, treeName, options).content]);
     await ensureImageMeta(ids);
     // An image the catalog has no entry for even now is not readable (not in the pool, locked): empty
     // text, as the expanded tree has it — the rest is not read whole for it.
     const tree = withPoolRefsReplaced(data, id => (imageMetaOf(id) ? POOL_REF + id : ''));
-    const parts = await filled(exportToGedcom(tree, treeName, options).content, true);
-    if (parts) return new Blob(parts);
+    const out = await blobOut(spool);
+    try {
+        if (await filledInto(exportToGedcom(tree, treeName, options).content, out)) return await out.close();
+    } catch (e) {
+        await out.abort();
+        throw e;
+    }
+    await out.abort();
     return new Blob([exportToGedcom(await expandedData(tree), treeName, options).content]);
 }

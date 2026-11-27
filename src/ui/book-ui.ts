@@ -60,6 +60,8 @@ import { uiModule } from './module.js';
 import { activatedElement, BUSY_MIN_MS, BUSY_SHOW_MS, busySpinHtml, nextPaint } from './busy.js';
 import { imagesBeforeOutput } from './output-images.js';
 import { textBlobWithImages, textWithImageUrls, treeWithPoolStandIns } from '../image-standin.js';
+import { spoolFor } from '../spool.js';
+import { treeImageChars } from '../memory-limit.js';
 import { showProgressToast, type ProgressToastHandle } from './toast.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 import { imageLoads } from '../image-loads.js';
@@ -2024,8 +2026,9 @@ export const bookUiMethods = uiModule({
     async saveOrShareBook(win: Window, options: BookOptions, act: string | null, bookTitle: string, data: StromData = DataManager.getData()): Promise<void> {
         const doc = win.document;
         try {
-            // A Blob of its pieces with each image put in (stand-ins of the pool's images, 1127).
-            const html = await textBlobWithImages(this.familyBookHtml(options, true, data), 'text/html;charset=utf-8');
+            // A Blob of its pieces with each image put in (stand-ins of the pool's images, 1127); a large one a file of the page's own (spool.ts).
+            const spool = await spoolFor('book', treeImageChars(data));
+            const html = await textBlobWithImages(this.familyBookHtml(options, true, data), 'text/html;charset=utf-8', spool);
             if (win.closed) return;
             const name = bookFileName(bookTitle);
             if (act === 'save') {

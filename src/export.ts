@@ -16,6 +16,7 @@ import { safeFileName } from './filenames.js';
 import { storedTreeWithRefs } from './data.js';
 import { expandedData, poolRefSnapshot } from './image-expand.js';
 import { scriptSafeJson, htmlFileWithImages, jsonFileWithImages, countPoolRefs } from './image-stream.js';
+import type { Spool } from './spool.js';
 
 /**
  * Clean dynamic UI state from HTML before export: drop 'active' from specific
@@ -163,16 +164,21 @@ export function jsonForScript(value: unknown): string {
  * taken now and saved when the returned function is called — once the file
  * is written, so the two never hold the images at once (spec 135 D10c: the
  * export does not expand the tree; the baseline keeps its images whole, as
- * before, its JSON read from the pool a few images at a time).
+ * before, its JSON read from the pool a few images at a time). `spool`:
+ * that JSON written to its file (a large tree, spool.ts), let go of once saved.
  */
-function exportBaseline(treeId: TreeId, exportId: string, data: StromData): () => void {
+function exportBaseline(treeId: TreeId, exportId: string, data: StromData, spool?: Spool | null): () => void {
     const kept: StromData | string = countPoolRefs(data) > 0 ? poolRefSnapshot(data) : JSON.stringify(data);
     return () => {
         void (async () => {
             const { saveBaselineJson } = await import('./share-baselines.js');
             // With its images read from the pool as a Blob: a tree whose images weigh gigabytes is never one text (1127).
-            const json = typeof kept === 'string' ? kept : (await jsonFileWithImages(kept)).blob;
-            await saveBaselineJson(treeId, exportId, json, Date.now());
+            const json = typeof kept === 'string' ? kept : (await jsonFileWithImages(kept, { spool })).blob;
+            try {
+                await saveBaselineJson(treeId, exportId, json, Date.now());
+            } finally {
+                if (typeof json !== 'string') await spool?.drop(json);
+            }
         })().catch(() => {});
     };
 }
@@ -461,8 +467,9 @@ class AppExporterClass {
      * here. Opens on `data.defaultPersonId`. `trackTreeId` keeps the export id
      * and the baseline on the source tree (a reply can be read back). Throws
      * outside the built app (the dev server has no inlined bundle).
+     * `spool`: the file written there (a large tree's, spool.ts).
      */
-    async buildFocusAppBlob(data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string; trackTreeId?: TreeId; view?: EmbeddedDataEnvelope['view'] }): Promise<Blob> {
+    async buildFocusAppBlob(data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string; trackTreeId?: TreeId; view?: EmbeddedDataEnvelope['view']; spool?: Spool | null }): Promise<Blob> {
         if (!this.isBuiltVersion()) throw new Error(strings.export.devModeNotSupported);
         const html = this.getExportHtml();
         const exportId = generateExportId();
@@ -479,9 +486,9 @@ class AppExporterClass {
         let baseline: (() => void) | null = null;
         if (opts.trackTreeId) {
             TreeManager.setLastExportId(opts.trackTreeId, exportId);
-            baseline = exportBaseline(opts.trackTreeId, exportId, data);
+            baseline = exportBaseline(opts.trackTreeId, exportId, data, opts.spool);
         }
-        const file = await htmlFileWithImages(html, envelope, (e) => `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(e)};<\/script>`);
+        const file = await htmlFileWithImages(html, envelope, (e) => `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(e)};<\/script>`, opts.spool);
         baseline?.();
         return file.blob;
     }
