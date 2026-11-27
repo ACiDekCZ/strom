@@ -24,7 +24,8 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PartnershipId, PersonId, StromData } from '../types.js';
 import { BookSelectionSpec } from '../book-options.js';
 import { PAGE_SET_SPLIT_BYTES, PageSet, PageSetOptions, SetPage, buildPageSet, pageSetFileName, pageSetImages } from '../family-pages.js';
-import { ZipWriter } from '../zip.js';
+import { ZipBlobSink, ZipWriter } from '../zip.js';
+import { imageFileBytes, standInImage, textBlobWithImages, treeWithPoolStandIns } from '../image-standin.js';
 import { buildPageSetFilesAsync, buildPageSetHtmlAsync, pageSetZipName, pageSetRenderedPages, renderPage, renderPageBar, renderPageSearch } from '../family-pages-html.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { SHRINK_CLIP_PX, SHRINK_PHOTO_PX, SHRINK_QUALITY } from '../image-registry.js';
@@ -41,7 +42,7 @@ import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-loads.js';
 import { pageImageWait } from './image-slot.js';
 import { hasPoolRefs } from '../image-expand.js';
-import { pageSetImageIds, withImagesWhole } from '../page-images.js';
+import { pageSetImageIds } from '../page-images.js';
 import { poolImagesChars } from '../memory-limit.js';
 import { forEachImagePlace } from '../image-intern.js';
 import { treeWithStandIns, withFamilyPageImages } from './family-pages-images.js';
@@ -388,11 +389,10 @@ export async function buildPagesFile(
     onStep(0, 0, F.step.prepare);
     await idle();
     check();
-    // The file carries the pooled images whole: only the ones its pages can show (page-images.ts), read once
-    // the set (built with the references) names its people and families.
+    // The pooled images as stand-ins (image-standin.ts, 1127): the file gets each image put in as it is
+    // written, a few at a time, never the set's images whole (a tree with gigabytes of photos).
     if (hasPoolRefs(data)) {
-        const named = buildPageSet(data, spec, opts, { treeName: treeName() });
-        data = await withImagesWhole(data, pageSetImageIds(data, named.personSlug.keys(), named.familySlug.keys()));
+        data = await treeWithPoolStandIns(data);
         check();
     }
     let set = buildPageSet(data, spec, opts, { treeName: treeName() });
@@ -402,7 +402,8 @@ export async function buildPagesFile(
         for (let i = 0; i < want.length; i++) {
             onStep(0, 0, F.step.images(i, want.length));
             const img = want[i];
-            const out = await shrinkImage(img.dataUrl, img.kind === 'clip' ? SHRINK_CLIP_PX : SHRINK_PHOTO_PX, SHRINK_QUALITY);
+            const whole = await standInImage(img.dataUrl);
+            const out = whole ? await shrinkImage(whole, img.kind === 'clip' ? SHRINK_CLIP_PX : SHRINK_PHOTO_PX, SHRINK_QUALITY) : null;
             if (out) small.set(img.dataUrl, out);
             await hold();
         }
@@ -418,15 +419,23 @@ export async function buildPagesFile(
     };
     const title = set.bySlug.get(set.introSlug)?.title ?? '';
     if (zip) {
-        const parts: BlobPart[] = [];
+        // Gathered into Blobs as it is written; each image file read from the pool by itself (1127).
+        const sink = new ZipBlobSink();
         let writer: ZipWriter;
         let blob: Blob;
         try {
-            writer = new ZipWriter(p => { parts.push(p); }, set.options.now);
-            await buildPageSetFilesAsync(set, { ...build, emit: (e) => writer.add(e.path, e.data) });
+            writer = new ZipWriter(sink.write, set.options.now, { blobParts: true });
+            await buildPageSetFilesAsync(set, {
+                ...build,
+                imageBytes: imageFileBytes,
+                emit: async (e) => {
+                    if (typeof e.data === 'string' && e.data.includes('STROMPOOL')) await writer.addAsync(e.path, await textBlobWithImages(e.data), 'store');
+                    else writer.add(e.path, e.data);
+                },
+            });
             check();
             writer.finish();
-            blob = new Blob(parts, { type: 'application/zip' });
+            blob = sink.blob();
         } catch (e) {
             if (e instanceof PagesCancelled) throw e;
             throw new PagesZipFailed(e);
@@ -435,7 +444,10 @@ export async function buildPagesFile(
     }
     const html = await buildPageSetHtmlAsync(set, build);
     check();
-    return { data: html, type: 'text/html', name: pageSetFileName(set), bytes: new Blob([html]).size, title, pages: pages.length };
+    // One file with its images: a Blob of its pieces, the images put in a few at a time (1127).
+    const data2: string | Blob = html.includes('STROMPOOL') ? await textBlobWithImages(html, 'text/html;charset=utf-8') : html;
+    check();
+    return { data: data2, type: 'text/html', name: pageSetFileName(set), bytes: data2 instanceof Blob ? data2.size : new Blob([html]).size, title, pages: pages.length };
 }
 
 /**
@@ -477,7 +489,7 @@ export async function savePagesFile(file: PagesFile, el: HTMLElement | null = nu
         // The system's "Save as" first with nothing shown (§9), the writing after it as `el`'s working state.
         let handle: Awaited<ReturnType<SavePicker>> | undefined;
         try {
-            handle = await whilePicking(el, () => picker({ suggestedName: file.name, types: [{ description: file.name, accept: { 'application/zip': ['.zip'] } }] }));
+            handle = await whilePicking(el, () => picker({ suggestedName: file.name, types: [{ description: file.name, accept: file.type === 'application/zip' ? { 'application/zip': ['.zip'] } : { 'text/html': ['.html'] } }] }));
         } catch (e) {
             if ((e as Error)?.name === 'AbortError') return false;
         }

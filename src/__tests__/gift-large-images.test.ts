@@ -29,6 +29,7 @@ import { defaultGiftParts, defaultGiftPrivacy, type GiftSettings } from '../gift
 import { buildGiftPackage, type GiftPackageEnv } from '../gift-package.js';
 import { STAND_IN_IMAGES_PER_READ } from '../image-standin.js';
 import { blobBytes, zipFiles } from './helpers/zip-read.js';
+import { buildPagesFile } from '../ui/family-pages-ui.js';
 import type { PersonId, StromData } from '../types.js';
 
 const NOW = new Date(2026, 11, 20, 14, 0, 0);
@@ -171,5 +172,37 @@ describe('the gift package of a tree with many photos (1127)', () => {
         for (const re of [/\.html$/, /\.ged$/, /\.svg$/]) expect(text(re)).not.toContain('STROMPOOL');
         expect(paths.some(p => /\.svg$/.test(p) && dec.decode(b.get(p)!).includes(HEAD))).toBe(true);
         for (const [, bytes] of b) expect(dec.decode(bytes)).not.toMatch(/STROMPOOL|data-pool-ref|\\u0000sm:/);
+    });
+
+    it('the family pages file (one HTML, or the ZIP with the images folder): a few images per read, byte for byte as from the expanded tree', async () => {
+        vi.stubGlobal('window', {});
+        vi.stubGlobal('document', { styleSheets: [] });
+        try {
+            const { data } = await treeWithPhotos();
+            const opts = { lang: 'en', privacy: 'full', photos: 'full', clips: 'full', now: NOW } as never;
+            const job = { cancelled: false, paused: false };
+            const spec = { kind: 'tree' } as never;
+            const whole = await expandedData(data);
+            const text = async (d: string | Blob) => (typeof d === 'string' ? d : d.text());
+            const htmlBefore = await buildPagesFile(whole, spec, opts, job, () => {});
+            const zipBefore = await buildPagesFile(whole, spec, opts, job, () => {}, true);
+            counting = true;
+            const htmlAfter = await buildPagesFile(data, spec, opts, job, () => {});
+            const zipAfter = await buildPagesFile(data, spec, opts, job, () => {}, true);
+            counting = false;
+            expect(reads.length).toBeGreaterThan(0);
+            expect(Math.max(...reads)).toBeLessThanOrEqual(STAND_IN_IMAGES_PER_READ);
+            const h = await text(htmlAfter.data);
+            expect(h).toBe(await text(htmlBefore.data));
+            expect(h).toContain(HEAD);
+            expect(htmlAfter.bytes).toBe(htmlBefore.bytes);
+            const a = zipFiles(await blobBytes(zipBefore.data as Blob));
+            const b = zipFiles(await blobBytes(zipAfter.data as Blob));
+            expect([...b.keys()]).toEqual([...a.keys()]);
+            for (const [path, bytes] of a) expect(Buffer.from(b.get(path)!).equals(Buffer.from(bytes)), path).toBe(true);
+            expect([...b.keys()].filter(p => /\.jpg$/.test(p)).length).toBeGreaterThan(3);
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 });

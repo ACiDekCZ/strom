@@ -1568,11 +1568,11 @@ export const bookUiMethods = uiModule({
         // The tree's photos still on their way: the file waits for them (spec 116 §8), its button says so.
         if (await imagesBeforeOutput(strings.photos.out.familyPages, { el, treeId: s.treeId }) === 'cancelled') return;
         if (st !== s || s.phase !== 'options' || (running && running !== s)) return;
-        // The file holds the images of its pages whole: near the memory limit asked first (spec 135).
+        // The file gets its images a few at a time and keeps none (1127): near the memory limit by the open tree, asked first (spec 135).
         const asked = selectionOf(s);
         if (!selectionReady(asked)) return;
         if (await confirmMemoryForOutput({
-            whole: true, data: s.data, treeId: s.treeId as TreeId | null, refine: () => pagesImageChars(s.data, asked, pageSetOptionsOf(s)),
+            streamed: true, data: s.data, treeId: s.treeId as TreeId | null, refine: () => pagesImageChars(s.data, asked, pageSetOptionsOf(s)),
         }) === 'cancel') return;
         if (st !== s || s.phase !== 'options' || (running && running !== s)) return;
         const sel = selectionOf(s);

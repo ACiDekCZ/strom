@@ -93,6 +93,14 @@ export async function textBlobWithImages(text: string, type = ''): Promise<Blob>
     return new Blob(parts, opts);
 }
 
+/** A stand-in's image as it is shown, read from the pool ('' when it does not give it); any other text as it is. */
+export async function standInImage(src: string): Promise<string> {
+    const s = standInOf(src);
+    if (!s) return src;
+    const url = (await loadImageUrls([s.id])).get(s.id);
+    return url ? (s.orient ? withExifOrientation(url, s.orient) : url) : '';
+}
+
 /**
  * An image's bytes for a file of its own (the family pages' images folder):
  * a stand-in's read from the pool (turned by its orientation), any other

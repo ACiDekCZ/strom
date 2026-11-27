@@ -72,6 +72,7 @@ beforeEach(() => {
         reads++;
         return new Map(keys.map(k => [k, store === 'media' ? structuredClone(media.get(k) ?? null) : null])) as never;
     });
+    vi.spyOn(StorageManager, 'keys').mockImplementation(async (store: string) => (store === 'media' ? [...media.keys()] : []) as never);
 });
 
 afterEach(() => {
@@ -350,8 +351,8 @@ describe('no output of a tree holding references names one; its images whole', (
         const opts = { lang: 'en', privacy: 'full', photos: 'full', clips: 'full', now: new Date('2026-11-23T10:00:00Z') } as never;
         const job = { cancelled: false, paused: false };
         const html = await buildPagesFile(data, { kind: 'tree' } as never, opts, job, () => {});
-        expect(typeof html.data).toBe('string');
-        expectWhole(html.data as string, [urls[0]]);
+        // A Blob of its pieces with the images put in (1127).
+        expectWhole(typeof html.data === 'string' ? html.data : await html.data.text(), [urls[0]]);
         const zip = await buildPagesFile(data, { kind: 'tree' } as never, opts, job, () => {}, true);
         const bytes = Buffer.from(await (zip.data as Blob).arrayBuffer()).toString('latin1');
         expect(bytes).not.toContain('\u0000sm:');
