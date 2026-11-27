@@ -194,14 +194,20 @@ export const housePageMethods = uiModule({
 
     /**
      * Whether a house of the tree has an approved story (spec 145 T4, `house.story`): the detail the bridge read,
-     * else read once per list rev (`then` when it came); false without the bridge or the feature.
+     * else read once per list rev, the list first when none is read (`then` when a story came); false without the
+     * bridge or the feature.
      */
     houseHasStory(id: string, then?: () => void): boolean {
         const b = this.houseResearchBridge();
         if (!b || !houseFeature(b.features, 'house.story')) return false;
         const house = this.treeHouseOf(id);
-        const row = house ? this.houseResearchRow(house) : null;
-        if (!house || !row) return false;
+        if (!house) return false;
+        const row = this.houseResearchRow(house);
+        if (!row) {
+            // The research's list not read yet (no view of houses opened): read it, then the house's detail.
+            if (then && !this.houseStatesRev()) void this.loadHouseStates().then(() => { if (this.houseResearchRow(house)) then(); });
+            return false;
+        }
         const rev = this.houseStatesRev();
         const got = read.get(row.key);
         if (got && got.rev === rev) return got.house.story?.status === 'final';
