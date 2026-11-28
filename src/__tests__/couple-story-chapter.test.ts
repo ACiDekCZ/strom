@@ -27,10 +27,15 @@ describe('coupleChapterHtml', () => {
         expect(html).not.toContain('pp-ch-foot');
     });
 
-    it('a title is the heading, the names go under the kicker; a draft is marked', () => {
-        const html = coupleChapterHtml(chapter({ title: 'The mill', draft: true }), { lang: 'cs', mode: 'file', foldable: false, open: false, partnerHtml: '', tint: true });
-        expect(html).toContain('<p class="pp-ch-pair">Jan Vlk a Rozálie Vlková</p>');
-        expect(html).toContain('<h3 class="pp-ch-title">The mill <span class="pp-draft-tag">Návrh</span></h3>');
+    // A draft is tagged in the app only; an output prints it like a final story (1128, Milan 28. 11.).
+    it('a title is the heading, the names go under the kicker; a draft is marked in the app, not in a file', () => {
+        const base = { lang: 'cs' as const, foldable: false, open: false, partnerHtml: '', tint: true };
+        const app = coupleChapterHtml(chapter({ title: 'The mill', draft: true }), { ...base, mode: 'app', draftTag: true });
+        expect(app).toContain('<p class="pp-ch-pair">Jan Vlk a Rozálie Vlková</p>');
+        expect(app).toContain('<h3 class="pp-ch-title">The mill <span class="pp-draft-tag">Návrh</span></h3>');
+        const file = coupleChapterHtml(chapter({ title: 'The mill', draft: true }), { ...base, mode: 'file' });
+        expect(file).toContain('<h3 class="pp-ch-title">The mill</h3>');
+        expect(file).not.toContain('pp-draft-tag');
     });
 
     it('no years: the kicker alone; the partner line carries the given HTML', () => {
