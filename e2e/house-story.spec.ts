@@ -6,8 +6,9 @@ import { fakeBridge, links, openResearch, poll, BRIDGE } from './research-bridge
  * sections — a draft with Approve (the research's link), the approved text, a new version beside it with Compare; ⋯
  * "Write the story of the house" asks the agent through the bridge (POST /houses/story, the AI badge alone) and the
  * page shows the task's state; an older research without the feature offers and shows nothing. Under a person's
- * story the house's story is a link; the family book's Houses chapter has the approved story, a draft tagged as
- * waiting when there is no approved one (spec 145 T8), never one naming a living person; What waits leads to the house's page at its story.
+ * story the house's story is a link; the family book's Houses chapter has the approved story, a draft as the story,
+ * untagged, when there is no approved one (spec 145 T8); one naming a living person by default, left out with the
+ * dialog's switch "Stories of houses with living people" off (T8 change); What waits leads to the house's page at its story.
  * A fake bridge with invented data: the Fíšek family of Bělokamen čp. 16.
  */
 
@@ -88,7 +89,7 @@ async function setup(page: Page, opts: { story?: Story; features?: string[]; wai
     return fake;
 }
 
-/** Josef (1820–1880) and his son Jan (1850), each with a story of his own, at čp. 16; with `recent` also Anna, born there in 1950. */
+/** Josef (1820–1880) and his son Jan (1850), each with a story of his own, at čp. 16; with `recent` also Anna (P0002), born there in 1950. */
 async function placeFamily(page: Page, recent = false): Promise<void> {
     await page.evaluate(recent => {
         const dm = window.Strom.DataManager;
@@ -103,7 +104,8 @@ async function placeFamily(page: Page, recent = false): Promise<void> {
                     story: { status: 'final', text: 'Jan hospodařil po otci na gruntu.' } } as never);
             }
             if (recent && p.firstName === 'Anna') {
-                dm.updatePerson(p.id as never, { birthPlace: 'Bělokamen', birthAddress: 'čp. 16', birthDate: '1950' } as never);
+                // The research knows her as P0002 (a house's story may name her).
+                dm.updatePerson(p.id as never, { birthPlace: 'Bělokamen', birthAddress: 'čp. 16', birthDate: '1950', refn: 'P0002' } as never);
             }
         }
     }, recent);
@@ -274,12 +276,18 @@ test.describe('The story of a house elsewhere', () => {
     });
 });
 
-async function openBook(page: Page, context: BrowserContext): Promise<Page> {
+/** The book dialog open with the Houses chapter ticked. */
+async function openBookDialog(page: Page) {
     await page.evaluate(() => window.Strom.UI.showBookDialog());
     const dialog = page.locator('#book-modal');
     await expect(dialog).toHaveClass(/active/);
     const part = dialog.locator('.book-part[data-part="houses"] input');
     if (!(await part.isChecked())) await part.check();
+    return dialog;
+}
+
+async function openBook(page: Page, context: BrowserContext): Promise<Page> {
+    const dialog = await openBookDialog(page);
     const [book] = await Promise.all([context.waitForEvent('page'), dialog.locator('#book-open').click()]);
     await book.waitForLoadState('domcontentloaded');
     await book.locator('.book-toolbar').waitFor();
@@ -304,24 +312,49 @@ test.describe('The story of a house in the family book', () => {
         await expect(link).toHaveAttribute('href', `#${await ch.getAttribute('id')}`);
     });
 
-    test('a draft: tagged as waiting for approval, no button (spec 145 T8)', async ({ page, context }) => {
+    test('a draft: as the story, without a tag, no button (spec 145 T8)', async ({ page, context }) => {
         await setup(page, { story: DRAFT });
         const book = await openBook(page, context);
         const ch = book.locator('#book-houses .book-house-ch', { hasText: 'čp. 16' });
         const story = ch.locator('.book-house-story');
-        await expect(story).toHaveClass(/book-house-story--draft/);
-        await expect(story.locator('.book-house-story-tag')).toHaveText('draft, waiting for approval');
+        await expect(story).not.toHaveClass(/book-house-story--draft/);
+        await expect(story).not.toContainText('waiting for approval');
         await expect(story).toContainText('Stavení postavil roku 1830 Josef Fíšek.');
         await expect(story.locator('button')).toHaveCount(0);
         await expect(book.locator('.book-story', { hasText: 'Josef vyrostl' }).locator('.book-story-houses a')).toHaveText('House čp. 16 ›');
     });
 
-    test('a story naming a living person: left out whole', async ({ page, context }) => {
+    // Changed 28. 11. (spec 145 T8 change): in by default; the dialog's switch leaves it out.
+    test('a story naming a living person: in by default, left out with the switch off', async ({ page, context }) => {
         await setup(page, { story: { ...FINAL, people: [{ id: 'P0001', died: true }, { id: 'P0002', died: false }] }, recent: true });
+        // Anna (P0002) living by her record (as Jan's mother the tree would date her before 1850).
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const anna = (Object.values(dm.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Anna')!;
+            dm.updatePerson(anna.id as never, { isDeceased: false } as never);
+        });
         const book = await openBook(page, context);
-        await expect(book.locator('#book-houses .book-house-ch', { hasText: 'čp. 16' })).toBeVisible();
-        await expect(book.locator('.book-house-story')).toHaveCount(0);
-        await expect(book.locator('.book-story-houses')).toHaveCount(0);
-        await expect(book.locator('body')).not.toContainText('Stavení postavil roku 1830');
+        await expect(book.locator('#book-houses .book-house-ch', { hasText: 'čp. 16' }).locator('.book-house-story')).toContainText('Stavení postavil roku 1830');
+        await book.close();
+        const dialog = await openBookDialog(page);
+        const sw = dialog.locator('.book-house-stories [data-switch="houseStoriesLiving"]');
+        await expect(sw).toBeVisible();
+        await expect(sw).toHaveAttribute('aria-checked', 'true');
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        const [off] = await Promise.all([context.waitForEvent('page'), dialog.locator('#book-open').click()]);
+        await off.waitForLoadState('domcontentloaded');
+        await off.locator('.book-toolbar').waitFor();
+        await expect(off.locator('#book-houses .book-house-ch', { hasText: 'čp. 16' })).toBeVisible();
+        await expect(off.locator('.book-house-story')).toHaveCount(0);
+        await expect(off.locator('.book-story-houses')).toHaveCount(0);
+        await expect(off.locator('body')).not.toContainText('Stavení postavil roku 1830');
+    });
+
+    test('without a living person in a house\'s story: no switch', async ({ page }) => {
+        await setup(page, { story: FINAL });
+        const dialog = await openBookDialog(page);
+        await expect(dialog.locator('.book-part[data-part="houses"] input')).toBeChecked();
+        await expect(dialog.locator('.book-house-stories')).toBeHidden();
     });
 });

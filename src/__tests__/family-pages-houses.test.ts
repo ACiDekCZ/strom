@@ -134,9 +134,11 @@ describe('houses in the family pages (spec 145 T6)', () => {
         expect(section(buildPageSetHtml(prouzalSet()), set.houseSlug!.get(HOUSE_ID)!)).not.toContain('hp-sec--people');
     });
 
-    it('the house\'s page shows its story through the same filter (spec 145 T4), a draft tagged (T8)', () => {
+    // Changed 28. 11. (spec 145 T8 change): a draft untagged; a person of the last ~100 years no longer keeps the
+    // story out, a living one only with the option off.
+    it('the house\'s page shows its story (spec 145 T4), a draft as the story; the living only by the option (T8)', () => {
         const story = (status: 'draft' | 'final', people: { id: string; died: boolean }[]) => research(r => {
-            r.story = { status, title: 'Grunt na návsi', text: 'Grunt založil Svatobor Prouzal.', facts: ['h1'], sources: [], people };
+            r.story = { status, title: 'Grunt na návsi', text: 'Grunt založil Svatobor Prouzal.', facts: ['h1', 'h3'], sources: [], people };
         });
         const slug = set0().houseSlug!.get(HOUSE_ID)!;
         const page = (extra: Record<string, unknown>) => section(buildPageSetHtml(prouzalSet(undefined, extra)), slug);
@@ -145,11 +147,15 @@ describe('houses in the family pages (spec 145 T6)', () => {
         expect(shown).toContain('Grunt založil Svatobor Prouzal.');
         const draft = page(story('draft', [{ id: 'P0001', died: true }]));
         expect(draft).toContain('Grunt založil');
-        expect(draft).toContain('<span class="hp-story-tag">draft, waiting for approval</span>');
+        expect(draft).not.toContain('hp-story-tag');
+        expect(draft).not.toContain('waiting for approval');
         expect(draft).not.toContain('<button');
-        expect(page(story('draft', [{ id: 'P0001', died: true }, { id: 'P0003', died: true }]))).not.toContain('Grunt založil');
-        // A story naming a person of the last ~100 years is left out whole.
-        expect(page(story('final', [{ id: 'P0001', died: true }, { id: 'P0003', died: true }]))).not.toContain('Grunt založil');
+        expect(page(story('draft', [{ id: 'P0001', died: true }, { id: 'P0003', died: true }]))).toContain('Grunt založil');
+        const living = [{ id: 'P0001', died: true }, { id: 'P0005', died: false }];
+        expect(page(story('final', living))).toContain('Grunt založil');
+        expect(page({ ...story('final', living), houseStoriesLiving: false })).not.toContain('Grunt založil');
+        expect(page({ ...story('draft', living), houseStoriesLiving: false })).not.toContain('Grunt založil');
+        expect(page({ ...story('final', [{ id: 'P0003', died: true }]), houseStoriesLiving: false })).toContain('Grunt založil');
     });
 
     it('the house\'s people link to their pages in the set; one without a page stays text', () => {

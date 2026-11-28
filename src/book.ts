@@ -369,8 +369,8 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
             name: tree.houses?.[house.id]?.name?.trim() ?? '',
             numbers: research ? withResearchNumbers(house, research.numbers, data.houses?.[house.id]) : house.numbers,
             out,
-            // Its story, as outputs may show it (spec 145 T4; a draft tagged, T8).
-            story: hctx ? houseStoryForOutput(research, out, hctx) : null,
+            // Its story (spec 145 T4; a draft as the story, T8); one with a living person only by the book's option.
+            story: hctx ? houseStoryForOutput(research, opts.houseStoriesLiving === false ? hctx : null) : null,
             // Its location with the cut of today's map (spec 145 T3): only where outputs may show it and the book does.
             ...(out.location && bookHouseMaps(opts)
                 ? { map: { point: out.location, sure: out.locationSure ?? 'assumed', shot: env.houseMapShot?.(house) ?? null } } : {}),

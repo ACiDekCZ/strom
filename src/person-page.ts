@@ -1907,9 +1907,17 @@ function section(key: PersonPageSection['key'], title: string, body: string, hea
 
 // ── Story, notes ──
 
-/** A story not approved yet is shown too, marked as a draft (as the story reader does). */
+/**
+ * A story not approved yet is shown too, marked as a draft in the app's own window (as the story reader does).
+ * An output (the file, print, the family pages) prints a draft as the story (spec 145 T8, Milan 28. 11.: the draft is
+ * the researcher's word that it is not to be rewritten, not a mark for readers).
+ */
+function storyDraftTagged(c: Ctx): boolean {
+    return c.app && c.opts.links === 'app';
+}
+
 function draftTag(c: Ctx, st: Story): string {
-    return st.status === 'draft' ? ` <span class="pp-draft-tag">${esc(c.S.story.statusDraft)}</span>` : '';
+    return st.status === 'draft' && storyDraftTagged(c) ? ` <span class="pp-draft-tag">${esc(c.S.story.statusDraft)}</span>` : '';
 }
 
 /**
@@ -1963,11 +1971,11 @@ export function coupleChapterLinkLabel(u: Partnership, lang: Language): string {
     return getStringsForLang(lang).personPage.story.link;
 }
 
-/** The tooltip and accessible name of that link: "Story of the marriage: {title}" ({name} and {name} without one), a draft marked. */
-export function coupleChapterLinkTip(ch: CoupleChapterData, lang: Language): string {
+/** The tooltip and accessible name of that link: "Story of the marriage: {title}" ({name} and {name} without one), a draft marked in the app. */
+export function coupleChapterLinkTip(ch: CoupleChapterData, lang: Language, draftTag = true): string {
     const S = getStringsForLang(lang);
     const what = ch.title || (ch.partnerShort ? S.story.couple(ch.selfShort, ch.partnerShort) : ch.selfShort);
-    return S.personPage.story.treeTip(what, ch.draft);
+    return S.personPage.story.treeTip(what, ch.draft && draftTag);
 }
 
 /** What a couple's chapter shows, from the person's side (coupleChapterHtml renders it). */
@@ -2005,6 +2013,8 @@ export interface CoupleChapterContext {
     partnerHtml: string;
     /** Under the prose (inside the fold when folded), e.g. the story's basis. */
     basisHtml?: string;
+    /** The app's own window: a draft is tagged (an output prints it as the story, spec 145 T8). */
+    draftTag?: boolean;
     /** Two or more chapters on the page (own story + marriages): the tinted surface and the double monogram. */
     tint: boolean;
 }
@@ -2043,7 +2053,7 @@ export function coupleChapterHtml(ch: CoupleChapterData, cx: CoupleChapterContex
     const pair = ch.partnerName ? S.story.couple(ch.selfName, ch.partnerName) : ch.selfName;
     const mono = !cx.tint ? '' : `<span class="pp-ch-mono" aria-hidden="true"><span>${esc(ch.selfInitials || '?')}</span>`
         + (ch.partnerName ? `<span>${esc(ch.partnerInitials || '?')}</span>` : '') + `</span>`;
-    const tag = ch.draft ? ` <span class="pp-draft-tag">${esc(S.story.statusDraft)}</span>` : '';
+    const tag = ch.draft && cx.draftTag ? ` <span class="pp-draft-tag">${esc(S.story.statusDraft)}</span>` : '';
     const head = `<div class="pp-ch-head">${mono}<div class="pp-ch-headtext">`
         + `<p class="pp-kicker pp-ch-kicker">${esc(P.story.couple(ch.years))}</p>`
         + (ch.title ? `<p class="pp-ch-pair">${esc(pair)}</p>` : '')
@@ -2099,7 +2109,7 @@ function coupleChapterLinkHtml(c: Ctx, u: Partnership): string {
     const ch = label ? coupleChapterData(c.tree, c.person, shown, c.page.lang) : null;
     if (!ch) return '';
     const inner = `<span class="pp-ft-story-l">${esc(label)}</span><span class="pp-ft-story-s" aria-hidden="true">↓</span>`;
-    return storyJumpHtml(c, u.id, label, 'pp-ft-story', coupleChapterLinkTip(ch, c.page.lang), inner);
+    return storyJumpHtml(c, u.id, label, 'pp-ft-story', coupleChapterLinkTip(ch, c.page.lang, storyDraftTagged(c)), inner);
 }
 
 /**
@@ -2154,7 +2164,7 @@ function storyHtml(c: Ctx): string {
         ch.ids.forEach(id => c.ids.add(id));
         const uid = u.id.replace(/[^\w-]/g, '_');
         body += coupleChapterHtml(ch, {
-            lang: c.page.lang, mode: c.opts.mode,
+            lang: c.page.lang, mode: c.opts.mode, draftTag: storyDraftTagged(c),
             // After the person's own story a chapter folds to its first paragraph; alone it is whole.
             foldable: !!own, open: isOpen(c, coupleChapterFoldKey(u.id)),
             // Every chapter on the page counts (round 2): the tone from two.

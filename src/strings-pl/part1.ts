@@ -354,6 +354,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             // The book's house locations (spec 145 T3).
             houseMaps: 'Położenie domów',
             houseMapsHint: 'Wycinek dzisiejszej mapy z punktem domu bez ludzi ostatnich ~100 lat; wyłączone: tylko miejscowość.',
+            houseStoriesLiving: 'Opowieści o domach z żyjącymi osobami',
+            houseStoriesLivingHint: 'Włączone: trafia każda opowieść o domu. Wyłączone: opowieść, w której występuje żyjąca osoba, zostaje pominięta.',
             privacy: 'Ochrona osób żyjących',
             privacyHint: 'Dotyczy tekstu, drzewa rodu, spisu treści i indeksu.',
             lang: 'Język księgi',

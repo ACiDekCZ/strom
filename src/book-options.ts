@@ -15,7 +15,7 @@ import { LineageIndex, buildLineages, otherFamilyRods, rodLabels, selection } fr
 import { BookSelectionSpec, buildBookModel, chapterRods, lineageSpec } from './book-model.js';
 import { collectHouses, findHouse, houseNamedTitle, type TreeHouse } from './houses.js';
 import type { HouseResearch } from './house-bridge.js';
-import { houseOutputFilter, housePrivacyContext, type HousePrivacyContext } from './house-privacy.js';
+import { houseOutputFilter, housePrivacyContext, houseStoryNamesLiving, type HousePrivacyContext } from './house-privacy.js';
 
 export type { BookSelectionSpec } from './book-model.js';
 
@@ -80,6 +80,11 @@ export interface BookOptions {
      * false. Off: the town only, as before.
      */
     houseMaps?: boolean;
+    /**
+     * The stories of houses in which a living person appears (spec 145 T8): in the book unless false. Off: such a
+     * story is left out; the other stories, and a story of a house in a saved house page, always go.
+     */
+    houseStoriesLiving?: boolean;
 }
 
 /** Does the book keep people of the last ~100 years to their name and role (a book of a house, K1.4a)? */
@@ -171,6 +176,31 @@ export function housesChapterPages(houses: readonly TreeHouse[], withMap: Readon
 
 const locationCtx = new WeakMap<StromData, { year: number; ctx: HousePrivacyContext }>();
 
+/** The dialog asks at every change: the judge of the living once per state of the data and year. */
+function keptHouseCtx(data: StromData, now: Date): HousePrivacyContext {
+    let kept = locationCtx.get(data);
+    if (!kept || kept.year !== now.getFullYear()) locationCtx.set(data, kept = { year: now.getFullYear(), ctx: housePrivacyContext(data, now) });
+    return kept.ctx;
+}
+
+/**
+ * Whether a living person appears in the story of one of these houses (spec 145 T8), by the research's results
+ * read so far: the book's and the family pages' option "Stories of houses with living people" shows only then.
+ */
+export function housesStoryWithLiving(data: StromData, houses: readonly TreeHouse[],
+    research: ((house: TreeHouse) => HouseResearch | null | undefined) | undefined, now: Date = new Date()): boolean {
+    if (!houses.length || !research) return false;
+    const withStory = houses.map(h => research(h)).filter(r => r?.story?.status);
+    if (!withStory.length) return false;
+    const ctx = keptHouseCtx(data, now);
+    return withStory.some(r => houseStoryNamesLiving(r, ctx));
+}
+
+/** Does the book show the stories of houses in which a living person appears (spec 145 T8)? On unless switched off. */
+export function bookHouseStoriesLiving(options: Pick<BookOptions, 'houseStoriesLiving'>): boolean {
+    return options.houseStoriesLiving !== false;
+}
+
 /**
  * The houses of these whose location outputs may show (spec 145 T3, houseOutputFilter: no people of the last ~100
  * years, not hidden by hand), by the research's results read so far.
@@ -180,9 +210,7 @@ export function housesWithLocation(data: StromData, houses: readonly TreeHouse[]
     if (!houses.length) return out;
     const now = env.now ?? new Date();
     // The dialog asks at every change: the judge of the living once per state of the data and year.
-    let kept = locationCtx.get(data);
-    if (!kept || kept.year !== now.getFullYear()) locationCtx.set(data, kept = { year: now.getFullYear(), ctx: housePrivacyContext(data, now) });
-    const ctx = kept.ctx;
+    const ctx = keptHouseCtx(data, now);
     for (const h of houses) {
         if (houseOutputFilter(h, env.houseResearch?.(h) ?? null, data, now, ctx).location) out.add(h.id);
     }

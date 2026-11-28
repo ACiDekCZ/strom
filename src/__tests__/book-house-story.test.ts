@@ -1,7 +1,8 @@
 /**
  * A house's story in the family book (spec 145 T4), "now" fixed at 20 Nov 2026: in the Houses chapter before the
- * house's sections, the approved text or a draft tagged as one (spec 145 T8; a new version beside an approved one
- * never); left out when it names a protected person (a draft too); under the story of a person who lived there a link to the house in the chapter,
+ * house's sections, the approved text or a draft printed as the story, untagged (spec 145 T8; a new version beside an
+ * approved one never); whoever appears in it, a story with a living person left out only with the book's option
+ * houseStoriesLiving off (T8 change, 28. 11.); under the story of a person who lived there a link to the house in the chapter,
  * only when the chapter has the house with its story.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,10 +24,11 @@ function tree(): StromData {
     return data;
 }
 
-const book = (story: HouseStory | undefined, houses = true, data = tree()): string =>
+const book = (story: HouseStory | undefined, houses = true, data = tree(), houseStoriesLiving?: boolean): string =>
     buildFamilyBook(data, {
         ...defaultBookOptions('cs'), selection: { kind: 'tree' }, privacy: 'full',
         parts: { ...defaultBookOptions('cs').parts, houses, story: true },
+        ...(houseStoriesLiving !== undefined ? { houseStoriesLiving } : {}),
     }, {
         dateLabel: 'x', now: HOUSE_NOW,
         houseResearch: h => {
@@ -57,21 +59,27 @@ describe('the Houses chapter: a house\'s story', () => {
         expect(ch.indexOf(TEXT)).toBeLessThan(ch.indexOf('Časová osa'));
     });
 
-    it('a draft tagged (T8); a new version beside an approved one stays out, the approved one in', () => {
+    it('a draft as the story, untagged (T8); a new version beside an approved one stays out, the approved one in', () => {
         const draft = chapter(book({ ...final(), status: 'draft' }));
         expect(draft).toContain(TEXT);
-        expect(draft).toContain('<p class="book-house-story-tag"><span>koncept, čeká na schválení</span></p>');
-        expect(draft).toContain('book-house-story--draft');
-        expect(chapter(book(final()))).not.toContain('book-house-story-tag');
-        expect(chapter(book({ ...final({ people: [...OLD, { id: 'P0005', died: false }] }), status: 'draft' }))).not.toContain(TEXT);
+        expect(draft).not.toContain('book-house-story-tag');
+        expect(draft).not.toContain('book-house-story--draft');
+        expect(draft).not.toContain('čeká na schválení');
         const both = chapter(book(final({ draft: { text: 'Nová verze o gruntu.', facts: [], sources: [], people: [] } })));
         expect(both).toContain(TEXT);
         expect(both).not.toContain('Nová verze o gruntu.');
     });
 
-    it('left out when it names the living or a person of the last ~100 years', () => {
-        expect(chapter(book(final({ people: [...OLD, { id: 'P0005', died: false }] })))).not.toContain(TEXT);
-        expect(chapter(book(final({ people: [...OLD, { id: 'P0003', died: true }] })))).not.toContain(TEXT);
+    // Changed 28. 11. (T8 change): before, a story naming the living or a person of the last ~100 years was left out always.
+    it('with the living in it: in by default, left out with the option off; a person of the last ~100 years never keeps it out', () => {
+        const living = final({ people: [...OLD, { id: 'P0005', died: false }] });
+        expect(chapter(book(living))).toContain(TEXT);
+        expect(chapter(book({ ...living, status: 'draft' }))).toContain(TEXT);
+        expect(chapter(book(living, true, tree(), false))).not.toContain(TEXT);
+        expect(chapter(book({ ...living, status: 'draft' }, true, tree(), false))).not.toContain(TEXT);
+        const recent = final({ people: [...OLD, { id: 'P0003', died: true }], facts: ['h3', 'e9'] });
+        expect(chapter(book(recent))).toContain(TEXT);
+        expect(chapter(book(recent, true, tree(), false))).toContain(TEXT);
     });
 });
 

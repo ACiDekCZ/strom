@@ -135,6 +135,8 @@ export interface PageSetOptions {
     houseMapShots?: ReadonlyMap<HouseId, HouseMapShots>;
     /** The pictures of the houses and their towns from the web (spec 145 T8, "Web photos in outputs"; default true). */
     webPhotos?: boolean;
+    /** The stories of houses in which a living person appears (spec 145 T8; default true): false leaves them out. */
+    houseStoriesLiving?: boolean;
 }
 
 /** The option Houses of a set (spec 145 T6). */
@@ -194,6 +196,8 @@ export interface PageSet {
     houseMapShots?: ReadonlyMap<HouseId, HouseMapShots>;
     /** The house pages show the pictures from the web (spec 145 T8); false: their captions with the links only. */
     webPhotos?: boolean;
+    /** False: a house page leaves out its story when a living person appears in it (spec 145 T8). */
+    houseStoriesLiving?: boolean;
     /** Slugs of the indexes and of the map ('' for a page the set does not have). */
     indexSlug: Record<PageSetIndexKind, string>;
     /** The indexes split by letters (1102 §7.4), their letters in order; [] for an index on one page. */
@@ -775,7 +779,8 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         pages, bySlug: new Map(pages.map(p => [p.slug, p])), personSlug, familySlug, rodSlug, rodTimelineSlug, houseSlug, houseIds,
         ...(opts.houseResearch ? { houseResearch: opts.houseResearch } : {}),
         ...(opts.houseMapShots ? { houseMapShots: opts.houseMapShots } : {}),
-        ...(opts.webPhotos === false ? { webPhotos: false } : {}), indexSlug, indexLetters, minimalIds, mapSlug,
+        ...(opts.webPhotos === false ? { webPhotos: false } : {}),
+        ...(opts.houseStoriesLiving === false ? { houseStoriesLiving: false } : {}), indexSlug, indexLetters, minimalIds, mapSlug,
         introSlug: intro.slug, otherSlug, otherRodIds: small.map(r => r.id), otherAnchor, otherPersonIds, images, searchIndex: [], treeName: ctx.treeName?.trim() ?? '',
     };
     out.searchIndex = buildSearchIndex(out, rods);

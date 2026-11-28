@@ -1,6 +1,6 @@
 /**
  * The story of a house under a person's story (spec 145 T4): "House No. N ›" for a house the person lived in that has
- * a story (in a set also a draft its page shows tagged, spec 145 T8) — in the window a button to the house's page at its story, in a set an anchor only when the
+ * a story (in a set also a draft its page shows, spec 145 T8) — in the window a button to the house's page at its story, in a set an anchor only when the
  * house's page there shows the story; nothing otherwise, and the house's text never repeated.
  */
 import { describe, expect, it } from 'vitest';
@@ -58,13 +58,14 @@ describe('the person page — the story of a house the person lived in (spec 145
 });
 
 describe('the family pages — a person\'s story leads to the house\'s story', () => {
-    const setHtml = (story?: { status: 'draft' | 'final'; people: { id: string; died: boolean }[] }, houses?: 'pages' | 'mention') => {
+    const setHtml = (story?: { status: 'draft' | 'final'; people: { id: string; died: boolean }[] }, houses?: 'pages' | 'mention', houseStoriesLiving?: boolean) => {
         const data = tree();
         const r = houseResearch();
         if (story) r.story = { ...story, title: 'Grunt na návsi', text: HOUSE_STORY, facts: ['h1'], sources: [] };
         const rod = rods(buildLineages(data)).find(x => x.surname === 'Prouzal')!;
         const set = buildPageSet(data, { kind: 'rods', rods: [rod.id] },
-            { lang: 'en', now: HOUSE_NOW, timelines: true, houseResearch: new Map([[HOUSE_ID, r]]), ...(houses ? { houses } : {}) });
+            { lang: 'en', now: HOUSE_NOW, timelines: true, houseResearch: new Map([[HOUSE_ID, r]]), ...(houses ? { houses } : {}),
+                ...(houseStoriesLiving !== undefined ? { houseStoriesLiving } : {}) });
         return { html: buildPageSetHtml(set), slug: set.houseSlug?.get(HOUSE_ID), person: set.personSlug.get(pid('hostivit'))! };
     };
     /** Hostivít's page of the single file. */
@@ -80,16 +81,18 @@ describe('the family pages — a person\'s story leads to the house\'s story', (
         expect(page).not.toContain(HOUSE_STORY);
     });
 
-    it('a draft the house\'s page shows tagged (spec 145 T8): the link to that page too', () => {
+    it('a draft the house\'s page shows (spec 145 T8): the link to that page too', () => {
         const { html, slug, person } = setHtml({ status: 'draft', people: [{ id: 'P0001', died: true }] });
         expect(storyLinks(personPage(html, person))).toContain(`href="#${slug}"`);
     });
 
-    it('none for a story the house\'s page leaves out (a draft too), or a house without a page', () => {
+    // Changed 28. 11. (spec 145 T8 change): a person of the last ~100 years no longer keeps the story out.
+    it('none for a story the house\'s page leaves out (the living with the option off), or a house without a page', () => {
+        const recent = setHtml({ status: 'final', people: [{ id: 'P0001', died: true }, { id: 'P0003', died: true }] });
+        expect(storyLinks(personPage(recent.html, recent.person))).toContain(`href="#${recent.slug}"`);
         for (const s of [
-            setHtml({ status: 'draft', people: [{ id: 'P0001', died: true }, { id: 'P0003', died: true }] }),
-            // Names a person of the last ~100 years: the house's page leaves it out, so does the link.
-            setHtml({ status: 'final', people: [{ id: 'P0001', died: true }, { id: 'P0003', died: true }] }),
+            setHtml({ status: 'draft', people: [{ id: 'P0001', died: true }, { id: 'P0005', died: false }] }, undefined, false),
+            setHtml({ status: 'final', people: [{ id: 'P0001', died: true }, { id: 'P0005', died: false }] }, undefined, false),
             setHtml(),
         ]) expect(storyLinks(personPage(s.html, s.person))).toBe('');
         const mention = setHtml({ status: 'final', people: [{ id: 'P0001', died: true }] }, 'mention');

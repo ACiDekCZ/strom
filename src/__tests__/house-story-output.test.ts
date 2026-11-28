@@ -1,15 +1,15 @@
 /**
  * What outputs show of a house's story (spec 145 T4, T8), "now" fixed at 20 Nov 2026: the approved text, or a draft
- * tagged as one (an approved one with a new version beside it as approved), left out whole when it names a living person, one
- * of the last ~100 years or a person of the research the tree does not know whose death is not known, or rests on an
- * item the output leaves out. The house page: the story section in the app (draft, approved, new version, its task)
- * and in the file (approved or a draft tagged, never Approve or Compare; the filter); without a story nothing.
+ * printed as the story (an approved one with a new version beside it as approved), whoever appears in it and whatever
+ * it cites (T8 change, 28. 11.); left out only by a bulk output's option when a living person of the tree appears in
+ * it. The house page: the story section in the app (draft tagged, approved, new version, its task) and in the file
+ * (the story untagged, never Approve or Compare); without a story nothing.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StromData } from '../types.js';
 import type { HouseResearch, HouseStory } from '../house-bridge.js';
 import { collectHouses, type TreeHouse } from '../houses.js';
-import { houseOutputFilter, housePrivacyContext, houseStoryForOutput } from '../house-privacy.js';
+import { housePrivacyContext, houseStoryForOutput, houseStoryNamesLiving } from '../house-privacy.js';
 import { buildHousePage, housePageSections } from '../house-page.js';
 import { HOUSE_ID, HOUSE_NOW, houseResearch, houseTree } from './helpers/house-book-fixture.js';
 
@@ -35,39 +35,44 @@ afterEach(() => vi.useRealTimers());
 
 describe('houseStoryForOutput', () => {
     const data = houseTree();
-    const house = houseOf(data, HOUSE_ID);
     const ctx = housePrivacyContext(data, HOUSE_NOW);
-    const of = (story: HouseStory) => {
-        const r = withStory(story);
-        return houseStoryForOutput(r, houseOutputFilter(house, r, data, HOUSE_NOW, ctx), ctx);
-    };
+    const of = (story: HouseStory, leaveOutLiving = false) => houseStoryForOutput(withStory(story), leaveOutLiving ? ctx : null);
 
-    it('the approved text; with a new version beside it still the approved one; a draft as a draft (T8)', () => {
-        expect(of(final())).toEqual({ title: 'Grunt na návsi', text: TEXT, facts: ['e1', 'h1', 'h2'], sources: [{ source: 'S0001' }], at: '2026-11-20', people: OLD, draft: false });
+    it('the approved text; with a new version beside it still the approved one; a draft as the story (T8)', () => {
+        expect(of(final())).toEqual({ title: 'Grunt na návsi', text: TEXT, facts: ['e1', 'h1', 'h2'], sources: [{ source: 'S0001' }], at: '2026-11-20', people: OLD });
         const both = of(final({ draft: { text: 'Nová verze s Bohuslavou.', facts: [], sources: [], people: [{ id: 'P0005', died: false }] } }));
         expect(both?.text).toBe(TEXT);
-        expect(both?.draft).toBe(false);
-        expect(of({ ...final(), status: 'draft' })).toEqual({ ...of(final()), draft: true });
+        // A draft goes as the story, untagged (Milan 28. 11.).
+        expect(of({ ...final(), status: 'draft' })).toEqual(of(final()));
         expect(of({ status: null, task: { id: 'T0001', state: 'open' } })).toBeNull();
-        expect(houseStoryForOutput(null, houseOutputFilter(house, null, data, HOUSE_NOW, ctx), ctx)).toBeNull();
+        expect(houseStoryForOutput(null)).toBeNull();
     });
 
-    it('left out whole when it names the living, a person of the last ~100 years, or a stranger not known dead', () => {
-        expect(of(final({ people: [...OLD, { id: 'P0005', died: false }] }))).toBeNull();
-        // A draft is checked the same (T8).
-        expect(of({ ...final({ people: [...OLD, { id: 'P0005', died: false }] }), status: 'draft' })).toBeNull();
-        expect(of({ ...final({ facts: ['e1', 'e9'] }), status: 'draft' })).toBeNull();
-        expect(of(final({ people: [...OLD, { id: 'P0003', died: true }] }))).toBeNull();
-        expect(of(final({ people: [{ id: 'P0777', died: false }] }))).toBeNull();
-        expect(of(final({ people: [{ id: 'P0777', died: true }] }))?.text).toBe(TEXT);
+    // Changed 28. 11. (spec 145 T8 change): neither the people of the last ~100 years, nor a stranger, nor the facts
+    // the output hides keep the story out; the living only by a bulk output's option.
+    it('always, whoever appears in it and whatever it cites; the living left out only when the output asks', () => {
+        const living = final({ people: [...OLD, { id: 'P0005', died: false }] });
+        expect(of(living)?.text).toBe(TEXT);
+        expect(of({ ...living, status: 'draft' })?.text).toBe(TEXT);
+        expect(of(final({ people: [...OLD, { id: 'P0003', died: true }] }))?.text).toBe(TEXT);
+        expect(of(final({ people: [{ id: 'P0777', died: false }] }))?.text).toBe(TEXT);
+        expect(of(final({ facts: ['e1', 'e9'] }))?.text).toBe(TEXT);
+        expect(of(final({ facts: ['e10'] }))?.text).toBe(TEXT);
+        expect(of(final({ facts: ['h3'] }))?.text).toBe(TEXT);
+        // The bulk outputs' option off: only a story with a living person of the tree is left out.
+        expect(of(living, true)).toBeNull();
+        expect(of({ ...living, status: 'draft' }, true)).toBeNull();
+        expect(of(final({ people: [...OLD, { id: 'P0003', died: true }] }), true)?.text).toBe(TEXT);
+        // A person of the research the tree does not know, not known dead, does not count as living.
+        expect(of(final({ people: [{ id: 'P0777', died: false }] }), true)?.text).toBe(TEXT);
     });
 
-    it('left out when it rests on what the output hides: a sensitive event, a recent one, a holder without years', () => {
-        expect(of(final({ facts: ['e1', 'e9'] }))).toBeNull();
-        expect(of(final({ facts: ['e10'] }))).toBeNull();
-        expect(of(final({ facts: ['h3'] }))).toBeNull();
-        // A fact of a person, not an item of the house, is judged by its people.
-        expect(of(final({ facts: ['e1', 'F0042'] }))?.text).toBe(TEXT);
+    it('houseStoryNamesLiving: a living person of the tree in the story, a draft too; none without a story', () => {
+        expect(houseStoryNamesLiving(withStory(final({ people: [...OLD, { id: 'P0005', died: false }] })), ctx)).toBe(true);
+        expect(houseStoryNamesLiving(withStory({ ...final({ people: [{ id: 'P0005', died: false }] }), status: 'draft' }), ctx)).toBe(true);
+        expect(houseStoryNamesLiving(withStory(final({ people: [...OLD, { id: 'P0003', died: true }, { id: 'P0777', died: false }] })), ctx)).toBe(false);
+        expect(houseStoryNamesLiving(withStory({ status: null, task: { id: 'T0001', state: 'open' } }), ctx)).toBe(false);
+        expect(houseStoryNamesLiving(null, ctx)).toBe(false);
     });
 });
 
@@ -118,25 +123,43 @@ describe('the house page\'s story', () => {
         expect(storySection(app(final({ task: { id: 'T0002', state: 'open' } })))).toContain('hp-story-task');
     });
 
-    it('in the file: the approved story through the filter, a draft tagged (T8); a task or a protected person never', () => {
-        const file = (story: HouseStory) => storySection(buildHousePage(data, house, withStory(story), 'file', opts));
+    it('in the file: the story always, a draft as the story without its tag (T8); a task or a new version never', () => {
+        const file = (story: HouseStory, extra: Record<string, unknown> = {}) =>
+            storySection(buildHousePage(data, house, withStory(story), 'file', { ...opts, ...extra }));
         expect(file(final())).toContain('Svatobor Prouzal');
         expect(file(final())).not.toContain('hp-story-tag');
         const draft = file({ ...final(), status: 'draft' });
         expect(draft).toContain('Svatobor Prouzal');
-        expect(draft).toContain('hp-story--draft');
-        expect(draft).toContain('<span class="hp-story-tag">draft, waiting for approval</span>');
+        expect(draft).not.toContain('hp-story--draft');
+        expect(draft).not.toContain('hp-story-tag');
+        expect(draft).not.toContain('waiting for approval');
         expect(draft).not.toContain('<button');
         // Even with the window's buttons given, the file has none.
         const withActs = storySection(buildHousePage(data, house, withStory({ ...final(), status: 'draft' }), 'file',
             { ...opts, app: { storyApproveHtml: '<button id="ap">A</button>' } }));
         expect(withActs).not.toContain('id="ap"');
-        expect(file({ ...final({ people: [...OLD, { id: 'P0005', died: false }] }), status: 'draft' })).toBe('');
+        // A living person in it: the saved page of the house shows it (spec 145 T8 change); a bulk output's option may not.
+        const living = { ...final({ people: [...OLD, { id: 'P0005', died: false }] }), status: 'draft' as const };
+        expect(file(living)).toContain('Svatobor Prouzal');
+        expect(file(living, { storyLiving: false })).toBe('');
+        expect(file(final(), { storyLiving: false })).toContain('Svatobor Prouzal');
         expect(file({ status: null, task: { id: 'T0001', state: 'doing' } })).toBe('');
-        expect(file(final({ people: [...OLD, { id: 'P0005', died: false }] }))).toBe('');
         const both = file(final({ draft: { text: 'Nová verze.', facts: [], sources: [], people: [] } }));
         expect(both).not.toContain('Nová verze.');
         expect(both).not.toContain('hp-story-nv');
+    });
+
+    // Regression (Milan 28. 11.): a house whose story names a person who died in 1945 and cites a holder of 1939 —
+    // the saved HTML had no story at all.
+    it('in the file: a story of a person who died in 1945 citing a holder of 1939 is there', () => {
+        const recent = houseTree();
+        const lubor = Object.values(recent.persons).find(p => p.refn === 'P0003')!;
+        lubor.deathDate = '1945';
+        const r = withStory({ ...final({ facts: ['h1', 'h3'], people: [...OLD, { id: 'P0003', died: true }] }), status: 'draft' });
+        r.holders = r.holders.map(h => h.id === 'h3' ? { ...h, from: '1912', to: '1939' } : h);
+        const html = buildHousePage(recent, houseOf(recent, HOUSE_ID), r, 'file', opts);
+        expect(storySection(html)).toContain('Svatobor Prouzal');
+        expect(storySection(html)).toContain('Hostivít');
     });
 
     it('without a story: no section', () => {

@@ -14,7 +14,7 @@
  * out, the location only of a house without people of those years and not
  * hidden by hand (spec 145 T3: a cut of today's map, its coordinates, how sure
  * it is; the book option off: the town only); a note at the end
- * says what is left out. Its story a draft too, tagged (spec 145 T8). The
+ * says what is left out. Its story a draft too, printed as the story (spec 145 T8). The
  * pictures of the house and its town under a free licence (spec 145 T8): from
  * the web by the setting "Web photos in outputs" (default; a plain http(s)
  * <img>, without the network the caption with its link stays) or the caption
@@ -23,8 +23,7 @@
 
 import type { PersonId, StromData } from './types.js';
 import type { BookCtx, BookHouseEntry } from './book-blocks.js';
-import type { HouseResearch, HouseSource } from './house-bridge.js';
-import type { HouseOutputStory } from './house-privacy.js';
+import type { HouseResearch, HouseSource, HouseStoryText } from './house-bridge.js';
 import { safeHttpUrl } from './validation.js';
 import { proseHtml } from './story-text.js';
 import { getStringsForLang } from './strings.js';
@@ -39,8 +38,8 @@ import type { HouseMapShot } from './house-map-shot.js';
 /** One house of the chapter: as the index of houses shows it, with the research's result for its sources and building. */
 export interface BookHouseChapterEntry extends BookHouseEntry {
     research: HouseResearch | null;
-    /** Its story as outputs may show it (houseStoryForOutput, spec 145 T4; a draft tagged, T8); null none. */
-    story?: HouseOutputStory | null;
+    /** Its story as outputs show it (houseStoryForOutput, spec 145 T4; a draft as the story, T8); null none. */
+    story?: HouseStoryText | null;
     /**
      * Its location, where outputs may show it and the book does (spec 145 T3): the point, how sure it is, the cut of
      * today's map made before the book (null: the coordinates only).
@@ -165,14 +164,13 @@ export function housesChapterHtml(ctx: BookCtx, entries: readonly BookHouseChapt
         if (out.hidden.events || out.hidden.facts || out.hidden.location || out.persons.some(p => p.recent || p.living)) shielded = true;
         const parts: string[] = [`<h3>${esc(houseTitle(h))}</h3>`];
         if (e.name) parts.push(`<div class="book-house-alias"><em>${esc(e.name)}</em></div>`);
-        // Its story first (spec 145 T4): the approved text, or a draft tagged (T8); its sources among the chapter's notes.
+        // Its story first (spec 145 T4): the approved text, or a draft printed as the story (T8); its sources among the chapter's notes.
         if (e.story) {
             const body = proseHtml(e.story.text, { headingLevel: 5, softBreak: 'space', dropStrayMarks: true });
             if (body) {
-                const tag = e.story.draft ? `<p class="book-house-story-tag"><span>${esc(P.storyDraft)}</span></p>` : '';
                 const title = e.story.title ? `<h4 class="book-house-story-title">${esc(e.story.title)}</h4>` : '';
                 const marks = notes.cite(e.story.sources);
-                parts.push(`<div class="book-story book-house-story${e.story.draft ? ' book-house-story--draft' : ''}">${tag}${title}${body}`
+                parts.push(`<div class="book-story book-house-story">${title}${body}`
                     + `${marks ? `<p class="book-house-story-src">${marks}</p>` : ''}</div>`);
             }
         }

@@ -45,6 +45,8 @@ export interface BookMemory {
     houseRecent?: boolean;
     /** The Houses chapter's locations (spec 145 T3); absent = on. */
     houseMaps?: boolean;
+    /** The stories of houses with a living person in them (spec 145 T8); absent = on. */
+    houseStoriesLiving?: boolean;
     /** The Custom preset's own values (§4.9), null before Custom is first chosen. */
     custom?: BookPresetValues | null;
     /** The last lineages chosen (kind 'rods'), offered again from the menu. */
@@ -74,6 +76,8 @@ export interface PagesChoices {
     include: PagesInclude;
     /** The houses (spec 145 T6): pages linked with the people, only a mention, none. */
     houses: PagesHouses;
+    /** The house pages' stories with a living person in them (spec 145 T8); absent = on. */
+    houseStoriesLiving?: boolean;
 }
 
 /** The option Houses of the family pages (spec 145 T6), as PageSetOptions.houses. */
@@ -139,6 +143,7 @@ export function parseBookMemory(raw: string | null | undefined): Partial<BookMem
     if (typeof o.research === 'boolean') out.research = o.research;
     if (typeof o.houseRecent === 'boolean') out.houseRecent = o.houseRecent;
     if (typeof o.houseMaps === 'boolean') out.houseMaps = o.houseMaps;
+    if (typeof o.houseStoriesLiving === 'boolean') out.houseStoriesLiving = o.houseStoriesLiving;
     const parts = parseParts(o.parts);
     if (parts) out.parts = parts as BookParts;
     if (o.custom === null) out.custom = null;
@@ -204,6 +209,7 @@ function parsePagesChoices(v: unknown): PagesChoices | null {
     if (photos) { out.photos = photos; any = true; }
     const houses = oneOf(HOUSES, o.houses);
     if (houses) { out.houses = houses; any = true; }
+    if (typeof o.houseStoriesLiving === 'boolean') { out.houseStoriesLiving = o.houseStoriesLiving; any = true; }
     if (o.include && typeof o.include === 'object' && !Array.isArray(o.include)) {
         const src = o.include as Record<string, unknown>;
         for (const k of INCLUDE_KEYS) if (typeof src[k] === 'boolean') { out.include[k] = src[k] as boolean; any = true; }
@@ -249,6 +255,7 @@ export function saveBookMemory(
             lang: options.lang,
             ...(options.houseRecent !== undefined ? { houseRecent: options.houseRecent } : {}),
             ...(options.houseMaps !== undefined ? { houseMaps: options.houseMaps } : {}),
+            ...(options.houseStoriesLiving !== undefined ? { houseStoriesLiving: options.houseStoriesLiving } : {}),
             ...(custom !== undefined ? { custom: custom ? { ...custom, parts: { ...custom.parts } } : null } : {}),
             ...(lastRods?.length ? { lastRods } : {}),
             ...((extra.output ?? prev?.output) ? { output: extra.output ?? prev?.output } : {}),
@@ -297,6 +304,7 @@ export function bookOptionsFromMemory(
         ...(memory?.privacy ? { privacy: memory.privacy } : {}),
         ...(memory?.houseRecent !== undefined ? { houseRecent: memory.houseRecent } : {}),
         ...(memory?.houseMaps !== undefined ? { houseMaps: memory.houseMaps } : {}),
+        ...(memory?.houseStoriesLiving !== undefined ? { houseStoriesLiving: memory.houseStoriesLiving } : {}),
         selection,
     };
 }

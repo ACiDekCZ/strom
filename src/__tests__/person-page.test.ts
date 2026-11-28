@@ -119,7 +119,8 @@ describe('sections', () => {
         expect(file).toContain('<footer class="pp-foot">');
     });
 
-    it('a story in draft is shown marked as a draft, in the window and in the file; the researchers section needs a research tree', () => {
+    // Changed 28. 11. (spec 145 T8, Milan: "platí pro všechno vyprávění"): the file prints a draft as the story, untagged.
+    it('a story in draft is shown, marked as a draft in the window only, as the story in the file; the researchers section needs a research tree', () => {
         const d = fiskTree();
         d.persons['jan' as PersonId].story!.status = 'draft';
         const html = body(d, { research: false });
@@ -129,7 +130,8 @@ describe('sections', () => {
         expect(html).not.toContain('pp-sec-research');
         const file = doc(d, { lang: 'de' });
         expect(file).toContain('Jan se narodil v Čapkově.');
-        expect(file).toContain('<span class="pp-draft-tag">Entwurf</span>');
+        expect(file).not.toContain('pp-draft-tag">');
+        expect(file).not.toContain('>Entwurf<');
         // Without a title the tag sits in the section's heading.
         delete d.persons['jan' as PersonId].story!.title;
         expect(body(d, { lang: 'en' })).toContain('<h2 class="pp-kicker pp-story-kicker">Story <span class="pp-draft-tag">Draft</span></h2>');
@@ -216,6 +218,10 @@ describe('sections', () => {
         // Marie's page tells it too, she first (monogram and names); a title replaces the names as the heading.
         const marie = body(d, { personId: 'marie' as PersonId });
         expect(marie).toContain('<h3 class="pp-ch-title">Marie Dvořáková a Jan Fíšek <span class="pp-draft-tag">Návrh</span></h3>');
+        // The file prints the couple's draft as its story, untagged (spec 145 T8, 28. 11.).
+        const file = doc(d);
+        expect(file).toContain('<h3 class="pp-ch-title">Jan Fíšek a Marie Dvořáková</h3>');
+        expect(file).not.toContain('pp-draft-tag">');
         // Her page has the chapter alone: no monogram; with her own story too, the monogram puts her first.
         expect(marie).not.toContain('pp-ch-mono');
         d.persons['marie' as PersonId].story = { status: 'final', text: 'Marie byla z mlýna.' };

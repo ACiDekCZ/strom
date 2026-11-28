@@ -27,7 +27,7 @@ import { bookTitlePage, buildFamilyBook, buildFamilyBookAsync, type BookBuildEnv
 import { bookFileName, bookPreparingHtml } from '../book-window.js';
 import {
     BOOK_HOUSE_PARTS, BOOK_PART_KEYS, BookDetail, BookEnv, BookEstimate, BookLang, BookOptions, BookPartKey, BookSelectionSpec,
-    autoBookTitle, bookChapterHousesFor, bookHouseDefaults, bookHouseMaps, bookHouseMapsState, bookHouseRecent, bookPartAvailability, bookSelectionHouses, bookRodCounts, estimateBook,
+    autoBookTitle, bookChapterHousesFor, bookHouseDefaults, bookHouseMaps, bookHouseMapsState, bookHouseStoriesLiving, housesStoryWithLiving, bookHouseRecent, bookPartAvailability, bookSelectionHouses, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
     BOOK_GENERATIONS_DEFAULT, BOOK_GENERATIONS_MAX, BOOK_GENERATIONS_MIN, BookEntry, BookOutput, PAGES_GROUP_KEYS, PagesChoices, PagesGroups, PagesHouses,
@@ -427,7 +427,7 @@ function optionsHtml(s: DialogState): string {
     const seg = (name: string, items: ReadonlyArray<[string, string]>, label: string): string =>
         `<div class="book-seg sel-seg" role="radiogroup" aria-label="${esc(label)}">`
         + items.map(([v, l]) => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-${name}="${v}">${esc(l)}</button>`).join('') + `</div>`;
-    const sw = (key: 'notes' | 'research' | 'houseRecent' | 'houseMaps' | 'webPhotos', title: string, hintText: string): string =>
+    const sw = (key: 'notes' | 'research' | 'houseRecent' | 'houseMaps' | 'webPhotos' | 'houseStoriesLiving', title: string, hintText: string): string =>
         `<div class="book-switch-row"><button type="button" class="book-switch" role="switch" data-switch="${key}" aria-labelledby="book-sw-${key}">`
         + `<span class="book-switch-track" aria-hidden="true"></span></button>`
         + `<div class="book-switch-text"><span class="book-switch-t" id="book-sw-${key}">${esc(title)}</span><span class="book-hint">${esc(hintText)}</span></div></div>`;
@@ -477,7 +477,9 @@ function optionsHtml(s: DialogState): string {
         + PRIVACY.map(m => `<label class="book-radio"><input type="radio" name="book-privacy" value="${m}"><span>${esc(privacyLabel[m])}</span></label>`).join('')
         + `</div>`;
     // Web photos in outputs (spec 145 T8): the app's setting (Settings → Data), offered where the houses are.
-    const photos = `<div class="book-house-photos" hidden>${sw('webPhotos', strings.outputWebPhotos.bookSwitch, strings.outputWebPhotos.bookSwitchHint)}</div>`;
+    const photos = `<div class="book-house-photos" hidden>${sw('webPhotos', strings.outputWebPhotos.bookSwitch, strings.outputWebPhotos.bookSwitchHint)}</div>`
+        // The stories of houses with a living person in them (spec 145 T8): offered only when there is such a story.
+        + `<div class="book-house-stories" hidden>${sw('houseStoriesLiving', D.houseStoriesLiving, D.houseStoriesLivingHint)}</div>`;
     if (pages) return head + pagesOptionsHtml(sum, privacyRadios, photos);
     return head
         + `<div class="book-sum">${sum('parts', D.parts)}${sum('detail', D.detail)}${sum('notes', D.notesRow)}`
@@ -703,15 +705,19 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
     modal.querySelectorAll<HTMLElement>('[data-switch]').forEach(b => {
         const k = b.dataset.switch;
         b.setAttribute('aria-checked', String(k === 'notes' ? s.opts.notes : k === 'research' ? s.opts.research
-            : k === 'houseMaps' ? bookHouseMaps(s.opts) : k === 'webPhotos' ? SettingsManager.isOutputWebPhotos() : s.opts.houseRecent !== false));
+            : k === 'houseMaps' ? bookHouseMaps(s.opts) : k === 'webPhotos' ? SettingsManager.isOutputWebPhotos()
+            : k === 'houseStoriesLiving' ? bookHouseStoriesLiving(s.opts) : s.opts.houseRecent !== false));
     });
     modal.querySelectorAll<HTMLElement>('.book-house-recent').forEach(el => { el.hidden = s.kind !== 'house'; });
     const mapsShown = avail.houses.available && !!s.opts.parts.houses && bookHouseMapsState(s.data, opts, env).shown;
     modal.querySelectorAll<HTMLElement>('.book-house-maps').forEach(el => { el.hidden = !mapsShown; });
     // Web photos (spec 145 T8): with the Houses chapter whose houses have pictures under a free licence.
-    const photosShown = avail.houses.available && !!s.opts.parts.houses
-        && bookChapterHousesFor(s.data, opts, env).some(h => housePicturesOf(env.houseResearch?.(h) ?? null));
+    const chapterHouses = avail.houses.available && !!s.opts.parts.houses ? bookChapterHousesFor(s.data, opts, env) : [];
+    const photosShown = chapterHouses.some(h => housePicturesOf(env.houseResearch?.(h) ?? null));
     modal.querySelectorAll<HTMLElement>('.book-house-photos').forEach(el => { el.hidden = !photosShown; });
+    // The stories of houses with living people (spec 145 T8): with a chapter's house whose story names one.
+    const storiesShown = housesStoryWithLiving(s.data, chapterHouses, env.houseResearch);
+    modal.querySelectorAll<HTMLElement>('.book-house-stories').forEach(el => { el.hidden = !storiesShown; });
     modal.querySelectorAll<HTMLElement>('[data-lang]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.lang === s.opts.lang)));
 
     // Title: automatic by the selection and the book's language, until edited
@@ -772,10 +778,14 @@ function syncPages(s: DialogState, modal: HTMLElement): void {
     modal.querySelectorAll<HTMLElement>('[data-sec="houses"], [data-sub-open="houses"]').forEach(el => { el.hidden = !houses; });
     // Web photos (spec 145 T8): for house pages whose houses have pictures under a free licence.
     const photosOf = s.houseResearch;
-    const webPics = houses && p.houses === 'pages' && !!photosOf && housesOf(s)
-        .some(h => s.est!.set.houseIds!.has(h.id) && housePicturesOf(photosOf(h)));
+    const setHouses = houses && p.houses === 'pages' && !!photosOf ? housesOf(s).filter(h => s.est!.set.houseIds!.has(h.id)) : [];
+    const webPics = setHouses.some(h => housePicturesOf(photosOf!(h)));
     modal.querySelectorAll<HTMLElement>('.book-house-photos').forEach(el => { el.hidden = !webPics; });
     modal.querySelectorAll<HTMLElement>('[data-switch="webPhotos"]').forEach(b => b.setAttribute('aria-checked', String(SettingsManager.isOutputWebPhotos())));
+    // The house pages' stories with living people (spec 145 T8): with a house page whose story names one.
+    const storiesShown = housesStoryWithLiving(s.data, setHouses, photosOf);
+    modal.querySelectorAll<HTMLElement>('.book-house-stories').forEach(el => { el.hidden = !storiesShown; });
+    modal.querySelectorAll<HTMLElement>('[data-switch="houseStoriesLiving"]').forEach(b => b.setAttribute('aria-checked', String(p.houseStoriesLiving !== false)));
     // The lines' timelines: hidden for a selection without lines (1102 §4.4).
     const noLines = s.kind === 'persons' || s.kind === 'gift' || s.kind === 'ancestors' || s.kind === 'descendants';
     const tl = modal.querySelector<HTMLElement>('[data-inc="timelines"]');
@@ -994,6 +1004,7 @@ function pageSetOptionsOf(s: DialogState): PageSetOptions {
         minimal: s.est?.minimal ?? false, houses: p.houses,
         // Web photos in outputs (spec 145 T8): the app's setting.
         ...(SettingsManager.isOutputWebPhotos() ? {} : { webPhotos: false }),
+        ...(p.houseStoriesLiving === false ? { houseStoriesLiving: false } : {}),
     };
 }
 
@@ -1291,6 +1302,22 @@ export const bookUiMethods = uiModule({
             started: null,
         };
         this.presentBookDialog(st);
+        this.readDialogHouses(st);
+    },
+
+    /**
+     * The research's results of the tree's houses, read over the bridge when the dialog opens (spec 145 T8): the
+     * switches that depend on them (web photos, stories of houses with living people) show at once, not only after a
+     * first book. A failure leaves what was read so far; a dialog opened again meanwhile is not touched.
+     */
+    readDialogHouses(s: DialogState): void {
+        const b = this.houseResearchBridge();
+        if (!b || !s.houses?.length) return;
+        void loadBookHouseResearch(b.base, s.houses).then(got => {
+            if (st !== s || !got.research.size) return;
+            s.houseResearch = (house: TreeHouse) => got.research.get(house.id) ?? this.houseResearchRead(house);
+            sync(s);
+        }).catch(() => { /* what was read so far */ });
     },
 
     /** Show the dialog for a state: a new one, or the build brought back from the background (1102 §7.2). */
@@ -1457,6 +1484,14 @@ export const bookUiMethods = uiModule({
                 if (sw.dataset.switch === 'webPhotos') {
                     SettingsManager.setOutputWebPhotos(!SettingsManager.isOutputWebPhotos());
                     update(() => { /* the switch and the preview follow the setting */ });
+                    return;
+                }
+                // Not a preset's value: the stories of houses with living people (spec 145 T8), the book's or the pages'.
+                if (sw.dataset.switch === 'houseStoriesLiving') {
+                    update(s => {
+                        if (s.output === 'pages') s.pages = { ...s.pages, houseStoriesLiving: s.pages.houseStoriesLiving === false };
+                        else s.opts = { ...s.opts, houseStoriesLiving: !bookHouseStoriesLiving(s.opts) };
+                    });
                     return;
                 }
                 // Not a preset's value either: the Houses chapter's locations (spec 145 T3).

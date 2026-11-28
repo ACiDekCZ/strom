@@ -194,30 +194,31 @@ export function houseOutputFilter(house: TreeHouse, research: HouseResearch | nu
     };
 }
 
-/** The house's story as an output shows it: its text, and whether it is a draft (the output tags it "draft"). */
-export type HouseOutputStory = HouseStoryText & { draft: boolean };
-
 /**
- * The house's story an output may show (spec 145 T4, T8): the approved text, or the draft when the story is only a
- * draft yet (tagged so); a newer version waiting beside an approved one never (the approved text goes). None when it names a protected person — living or of the last ~100 years, or a person of the research
- * the tree does not know and whose death is not known — or rests on what the output leaves out (an event hidden, a
- * holder or resident left out or shown without years): the story is left out whole, as the book leaves out a
- * protected person's story; its text is never rewritten.
+ * The house's story an output shows (spec 145 T4, T8): the approved text, or the draft when the story is only a
+ * draft yet — printed as the story, untagged (a draft is the researcher's word that it is not to be rewritten, not
+ * a mark for readers); a newer version waiting beside an approved one never (the approved text goes). Neither the
+ * people of the last ~100 years nor the facts the output leaves out keep it out: the story is not personal data
+ * (Milan 28. 11.). Only a bulk output (the book, the family pages) may leave out a story in which a living person
+ * appears, by its option (houseStoriesLiving off): `leaveOutLiving` is that output's judge of the living. A person of
+ * the research the tree does not know counts as not living. Its text is never rewritten.
  */
-export function houseStoryForOutput(research: HouseResearch | null, out: HouseOutput, ctx: HousePrivacyContext): HouseOutputStory | null {
+export function houseStoryForOutput(research: HouseResearch | null, leaveOutLiving?: HousePrivacyContext | null): HouseStoryText | null {
     const story = research?.story;
     if (!story || story.status === null) return null;
-    for (const p of story.people) {
-        const id = ctx.personOfRef(p.id);
-        if (id ? ctx.living(id) || ctx.recent(id) : !p.died) return null;
-    }
-    const low = (id: string): string => id.toLowerCase();
-    const items = new Set([...research.timeline, ...research.holders, ...research.residents].map(x => low(x.id)));
-    const shown = new Set([...out.timeline.map(e => low(e.id)),
-        ...[...out.holders, ...out.residents].filter(h => !h.noYears).map(h => low(h.item.id))]);
-    if (story.facts.some(f => items.has(low(f)) && !shown.has(low(f)))) return null;
+    if (leaveOutLiving && houseStoryNamesLiving(research, leaveOutLiving)) return null;
     return {
         ...(story.title ? { title: story.title } : {}), text: story.text, facts: story.facts, sources: story.sources,
-        ...(story.at ? { at: story.at } : {}), people: story.people, draft: story.status === 'draft',
+        ...(story.at ? { at: story.at } : {}), people: story.people,
     };
+}
+
+/** Whether a living person of the tree appears in the house's story (the bulk outputs' option, spec 145 T8). */
+export function houseStoryNamesLiving(research: HouseResearch | null | undefined, ctx: HousePrivacyContext): boolean {
+    const story = research?.story;
+    if (!story || story.status === null) return false;
+    return story.people.some(p => {
+        const id = ctx.personOfRef(p.id);
+        return !!id && ctx.living(id);
+    });
 }

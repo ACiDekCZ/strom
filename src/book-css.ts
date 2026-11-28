@@ -207,8 +207,6 @@ ${PERSON_PAGE_CHART_CSS}
 .book-house-story h4.book-house-story-title { font-style: italic; font-weight: 400; color: #4a4438; }
 .book-house-story-src { margin: 2px 0 0; text-align: left; }
 /* A draft story (spec 145 T8): a small tag above it */
-.book-house-story-tag { margin: 0 0 3px; text-align: left; }
-.book-house-story-tag span { display: inline-block; font: 600 8.5pt ${SANS}; color: #5c5546; background: #f1ece1; border-radius: 3px; padding: 1px 6px; }
 /* The pictures of a house and its town (spec 145 T8): from the web without a fixed size (one that cannot load takes no
    room, its caption with the link stays), never split across pages */
 .book-house-figs { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 6px 0 10px; }

@@ -106,6 +106,12 @@ export interface HousePageOptions {
      * web (default) — an <img> of their http(s) address beside the caption; false: the caption and the link only.
      */
     webPhotos?: boolean;
+    /**
+     * The file of a bulk output (spec 145 T8, the family pages' option "Stories of houses with living people"):
+     * false leaves out the house's story when a living person appears in it; default the story goes. The saved page
+     * of one house always shows it.
+     */
+    storyLiving?: boolean;
 }
 
 export type { HouseMapInput } from './house-map.js';
@@ -804,13 +810,13 @@ function lookHtml(c: Ctx): string {
 
 /**
  * The story's text the page shows: the approved one or the draft (a new version beside an approved one only
- * through its notice in the app); in the file only as the output's filter lets it (houseStoryForOutput: none when it
- * names a protected person; a draft tagged, spec 145 T8).
+ * through its notice in the app); in the file as houseStoryForOutput gives it: always, a draft as the story, left
+ * out only by a bulk output's option when a living person appears in it (spec 145 T8).
  */
 function shownStory(c: Ctx): HouseStoryText | null {
     const st = c.research?.story;
     if (!st || st.status === null) return null;
-    return c.out ? houseStoryForOutput(c.research, c.out, c.privacy) : st;
+    return c.out ? houseStoryForOutput(c.research, c.opts.storyLiving === false ? c.privacy : null) : st;
 }
 
 const STORY_TASK_LIVE: readonly string[] = ['open', 'doing', 'parked', 'waiting'];
@@ -825,14 +831,14 @@ function storyHtml(c: Ctx): string {
     if (st.status === null) return live ? section('story', P.sec.story, live) : '';
     const shown = shownStory(c);
     if (!shown) return '';
-    // A draft is tagged in the file too (spec 145 T8); Approve and Compare only in the app.
-    const draft = st.status === 'draft';
+    // A draft is tagged in the app only, with Approve and Compare; a file prints it as the story (spec 145 T8).
+    const draft = c.app && st.status === 'draft';
     const tag = draft ? `<span class="hp-story-tag">${esc(P.storyDraft)}</span>` : '';
     const nv = c.app && st.status === 'final' && st.draft
         ? `<div class="hp-story-nv" role="status"><span>${esc(P.storyNew(dayText(st.draft.at, c.lang) || undefined))}</span>${app?.storyCompareHtml ?? ''}</div>` : '';
     const title = shown.title ? `<h3 class="hp-story-title">${esc(shown.title)}</h3>` : '';
     const cites = citesHtml(c, shown.sources);
-    const approve = draft && c.app && app?.storyApproveHtml ? `<div class="hp-acts">${app.storyApproveHtml}</div>` : '';
+    const approve = draft && app?.storyApproveHtml ? `<div class="hp-acts">${app.storyApproveHtml}</div>` : '';
     const body = `${nv}<div class="hp-story${draft ? ' hp-story--draft' : ''}">${title}<div class="hp-story-prose pp-prose">${storyProseHtml(shown.text, { headingLevel: 4 })}</div>`
         + `${cites ? `<div class="hp-story-src">${cites}</div>` : ''}</div>${approve}${live}`;
     return section('story', P.sec.story, body, tag);

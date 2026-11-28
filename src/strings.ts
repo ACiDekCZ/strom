@@ -630,6 +630,8 @@ const stringsEN = {
             // The book's house locations (spec 145 T3).
             houseMaps: 'House locations',
             houseMapsHint: 'A cut of today’s map with the point of a house without people of the last ~100 years; off: the town only.',
+            houseStoriesLiving: 'Stories of houses with living people',
+            houseStoriesLivingHint: 'On: every story of a house goes in. Off: a story in which a living person appears is left out.',
             privacy: 'Privacy of living people',
             privacyHint: 'Applies to the text, the line tree, the contents and the index.',
             lang: 'Book language',
@@ -14033,6 +14035,8 @@ const stringsCZ: StringsType = {
             // The book's house locations (spec 145 T3).
             houseMaps: 'Poloha domů',
             houseMapsHint: 'Výřez dnešní mapy s bodem domu bez lidí posledních ~100 let; vypnuto: jen obec.',
+            houseStoriesLiving: 'Vyprávění o domech se žijícími osobami',
+            houseStoriesLivingHint: 'Zapnuto: vloží se každé vyprávění o domě. Vypnuto: vyprávění, ve kterém vystupuje žijící osoba, se vynechá.',
             privacy: 'Ochrana žijících',
             privacyHint: 'Platí pro text, rodokmen, obsah i rejstřík.',
             lang: 'Jazyk knihy',
@@ -27086,6 +27090,8 @@ const stringsDE: StringsType = {
             // The book's house locations (spec 145 T3).
             houseMaps: 'Lage der Häuser',
             houseMapsHint: 'Ein Ausschnitt der heutigen Karte mit dem Punkt eines Hauses ohne Menschen der letzten ~100 Jahre; aus: nur der Ort.',
+            houseStoriesLiving: 'Erzählungen über Häuser mit lebenden Personen',
+            houseStoriesLivingHint: 'Ein: Jede Erzählung über ein Haus kommt hinein. Aus: Eine Erzählung, in der eine lebende Person vorkommt, wird weggelassen.',
             privacy: 'Schutz lebender Personen',
             privacyHint: 'Gilt für Text, Stammbaum der Linie, Inhalt und Register.',
             lang: 'Sprache des Buchs',
