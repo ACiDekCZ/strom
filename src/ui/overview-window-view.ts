@@ -400,9 +400,13 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             }
             return r;
         },
-        async markWaitingSent(_s: LiveSession, w: LiveWaiting): Promise<void> { run('waiting-sent', { itemId: w.id }); },
+        async markWaitingSent(_s: LiveSession, w: LiveWaiting, day?: string): Promise<void> { run('waiting-sent', { itemId: w.id, ...(day ? { day } : {}) }); },
+        async changeWaitingSentDay(_s: LiveSession, w: LiveWaiting, day: string): Promise<undefined> {
+            run('waiting-sent', { itemId: w.id, day, change: true });
+            return undefined;
+        },
         async markWaitingUnsent(_s: LiveSession, id: string): Promise<undefined> { run('waiting-unsent', { itemId: id }); return undefined; },
-        async markWaitingGroupSent(_s: LiveSession, key: string): Promise<void> { run('waiting-group-sent', { group: key }); },
+        async markWaitingGroupSent(_s: LiveSession, key: string, day?: string): Promise<void> { run('waiting-group-sent', { group: key, ...(day ? { day } : {}) }); },
         // A row's own write (§7) as the main window has it: "saving", or refused with its sentence; Try again asks it.
         waitingRowNote(_s: LiveSession, id: string): RowNote | null {
             const ww = extras().waitingWrite;

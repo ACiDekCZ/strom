@@ -28,6 +28,7 @@ import { QUEUE_TASK_KINDS, RESEARCH_LINK_ACTIONS, imageNumber, type QueueTaskKin
 import type { AsideDo } from '../research-aside.js';
 import { sanitizeTaskOrderWas, type TaskOrderWas } from '../research-directions-write.js';
 import { queueQuery, type QueueFilter } from '../research-queue-pages.js';
+import { calendarDay } from '../research-waiting-write.js';
 
 /** Raised when the snapshot's shape changes in a way an older window cannot read. */
 export const OVERVIEW_STATE_VERSION = 1;
@@ -395,10 +396,11 @@ export type OverviewAction =
     /** An answer to an item of "Awaiting action" (the outcome comes back: WaitingAnswerOutcome). */
     | { action: 'waiting-answer'; args: { itemId: string; text: string } }
     /** Mark an item sent, or back to do. */
-    | { action: 'waiting-sent'; args: { itemId: string } }
+    /** `day`: the day it went out ("2026-11-24", spec 149); `change`: a sent item's day changed. */
+    | { action: 'waiting-sent'; args: { itemId: string; day?: string; change?: true } }
     | { action: 'waiting-unsent'; args: { itemId: string } }
-    /** Mark a whole place's items sent. */
-    | { action: 'waiting-group-sent'; args: { group: string } }
+    /** Mark a whole place's items sent (`day`: the one day all of them went out). */
+    | { action: 'waiting-group-sent'; args: { group: string; day?: string } }
     /** "Try again" in a row whose write was refused (§7). */
     | { action: 'waiting-retry'; args: { itemId: string } }
     /** "Retry with the agent" at an item (spec 089 §1.3): written by the main window (its toast), the outcome back (WaitingRetryResult | null). */
@@ -574,13 +576,22 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
         }
         case 'waiting-answer':
             return str(a.itemId) && typeof a.text === 'string' ? { action, args: { itemId: a.itemId, text: a.text } } : null;
-        case 'waiting-sent':
+        case 'waiting-sent': {
+            if (!str(a.itemId)) return null;
+            const day = a.day === undefined ? undefined : calendarDay(a.day);
+            if (day === '' || (a.change !== undefined && (a.change !== true || !day))) return null;
+            return { action, args: { itemId: a.itemId, ...(day ? { day } : {}), ...(a.change === true ? { change: true as const } : {}) } };
+        }
         case 'waiting-unsent':
         case 'waiting-retry':
         case 'waiting-agent-retry':
         case 'answer-task':
             return str(a.itemId) ? { action, args: { itemId: a.itemId } } as OverviewAction : null;
-        case 'waiting-group-sent':
+        case 'waiting-group-sent': {
+            if (!str(a.group)) return null;
+            const day = a.day === undefined ? undefined : calendarDay(a.day);
+            return day === '' ? null : { action, args: { group: a.group, ...(day ? { day } : {}) } };
+        }
         case 'waiting-group-agent-retry':
             return str(a.group) ? { action, args: { group: a.group } } : null;
         case 'waiting-audit':

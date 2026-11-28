@@ -43,9 +43,10 @@ import {
     type BridgeWriteResult, type DirectionStateDo, type DirectionWriteRefused,
 } from '../research-directions-write.js';
 import {
-    WAITING_FILE_ACCEPT, answerWaiting, postWaitingSent, putWaitingFile, retryWaiting, waitingFileTaken,
+    WAITING_FILE_ACCEPT, answerWaiting, postWaitingSent, putWaitingFile, retryWaiting, waitingFileTaken, localDayOf, waitingDayShown, waitingSentDayOf,
     type WaitingRetryRefused, type WaitingWriteRefused,
 } from '../research-waiting-write.js';
+import { openSentDayPopover } from './waiting-sent-day.js';
 import { WaitingAnswerForm, type WaitingAnswerOutcome } from './waiting-answer-form.js';
 import { deviceHypothesisBody, type DeviceHypothesisDo } from './device-decide-ui.js';
 import { postRunStop } from '../research-runs-write.js';
@@ -693,6 +694,7 @@ function waitingRefusedText(r: WaitingWriteRefused | WaitingRetryRefused): strin
         case 'locked': return W.locked;
         case 'app-only': return W.appOnly;
         case 'bad-body': case 'bad': return W.badBody;
+        case 'bad-date': return W.badDate;
         case 'not-sendable': return W.notSendable;
         case 'changed': return strings.live.waitingRetry.errChanged;
         case 'not': return strings.live.waitingRetry.errNot;
@@ -726,6 +728,8 @@ interface WaitingHere {
     /** Marked sent (its moment) or back to do here. */
     phase?: 'todo' | 'sent';
     sentAt?: string;
+    /** The day it was marked sent for, or changed to, here (spec 149). */
+    sentDay?: string;
     /** Answered here: when and with how many files (the row says "Sent 14:41 · 1 photo"). */
     answered?: { at: string; files: number };
     /** A hypothesis decided here: what holds ('' none said). */
@@ -873,6 +877,8 @@ function setWaitingHere(item: DeviceGlanceWaiting, what: Omit<WaitingHere, 'item
 function waitingSettled(item: DeviceGlanceWaiting, here: WaitingHere, now: number): boolean {
     if (now - here.set > WAITING_ANSWERED_KEEP_MS) return true;
     if (here.answered || here.gone || here.decided !== undefined) return false;
+    // A day changed here holds until the research says that day.
+    if (here.sentDay && item.phase === 'sent' && waitingSentDayOf(item) !== here.sentDay) return false;
     return here.phase !== undefined && item.phase === here.phase;
 }
 
@@ -916,13 +922,16 @@ function phoneWaitingFind(id: string): { item: DeviceGlanceWaiting; here?: Waiti
 /** What a row of Waiting shows. */
 /** A button of an item: an action through the bridge (`waiting-do`), or the agent started on the computer (`waiting-agent`). */
 interface WaitingAct {
-    do: DeviceWaitingDo | PhoneWaitingAgent;
+    do: DeviceWaitingDo | PhoneWaitingAgent | PhoneWaitingDay;
     label: string;
     cls: string;
     /** The label with its mark (trusted markup), for the agent's buttons. */
     html?: string;
     act?: 'waiting-agent';
 }
+
+/** A sent request's day changed here (spec 149 K2.1; only with `waiting.sentDay`): the app's own action, not the research's `do`. */
+export type PhoneWaitingDay = 'sent-day';
 
 /** The agent's work on an item (§5, §10): a task talked over, a conflict left to the agent. */
 export type PhoneWaitingAgent = 'discuss' | 'leave';
@@ -986,8 +995,10 @@ function waitingActLabel(d: DeviceWaitingDo): { label: string; cls: string } {
 }
 
 /** A row's data from the item and what was done here. */
-function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | undefined, o: {
+export function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | undefined, o: {
     g: DeviceGlance; lang: string; now: number; seen: string | null; pc: string; allows: (d: DeviceWaitingDo) => boolean; locked?: boolean;
+    /** The bridge takes the day of a Sent (`waiting.sentDay`): a sent request offers its change. */
+    sentDay?: boolean;
     /** The agent's link of the item (absent: none here, e.g. an archive). */
     agent?: (what: PhoneWaitingAgent) => string | null;
 }): WaitingRowData {
@@ -997,6 +1008,10 @@ function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | unde
     const since = formatWaitingSince(Date.parse(item.at), o.now, o.lang, { justNow: strings.research.justNow, yesterday: strings.live.waitingSinceYesterday });
     const phase = here?.phase ?? item.phase;
     const sentAt = here?.phase === 'sent' ? here.sentAt : item.sentAt;
+    // A day given (not today's moment) is said as a day, never as a clock (spec 149 K1.4).
+    const sentDay = here?.phase === 'sent' && here.sentDay ? here.sentDay : sentAt ? waitingSentDayOf({ sentAt }) : '';
+    const sentWhen = (iso: string): string => sentDay && (sentDay !== localDayOf(Date.parse(iso)) || iso.endsWith('T12:00:00.000Z'))
+        ? waitingDayShown(sentDay, o.now, o.lang) : clock(iso);
     const decided = here?.decided !== undefined;
     let meta: string;
     let personShown = true;
@@ -1006,7 +1021,7 @@ function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | unde
     } else if (decided) {
         meta = [r.waitingDecided, here!.decided].filter(Boolean).join(' · ');
     } else if (kind === 'task' && phase === 'sent') {
-        meta = sentAt ? phoneWaitingSentMeta(clock(sentAt), 0) : strings.live.waitingWrite.sent;
+        meta = sentAt ? phoneWaitingSentMeta(sentWhen(sentAt), 0) : strings.live.waitingWrite.sent;
         personShown = false;
     } else if (kind === 'hypothesis') {
         const proposed = hypoChoiceText(item.hypothesis?.proposal);
@@ -1017,6 +1032,9 @@ function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | unde
     const person = personShown && item.person && o.g.people[item.person] ? item.person : undefined;
     const acts: WaitingAct[] = (here?.answered ? [] : phoneWaitingActions({ ...item, phase }, { decided, allows: o.allows }))
         .map(d => ({ do: d, ...waitingActLabel(d) }));
+    // After Back to To do: the day it went out changed (spec 149 K2.1).
+    const unsentAt = acts.findIndex(a => a.do === 'unsent');
+    if (o.sentDay && unsentAt >= 0) acts.splice(unsentAt + 1, 0, { do: 'sent-day', label: strings.live.waitingWrite.changeSentDay, cls: 'is-link' });
     // The agent's work beside the item's own actions, as on the computer (§5, §10): after Answer, after Keep.
     if (!here?.answered && !decided && o.agent) {
         const what: PhoneWaitingAgent | null = kind === 'task' && phase === 'todo' ? 'discuss' : kind === 'conflict' ? 'leave' : null;
@@ -1429,7 +1447,7 @@ export const phoneResearchMethods = uiModule({
             else if (act === 'find-group' && at?.dataset.group) this.openPhoneFindGroup(at.dataset.group, at.dataset.older === '1');
             else if (act === 'finds-older') void this.phoneFindsOlder();
             else if (act === 'finds-new') this.phoneScrollToFinds();
-            else if (act === 'waiting-do' && at?.dataset.id && at.dataset.do) this.phoneWaitingDo(at.dataset.id, at.dataset.do as DeviceWaitingDo);
+            else if (act === 'waiting-do' && at?.dataset.id && at.dataset.do) this.phoneWaitingDo(at.dataset.id, at.dataset.do as DeviceWaitingDo | PhoneWaitingDay, at);
             else if (act === 'waiting-agent' && at?.dataset.id && at.dataset.do) this.phoneWaitingAgent(at.dataset.id, at.dataset.do as PhoneWaitingAgent, at);
             else if (act === 'queue-work') this.phoneStartQueueWork(at ?? null);
             else if (act === 'agent-retry') this.phoneAgentRetry();
@@ -1640,7 +1658,7 @@ export const phoneResearchMethods = uiModule({
             key: `w:${item.id}`,
             make: makeWaitingRow,
             fill: (row: HTMLElement) => fillWaitingRow(row, phoneWaitingRowData(item, here, {
-                g: g!, lang, now, seen, pc, allows, locked: away,
+                g: g!, lang, now, seen, pc, allows, locked: away, sentDay: !!features?.sentDay,
                 ...(archive ? {} : { agent: (what: PhoneWaitingAgent) => phoneWaitingAgentLink(treeId, item, what) }),
             })),
         }));
@@ -1662,7 +1680,7 @@ export const phoneResearchMethods = uiModule({
     },
 
     /** An action of an item of Waiting (its `do`). */
-    phoneWaitingDo(id: string, d: DeviceWaitingDo): void {
+    phoneWaitingDo(id: string, d: DeviceWaitingDo | PhoneWaitingDay, anchor?: HTMLElement): void {
         const found = phoneWaitingFind(id);
         if (!found || away || shownState?.glance?.tree.state === 'archive') return;
         const { item } = found;
@@ -1676,11 +1694,31 @@ export const phoneResearchMethods = uiModule({
             this.openPhoneHypothesis(item);
             return;
         }
-        if (d === 'sent' || d === 'unsent') {
+        // The day it went out (spec 149 K2.1): asked under the button where the bridge takes it, today by default.
+        if ((d === 'sent' || d === 'sent-day') && features?.sentDay && anchor) {
+            const W = L.waitingWrite;
+            const now = Date.now();
+            const was = d === 'sent-day' ? waitingSentDayOf(found.here?.sentDay ? { sentDay: found.here.sentDay } : item) : '';
+            openSentDayPopover({
+                anchor, now, day: was || localDayOf(now),
+                labels: { title: d === 'sent-day' ? W.changeSentDay : W.sentDayTitle, save: W.sentDaySave, cancel: W.sentDayCancel, future: W.sentDayFuture },
+                onSave: (day) => {
+                    if (day === was) return;
+                    this.phoneWaitingSent(item, day === localDayOf(Date.now()) && d === 'sent' ? undefined : day, d === 'sent-day');
+                },
+            });
+            return;
+        }
+        if (d === 'sent-day') return;
+        if (d === 'sent') {
+            this.phoneWaitingSent(item);
+            return;
+        }
+        if (d === 'unsent') {
             void this.phoneWaitingWrite(item, async (base) => {
                 const res = await postWaitingSent(base, item.id, d);
                 return res.ok ? { ok: true } : res.code === 'none' ? { ok: false, none: true } : { ok: false, text: waitingRefusedText(res) };
-            }, () => setWaitingHere(item, d === 'sent' ? { phase: 'sent', sentAt: new Date().toISOString() } : { phase: 'todo' }));
+            }, () => setWaitingHere(item, { phase: 'todo' }));
             return;
         }
         if (d === 'retry') {
@@ -1717,6 +1755,25 @@ export const phoneResearchMethods = uiModule({
      * row at once) and the research is read again; gone meanwhile (404), the row goes; refused, the quiet sentence at
      * the row until a write of it goes.
      */
+    /** Sent from the phone (`at`: the day it went out, else today), or a sent request's day changed (`change`); the toast says the day. */
+    phoneWaitingSent(item: DeviceGlanceWaiting, at?: string, change = false): void {
+        const W = strings.live.waitingWrite;
+        let recorded = '';
+        void this.phoneWaitingWrite(item, async (base) => {
+            const res = await postWaitingSent(base, item.id, 'sent', at ? { at } : {});
+            if (res.ok) recorded = res.sentDay ?? '';
+            return res.ok ? { ok: true } : res.code === 'none' ? { ok: false, none: true } : { ok: false, text: waitingRefusedText(res) };
+        }, () => {
+            const now = Date.now();
+            const day = recorded || at || localDayOf(now);
+            setWaitingHere(item, { phase: 'sent', sentAt: at ? `${at}T12:00:00.000Z` : new Date(now).toISOString(), sentDay: day });
+            if (at || change) {
+                const shown = waitingDayShown(day, now, getCurrentLanguage());
+                this.showToast(change ? W.sentDayChangedToast(shown) : W.sentToast(shown), 4000);
+            }
+        });
+    },
+
     async phoneWaitingWrite(item: DeviceGlanceWaiting, write: (base: string) => Promise<{ ok: boolean; none?: boolean; text?: string }>,
         done: () => void): Promise<boolean> {
         const treeId = phoneResearchTreeId();

@@ -26,6 +26,7 @@ import { deviceFetch } from './gateway-client';
 import { deviceConnection, onDeviceConnection, onDeviceEvent } from './device-connection';
 import { chosenTreeId, deviceTreeIdOk, findsSeenAt, loadResearchState, saveResearchState } from './device-store';
 import { noteResearchDeviceActions } from '../research-link.js';
+import { WAITING_SENT_DAY_FEATURE } from '../research-waiting-write.js';
 
 // ——— features ———
 
@@ -34,6 +35,7 @@ export const PEOPLE_SEARCH_FEATURE = 'people.search';
 export const FINDS_FEATURE = 'finds';
 export const FINDS_PERSON_FEATURE = 'finds.person';
 
+
 /** What the research's bridge offers the Research screen, by its `/status.features`. */
 export interface DeviceResearchFeatures {
     glance: boolean;
@@ -41,6 +43,8 @@ export interface DeviceResearchFeatures {
     finds: boolean;
     /** Finds say the person (ID) of a group and a child line ("Show in the tree"). */
     findsPerson: boolean;
+    /** A Sent takes the day it went out, and a sent item's day is changed (`waiting.sentDay`, spec 149). */
+    sentDay?: boolean;
 }
 
 /** The features of a `/status` (its `features`, or the list itself); anything else: none. */
@@ -53,6 +57,7 @@ export function deviceResearchFeatures(statusOrFeatures: unknown): DeviceResearc
         peopleSearch: has.has(PEOPLE_SEARCH_FEATURE),
         finds,
         findsPerson: finds && has.has(FINDS_PERSON_FEATURE),
+        ...(has.has(WAITING_SENT_DAY_FEATURE) ? { sentDay: true } : {}),
     };
 }
 

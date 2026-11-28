@@ -290,7 +290,8 @@ export const overviewWindowMethods = uiModule({
             case 'waiting-sent': {
                 const w = item(a.args.itemId);
                 if (!s || !w) return false;
-                void this.markWaitingSent(s, w);
+                if (a.args.change && a.args.day) void this.changeWaitingSentDay(s, w, a.args.day);
+                else void this.markWaitingSent(s, w, a.args.day);
                 return true;
             }
             case 'waiting-unsent':
@@ -299,7 +300,7 @@ export const overviewWindowMethods = uiModule({
                 return true;
             case 'waiting-group-sent':
                 if (!s) return false;
-                void this.markWaitingGroupSent(s, a.args.group);
+                void this.markWaitingGroupSent(s, a.args.group, a.args.day);
                 return true;
             case 'waiting-retry':
                 return !!s && this.retryWaitingRow(s, a.args.itemId);

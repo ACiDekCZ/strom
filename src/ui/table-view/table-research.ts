@@ -16,6 +16,7 @@ import type { LiveQueueItem, LiveWaiting, LiveWorker } from '../../research-link
 import type { DirectionPlaces } from '../../research-directions-write.js';
 import type { ChangeKind } from '../../research-changes.js';
 import { todoWaiting } from '../../research-waiting.js';
+import { waitingSentDayOf } from '../../research-waiting-write.js';
 import { AGENT_DONE_MS, personStoryState } from '../../card-signals.js';
 import { isOpenHypothesis } from '../../view-links.js';
 import { edgeEndText, edgeEstimateText, edgeNextText, effectiveNext } from '../../research-edge.js';
@@ -391,11 +392,11 @@ function externalWaits(env: ResearchTableEnv, p: Person): { text: string; id: st
     for (const w of p.refn ? env.sent.get(p.refn) ?? [] : []) {
         seen.add(w.id);
         const kind = w.kind && w.kind in R.waitTypes ? R.waitTypes[w.kind] : (w.what || R.waitTypes.other);
-        out.push({ id: w.id, text: [R.waitSent(kind, dayText(w.sentAt)), w.group?.name].filter(Boolean).join(' · ') });
+        out.push({ id: w.id, text: [R.waitSent(kind, dayText(waitingSentDayOf(w) || undefined)), w.group?.name].filter(Boolean).join(' · ') });
     }
     for (const w of p.research?.waits ?? []) {
         if (w.stat !== 'sent' || seen.has(w.id)) continue;
-        out.push({ id: w.id, text: [R.waitSent(R.waitTypes[w.type ?? 'other'], dayText(w.sent)), w.group?.name].filter(Boolean).join(' · ') });
+        out.push({ id: w.id, text: [R.waitSent(R.waitTypes[w.type ?? 'other'], dayText(waitingSentDayOf({ sentAt: w.sent }) || undefined)), w.group?.name].filter(Boolean).join(' · ') });
     }
     return out;
 }

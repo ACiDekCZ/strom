@@ -29529,6 +29529,38 @@
         .tov-foot { flex: none; display: flex; justify-content: flex-end; padding: 12px 22px; border-top: 1px solid var(--divider); background: var(--surface-2); }
         .tov-btn-primary { min-height: 34px; }
         /* Person popover */
+        /* The day a request went out (spec 149): src/ui/waiting-sent-day.ts. */
+        .sent-day-pop {
+            position: fixed; z-index: 1300; width: 280px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 8px;
+            padding: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-lg);
+            box-shadow: var(--shadow-lg); box-sizing: border-box;
+        }
+        .sent-day-pop__label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .sent-day-pop__title { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+        .sent-day-pop__input {
+            height: 36px; padding: 0 8px; border: 1px solid var(--line-color); border-radius: 8px; min-width: 0; max-width: 100%;
+            background: var(--surface); color: var(--text); font: inherit; font-size: 14px; color-scheme: light dark; box-sizing: border-box;
+        }
+        .sent-day-pop__input:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; }
+        .sent-day-pop__input[aria-invalid="true"] { border-color: var(--danger, #c0392b); }
+        .sent-day-pop__note { margin: 0; font-size: 12.5px; color: var(--text-muted); overflow-wrap: anywhere; }
+        .sent-day-pop__error { margin: 0; font-size: 12.5px; color: var(--danger, #c0392b); overflow-wrap: anywhere; }
+        .sent-day-pop__buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+        .sent-day-pop__buttons .btn { min-width: 0; }
+        @media (max-width: 640px) {
+            .sent-day-pop { width: auto; max-width: none; }
+            .sent-day-pop__buttons .btn { flex: 1 1 auto; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .sent-day-pop { width: 300px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .sent-day-pop { gap: 6px; padding: 10px; }
+        }
+        @media (pointer: coarse) {
+            .sent-day-pop__input { height: 44px; font-size: 16px; }
+            .sent-day-pop__buttons .btn { min-height: 44px; }
+        }
         .tov-pop {
             position: fixed; z-index: 260; width: 320px; display: flex; flex-direction: column; gap: 4px; padding: 8px;
             background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-lg);

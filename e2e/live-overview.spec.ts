@@ -155,8 +155,19 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
             const reply = (status: number, body: unknown) => json(status, commit ? { ...(body as Record<string, unknown>), ...commit } : body);
             if (write[1].startsWith('media/')) return route.fulfill(reply(200, { input: 'I0042' }));
             if (write[1].endsWith('/note')) return route.fulfill(reply(200, bridge.note ?? { text: '' }));
-            const what = (JSON.parse(req.postData() || '{}') as { do?: string }).do;
+            const asked = JSON.parse(req.postData() || '{}') as { do?: string; at?: unknown };
+            const what = asked.do;
             const at = new Date().toISOString();
+            // The day it went out (spec 149, `waiting.sentDay`): a day given is kept as its noon UTC, never one to come.
+            const dayed = !!bridge.features?.includes('waiting.sentDay');
+            const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if (asked.at !== undefined) {
+                const ok = dayed && what === 'sent' && typeof asked.at === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(asked.at) && asked.at <= localDay(new Date());
+                if (!ok) return route.fulfill(reply(400, { error: 'bad date', code: 'waiting.bad-date', params: { at: String(asked.at).slice(0, 20) } }));
+            }
+            const sentOf = (): Record<string, unknown> => typeof asked.at === 'string'
+                ? { phase: 'sent', sentAt: `${asked.at}T12:00:00.000Z`, sentDay: asked.at }
+                : { phase: 'sent', sentAt: at, ...(dayed ? { sentDay: localDay(new Date()) } : {}) };
             if (write[1].startsWith('waiting/')) {
                 const w = bridge.waiting.find(x => x.id === write[1].slice('waiting/'.length));
                 if (!w) return route.fulfill(reply(404, { error: 'not waiting', code: 'waiting.none' }));
@@ -165,10 +176,12 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
                     return route.fulfill(reply(200, { ...bridge.itemReply, task: w.id }));
                 }
                 if (what === 'sent') {
-                    Object.assign(w, { phase: 'sent', sentAt: at });
-                    return route.fulfill(reply(200, { sent: [w.id] }));
+                    // Sent again: only another day changes it.
+                    const changed = w.phase !== 'sent' || (typeof asked.at === 'string' && asked.at !== w.sentDay);
+                    if (changed) Object.assign(w, sentOf());
+                    return route.fulfill(reply(200, { sent: changed ? [w.id] : [], ...(dayed ? { task: w.id, phase: 'sent', sentAt: w.sentAt, sentDay: w.sentDay } : {}) }));
                 }
-                delete w.phase; delete w.sentAt;
+                delete w.phase; delete w.sentAt; delete w.sentDay;
                 return route.fulfill(reply(200, { unsent: [w.id] }));
             }
             const key = decodeURIComponent(write[1].slice('group/'.length));
@@ -182,8 +195,8 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
                 return route.fulfill(reply(200, { unsent: back.map(w => w.id) }));
             }
             const marked = bridge.waiting.filter(w => inPlace(w) && sendable(w));
-            for (const w of marked) Object.assign(w, { phase: 'sent', sentAt: at });
-            return route.fulfill(reply(200, bridge.groupSentSilent ? {} : { sent: marked.map(w => w.id) }));
+            for (const w of marked) Object.assign(w, sentOf());
+            return route.fulfill(reply(200, bridge.groupSentSilent ? {} : { sent: marked.map(w => w.id), ...(typeof asked.at === 'string' ? { sentDay: asked.at } : {}) }));
         }
         return route.fulfill({ status: 404, headers: cors, body: '' });
     });
@@ -2320,6 +2333,111 @@ test.describe('Awaiting action written through the bridge', () => {
         // The bridge's next status agrees: the row stays where it went.
         await nextStatus(bridge);
         await expect(todoHead(page)).toHaveText(/To do · 31/);
+    });
+
+    test('the day it went out (spec 149): asked at Sent, today by default, never one to come; changed at a sent item, Undo', async ({ page }) => {
+        // A fixed clock at mid-morning (ZAKLAD §10): the days and their texts never shift around midnight.
+        const now = new Date();
+        const clock = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 30);
+        await page.clock.setFixedTime(clock);
+        const dayOf = (back: number) => {
+            const d = new Date(clock.getFullYear(), clock.getMonth(), clock.getDate() - back, 12);
+            return { iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+                short: `${d.getMonth() + 1}/${d.getDate()}`, year: d.getFullYear() };
+        };
+        const today = dayOf(0);
+        const earlier = dayOf(4);
+        const later = dayOf(9);
+        const shown = (d: { short: string; year: number; iso: string }) => (d.year === today.year ? d.short : `${d.short}/${d.year}`);
+        await fastReconnect(page);
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent', 'waiting.sentDay']));
+        const ov = await openOverview(page);
+        const letter = await openLetter(page);
+        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        const pop = page.locator('.sent-day-pop');
+        await expect(pop).toBeVisible();
+        await expect(pop.locator('.sent-day-pop__title')).toHaveText('Day it went out');
+        const input = pop.locator('.sent-day-pop__input');
+        await expect(input).toHaveValue(today.iso);
+        await expect(input).toHaveAttribute('max', today.iso);
+        await expect(input).toBeFocused();
+        // Cancel writes nothing; the button works again.
+        await pop.locator('.sent-day-pop__cancel').click();
+        await expect(pop).toHaveCount(0);
+        expect(bridge.writes).toEqual([]);
+        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        // A day still to come: said, nothing written.
+        await input.fill(dayOf(-1).iso);
+        await pop.locator('.sent-day-pop__save').click();
+        await expect(pop.locator('.sent-day-pop__error')).toHaveText('That day is still to come.');
+        expect(bridge.writes).toEqual([]);
+        // An earlier day, Enter records it: the day in the body, in the toast and at the row.
+        await input.fill(earlier.iso);
+        await input.press('Enter');
+        await expect(pop).toHaveCount(0);
+        const toast = page.locator('.toast[data-kind="waiting-sent"]');
+        await expect(toast).toContainText(`Recorded as sent on ${shown(earlier)}`);
+        await expect.poll(() => bridge.writes.map(w => [w.path, w.body])).toEqual([['waiting/T0018', `{"do":"sent","at":"${earlier.iso}"}`]]);
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 6/);
+        await sentHead(page).click();
+        await placeHead(page, 'sent', 'MěÚ Vzorov').locator('.research-overview__waiting-group').click();
+        const sentItem = ov.locator('.research-overview__phase[data-phase="sent"] .research-overview__waiting-item', { hasText: 'Napsat matrice o zápis 1' });
+        await expect(sentItem.locator('.research-overview__waiting-sent')).toHaveText(`sent ${shown(earlier)}`);
+        await expect(sentItem.locator('.research-overview__waiting-age')).toHaveText('4 days ago');
+
+        // The day changed afterwards (the item stays open where it went): the popover has the day it was sent;
+        // the toast says the new one; Undo writes the one before.
+        await expect(sentItem.locator('.research-overview__waiting-action')).toHaveText(['Answer, opens in the research', 'Chat, AI, opens in the researchAI', 'Add a file, opens in the research', 'Query text, opens in the research', 'Back to To do', 'Change the day it was sent']);
+        await sentItem.locator('.research-overview__waiting-action[data-action="sent-day"]').click();
+        await expect(pop.locator('.sent-day-pop__title')).toHaveText('Change the day it was sent');
+        await expect(input).toHaveValue(earlier.iso);
+        await input.fill(later.iso);
+        await pop.locator('.sent-day-pop__save').click();
+        // Toasts take turns: this one comes once the one of the Sent is gone (6 s).
+        await expect(toast).toContainText(`Day sent changed to ${shown(later)}`, { timeout: 10000 });
+        await expect.poll(() => bridge.writes.length).toBe(2);
+        expect(bridge.writes[1]).toMatchObject({ path: 'waiting/T0018', body: `{"do":"sent","at":"${later.iso}"}` });
+        await expect(sentItem.locator('.research-overview__waiting-sent')).toHaveText(`sent ${shown(later)}`);
+        await toast.locator('.toast-action', { hasText: 'Undo' }).click();
+        await expect.poll(() => bridge.writes.length).toBe(3);
+        expect(bridge.writes[2]).toMatchObject({ path: 'waiting/T0018', body: `{"do":"sent","at":"${earlier.iso}"}` });
+        await expect(toast).toContainText(`Day sent changed to ${shown(earlier)}`);
+        await expect(sentItem.locator('.research-overview__waiting-sent')).toHaveText(`sent ${shown(earlier)}`);
+        // Still awaiting a reply: a change of the day never moves it.
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 6/);
+    });
+
+    test('the day of a place\'s Sent (spec 149): one day for all of them', async ({ page }) => {
+        const now = new Date();
+        const clock = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 30);
+        await page.clock.setFixedTime(clock);
+        const d = new Date(clock.getFullYear(), clock.getMonth(), clock.getDate() - 2, 12);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent', 'waiting.sentDay']));
+        await openOverview(page);
+        await placeHead(page, 'todo', 'MěÚ Vzorov').locator('.research-overview__waiting-groupwrite[data-action="group-sent"]').click();
+        const pop = page.locator('.sent-day-pop');
+        await expect(pop.locator('.sent-day-pop__note')).toHaveText(/^One day for \d+ items$/);
+        await pop.locator('.sent-day-pop__input').fill(iso);
+        await pop.locator('.sent-day-pop__save').click();
+        await expect.poll(() => bridge.writes.map(w => w.body)).toEqual([`{"do":"sent","at":"${iso}"}`]);
+        expect(bridge.writes[0].path).toMatch(/^group\//);
+        await expect(page.locator('.toast[data-kind="waiting-sent"]')).toContainText(`recorded as sent on ${d.getMonth() + 1}/${d.getDate()}`);
+    });
+
+    test('an older research without waiting.sentDay (spec 149 K2.2): Sent writes at once, no day asked, no change of the day', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
+        const ov = await openOverview(page);
+        const letter = await openLetter(page);
+        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        await expect.poll(() => bridge.writes.map(w => w.body)).toEqual(['{"do":"sent"}']);
+        await expect(page.locator('.sent-day-pop')).toHaveCount(0);
+        await sentHead(page).click();
+        await placeHead(page, 'sent', 'MěÚ Vzorov').locator('.research-overview__waiting-group').click();
+        const sentItem = ov.locator('.research-overview__phase[data-phase="sent"] .research-overview__waiting-item', { hasText: 'Odeslaný dopis 1' });
+        await sentItem.locator('.research-overview__waiting-row').click();
+        await expect(sentItem.locator('.research-overview__waiting-action[data-action="unsent"]')).toBeVisible();
+        await expect(sentItem.locator('.research-overview__waiting-action[data-action="sent-day"]')).toHaveCount(0);
     });
 
     test('a place: Sent for its items to do and the text of all its queries with Copy, folded, the fold untouched', async ({ page }) => {

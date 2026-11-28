@@ -1097,7 +1097,7 @@ function nearDay(offset: -1 | 1, lang: Language): string {
 /**
  * When an item went back last or can go back again (spec 089 §6): "18:40"
  * today, "yesterday 18:40", "tomorrow 9:12", any other day with its day and
- * month ("22. 11. 18:40", as waitingSentDay). '' for a time not given.
+ * month ("22. 11. 18:40", as waitingDayShort). '' for a time not given.
  */
 export function retryWhenText(iso: string | undefined, now: number, lang: Language): string {
     const ts = iso ? Date.parse(iso) : NaN;

@@ -26,6 +26,11 @@ import { sanitizeAuditPreview, type AuditPreview } from './research-audit.js';
 
 /** The bridge takes "sent" / "unsent" for an item and for a place. */
 export const WAITING_SENT_FEATURE = 'waiting.sent';
+/**
+ * The bridge takes the day a request really went out (`{do: "sent", at: "YYYY-MM-DD"}`, an item's or a place's) and
+ * a sent item's day changed afterwards; its items say `sentDay` (spec 149). Without it: sent = today, as before.
+ */
+export const WAITING_SENT_DAY_FEATURE = 'waiting.sentDay';
 /** The bridge gives the text of all a place's queries. */
 export const WAITING_NOTE_FEATURE = 'waiting.note';
 /** The bridge takes the person's answer to a task (`POST <token>/waiting/<T…>` `{do: "answer"}`, research 1.27, spec 048). */
@@ -36,6 +41,8 @@ export { WAITING_RETRY_FEATURE };
 /** What the bridge takes from "Awaiting action" (each false: the task link, when the research offers it). */
 export interface WaitingWrites {
     sent: boolean;
+    /** The day of a Sent is chosen, and a sent item's day changed (`waiting.sentDay`, spec 149). */
+    sentDay: boolean;
     note: boolean;
     file: boolean;
     /** The person's answer to a task (`waiting.answer`). */
@@ -52,6 +59,7 @@ export function waitingWrites(env: {
 }): WaitingWrites {
     return {
         sent: !!env.features?.includes(WAITING_SENT_FEATURE),
+        sentDay: !!env.features?.includes(WAITING_SENT_FEATURE) && !!env.features?.includes(WAITING_SENT_DAY_FEATURE),
         note: !!env.features?.includes(WAITING_NOTE_FEATURE),
         file: env.accepts?.mediaTask === true,
         answer: !!env.features?.includes(WAITING_ANSWER_FEATURE),
@@ -61,7 +69,7 @@ export function waitingWrites(env: {
 }
 
 /** No writes at all (no bridge answering here). */
-export const NO_WAITING_WRITES: WaitingWrites = { sent: false, note: false, file: false, answer: false, images: false, retry: false };
+export const NO_WAITING_WRITES: WaitingWrites = { sent: false, sentDay: false, note: false, file: false, answer: false, images: false, retry: false };
 
 /** Kinds the bridge marks sent (anything else: 409 `waiting.not-sendable`). */
 const SENDABLE_KINDS: ReadonlySet<string> = new Set(['letter', 'family', 'other']);
@@ -135,6 +143,8 @@ export type WaitingWriteCode =
     | 'none' | 'not-sendable' | 'no-file' | 'locked' | 'app-only' | 'bad-body' | 'busy' | 'failed' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown'
     // Held until something is settled in the research (sealed elsewhere, files not downloaded, its disk full; 017 U7).
     | 'held'
+    // The day of a Sent the bridge does not take (400 `waiting.bad-date`: not a day of the calendar, or one still to come; spec 149).
+    | 'bad-date'
     | 'changed' | 'no-answer' | 'image-exists' | 'image-unwanted' | 'image-unknown' | 'image-same' | 'pdf' | 'no-images'
     // A task's finding (spec 109): none to fix or keep any more (409 `audit.none`); a task the fix touched changed since (409 `audit.changed`, unfix).
     | 'audit-none' | 'audit-changed';
@@ -183,6 +193,8 @@ export interface WaitingSentDone {
     /** An item's answer: the task, and the phase it is in now (both or neither). */
     task?: string;
     phase?: WaitingPhase;
+    /** The day it is recorded as sent ("2026-11-24"; `waiting.sentDay`; absent: not said). */
+    sentDay?: string;
 }
 
 export type WaitingSentResult = WaitingSentDone | WaitingWriteRefused;
@@ -276,7 +288,7 @@ function refusal(status: number, body: unknown, retryAfter: string | null | unde
     if (status === 415 && code === 'waiting.pdf') return out('pdf');
     if (status === 423) return out('locked');
     if (status === 403) return out('app-only');
-    if (status === 400) return out('bad-body');
+    if (status === 400) return out(code === 'waiting.bad-date' ? 'bad-date' : 'bad-body');
     if (status === 413) return out('too-large');
     if (status === 415) return out('type');
     if (status === 503) return out('busy');
@@ -299,7 +311,11 @@ export function waitingSentReply(status: number, body: unknown, retryAfter?: str
         const task = researchTaskRef(r.task);
         const phase = r.phase === 'todo' || r.phase === 'sent' ? r.phase : null;
         const parent = isResearchHead(r.parent);
-        return { ok: true, sent: taskList(moved), head: isResearchHead(r.head) ?? '', ...(parent ? { parent } : {}), ...(task && phase ? { task, phase } : {}) };
+        const sentDay = calendarDay(r.sentDay);
+        return {
+            ok: true, sent: taskList(moved), head: isResearchHead(r.head) ?? '', ...(parent ? { parent } : {}), ...(task && phase ? { task, phase } : {}),
+            ...(sentDay ? { sentDay } : {}),
+        };
     }
     return refusal(status, body, retryAfter);
 }
@@ -583,22 +599,32 @@ function bridgeRequest<R>(key: string, url: string, init: { method: 'GET' | 'POS
 
 const JSON_TEXT = { 'Content-Type': 'text/plain; charset=utf-8' };
 
-/** Mark a task sent, or back to do (`POST <base>/waiting/<T…>`). */
-export function postWaitingSent(base: string, task: string, what: 'sent' | 'unsent', opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
+/**
+ * Mark a task sent, or back to do (`POST <base>/waiting/<T…>`). `at` (only with `waiting.sentDay`, only for sent):
+ * the day it went out ("2026-11-24"); at a sent task another day changes its day. A malformed day: not sent.
+ */
+export function postWaitingSent(base: string, task: string, what: 'sent' | 'unsent', opts: { timeoutMs?: number; at?: string } = {}): Promise<WaitingSentResult> {
     const ref = researchTaskRef(task);
     if (!ref || ref !== task || (what !== 'sent' && what !== 'unsent')) return Promise.resolve(notSent());
+    if (opts.at !== undefined && (what !== 'sent' || !calendarDay(opts.at))) return Promise.resolve(notSent());
     const reply = what === 'sent' ? waitingSentReply
         : (status: number, body: unknown, retryAfter: string | null) => waitingSentReply(status, body, retryAfter, 'either');
-    return bridgeRequest(`${base}|POST|waiting/${ref}|${what}`, `${base}/waiting/${encodeURIComponent(ref)}`,
-        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: what }) }, reply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+    return bridgeRequest(`${base}|POST|waiting/${ref}|${what}${opts.at ? `|${opts.at}` : ''}`, `${base}/waiting/${encodeURIComponent(ref)}`,
+        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify(opts.at ? { do: what, at: opts.at } : { do: what }) }, reply,
+        opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
 }
 
-/** Mark a whole place sent (`POST <base>/group/<key>`, the key encoded); the answer's `sent` lists the tasks it marked. */
-export function postGroupSent(base: string, key: string, opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
+/**
+ * Mark a whole place sent (`POST <base>/group/<key>`, the key encoded); the answer's `sent` lists the tasks it marked.
+ * `at` (`waiting.sentDay`): the one day all of them went out.
+ */
+export function postGroupSent(base: string, key: string, opts: { timeoutMs?: number; at?: string } = {}): Promise<WaitingSentResult> {
     const path = waitingGroupPath(key);
     if (!path) return Promise.resolve(notSent());
-    return bridgeRequest(`${base}|POST|group/${path}|sent`, `${base}/group/${path}`,
-        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: 'sent' }) }, waitingSentReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+    if (opts.at !== undefined && !calendarDay(opts.at)) return Promise.resolve(notSent());
+    return bridgeRequest(`${base}|POST|group/${path}|sent${opts.at ? `|${opts.at}` : ''}`, `${base}/group/${path}`,
+        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify(opts.at ? { do: 'sent', at: opts.at } : { do: 'sent' }) }, waitingSentReply,
+        opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
 }
 
 /**
@@ -967,6 +993,8 @@ export interface WaitingPending {
     phase: WaitingPhase;
     /** When it was marked sent (ISO; phase 'sent'). */
     sentAt?: string;
+    /** The day it was marked sent for ("2026-11-24"; phase 'sent', a day chosen or changed). */
+    sentDay?: string;
     gone?: boolean;
     until: number;
 }
@@ -986,13 +1014,15 @@ export function applyWaitingPending<T extends LiveWaiting>(items: readonly T[], 
         }
         if (p.gone) continue;
         if (p.phase === waitingPhase(w)) {
-            out.push(w);
+            // A sent item's day changed here: shown at once.
+            out.push(p.phase === 'sent' && p.sentDay && p.sentDay !== w.sentDay ? { ...w, sentDay: p.sentDay } : w);
         } else if (p.phase === 'sent') {
-            out.push({ ...w, phase: 'sent', ...(p.sentAt ? { sentAt: p.sentAt } : {}) });
+            out.push({ ...w, phase: 'sent', ...(p.sentAt ? { sentAt: p.sentAt } : {}), ...(p.sentDay ? { sentDay: p.sentDay } : {}) });
         } else {
             const back = { ...w };
             delete back.phase;
             delete back.sentAt;
+            delete back.sentDay;
             out.push(back);
         }
     }
@@ -1007,11 +1037,89 @@ export function settleWaitingPending(pending: Map<string, WaitingPending>, items
     for (const [id, p] of [...pending]) {
         if (p.until === Infinity) continue;
         const w = items.find(x => x.id === id);
-        if (p.until < now || !w || (!p.gone && waitingPhase(w) === p.phase)) pending.delete(id);
+        // A day changed here holds until the research says that day (an older one says none: the phase is enough).
+        const agrees = !!w && !p.gone && waitingPhase(w) === p.phase && (p.phase !== 'sent' || !p.sentDay || !w.sentDay || w.sentDay === p.sentDay);
+        if (p.until < now || !w || agrees) pending.delete(id);
     }
 }
 
-/** The day a row was marked sent, short ("11. 10.", "10/11"), in the UI language. */
-export function waitingSentDay(ts: number, lang: string): string {
-    return new Date(ts).toLocaleDateString(lang, { day: 'numeric', month: 'numeric' });
+
+// ==================== THE DAY OF A SENT (spec 149) ====================
+
+/** A day of the calendar "YYYY-MM-DD" (ASCII digits, a real date), else ''. */
+export function calendarDay(v: unknown): string {
+    if (typeof v !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(v)) return '';
+    const t = Date.parse(`${v}T12:00:00Z`);
+    return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === v ? v : '';
+}
+
+/** A moment's day on this device's calendar ("2026-11-24"). */
+export function localDayOf(ms: number): string {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** How the research keeps a day given (not a moment): its noon in UTC. */
+const GIVEN_DAY = 'T12:00:00.000Z';
+
+/**
+ * The day an item was sent: the research's `sentDay` when it says it, else the day of its `sentAt` as the research
+ * reads it (a day given is kept as its noon UTC: that day; a moment: its day on this calendar); '' when none.
+ */
+export function waitingSentDayOf(w: { sentDay?: string; sentAt?: string }): string {
+    const said = calendarDay(w.sentDay);
+    if (said) return said;
+    const at = w.sentAt ?? '';
+    if (calendarDay(at)) return at;
+    if (at.endsWith(GIVEN_DAY) && calendarDay(at.slice(0, 10))) return at.slice(0, 10);
+    const ms = Date.parse(at);
+    return Number.isFinite(ms) ? localDayOf(ms) : '';
+}
+
+/** Whole days from one day to another by the calendar (never by 24 hours of a clock); NaN when either is no day. */
+export function calendarDaysBetween(from: string, to: string): number {
+    const n = (d: string): number => {
+        const v = calendarDay(d);
+        return v ? Date.UTC(Number(v.slice(0, 4)), Number(v.slice(5, 7)) - 1, Number(v.slice(8, 10))) / 86_400_000 : NaN;
+    };
+    return n(to) - n(from);
+}
+
+/** A day "YYYY-MM-DD" as a date of this calendar (its noon: never the day beside it). */
+export function dateOfDay(day: string): Date | null {
+    const v = calendarDay(day);
+    return v ? new Date(Number(v.slice(0, 4)), Number(v.slice(5, 7)) - 1, Number(v.slice(8, 10)), 12) : null;
+}
+
+/** A day short ("24. 11.", "11/24"), in the UI language; '' when it is no day. */
+export function waitingDayShort(day: string, lang: string): string {
+    const d = dateOfDay(day);
+    return d ? d.toLocaleDateString(lang, { day: 'numeric', month: 'numeric' }) : '';
+}
+
+/** A day whole ("24. 11. 2026", "11/24/2026"), in the UI language; '' when it is no day. */
+export function waitingDayLong(day: string, lang: string): string {
+    const d = dateOfDay(day);
+    return d ? d.toLocaleDateString(lang, { day: 'numeric', month: 'numeric', year: 'numeric' }) : '';
+}
+
+/** How many days ago a day was ("3 days ago", "yesterday", "today"), by the calendar, in the UI language. */
+export function waitingDayAgo(day: string, now: number, lang: string): string {
+    const days = Math.max(0, calendarDaysBetween(day, localDayOf(now)));
+    if (!Number.isFinite(days)) return '';
+    try {
+        return new Intl.RelativeTimeFormat(lang, { numeric: 'auto' }).format(-days, 'day');
+    } catch {
+        return `${days}`;
+    }
+}
+
+/** A day the bridge takes for a Sent: a day of the calendar, not after today (this device's calendar). */
+export function sentDayAllowed(day: string, now: number): boolean {
+    return !!calendarDay(day) && calendarDaysBetween(day, localDayOf(now)) >= 0;
+}
+
+/** A day as a toast or a row says it: short in this year ("24. 11."), whole in another ("24. 11. 2025"). */
+export function waitingDayShown(day: string, now: number, lang: string): string {
+    return day.slice(0, 4) === localDayOf(now).slice(0, 4) ? waitingDayShort(day, lang) : waitingDayLong(day, lang);
 }

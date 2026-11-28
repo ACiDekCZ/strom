@@ -50,7 +50,7 @@ describe('what the status says (research 1.27)', () => {
         expect(sanitizeAccepts({ media: { taskImages: true } })?.mediaTaskImages).toBe(true);
         for (const v of ['true', 1, {}, false, undefined]) expect(sanitizeAccepts({ media: { taskImages: v } })).not.toHaveProperty('mediaTaskImages');
         expect(waitingWrites({ features: [WAITING_ANSWER_FEATURE], accepts: sanitizeAccepts({ media: { task: true, taskImages: true } }) }))
-            .toEqual({ sent: false, note: false, file: true, answer: true, images: true, retry: false });
+            .toEqual({ sent: false, sentDay: false, note: false, file: true, answer: true, images: true, retry: false });
         expect(waitingWrites({ features: ['waiting.sent'], accepts: sanitizeAccepts({ media: { task: true } }) })).toMatchObject({ answer: false, images: false });
     });
 

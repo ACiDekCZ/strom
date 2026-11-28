@@ -16,7 +16,8 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { LiveWaiting, inShowcase, researchDeviceAllows, researchTaskRef } from '../research-link.js';
 import {
     WaitingWrites, WaitingPending, WaitingSentResult, WaitingFileResult, WaitingAnswerResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
-    waitingWrites, waitingGroupSendable, waitingTaskIds, waitingFileWritable, waitingWrittenPhase, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
+    waitingWrites, waitingGroupSendable, waitingTaskIds, waitingFileWritable, waitingWrittenPhase, applyWaitingPending, settleWaitingPending, waitingFileTaken,
+    calendarDay, localDayOf, waitingDayShown, waitingSentDayOf,
     postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile, answerWaiting, TaskImageResult, uploadTaskImage,
     retryWaiting, retryGroup, WaitingRetryResult, GroupRetryResult,
 } from '../research-waiting-write.js';
@@ -34,6 +35,7 @@ import { isPicking, openFilePicker, takePickOrigin } from './file-pick.js';
 import { formatBytes } from './attachments-ui.js';
 import { RowNote, RowRefusal, WAITING_ROWS_SCOPE, WaitingRowNotes } from './waiting-row-notes.js';
 import { overviewInWindow } from '../windows/overview-window.js';
+import { openSentDayPopover } from './waiting-sent-day.js';
 
 const NOTE_ID = 'waiting-note-modal';
 /** "All queries' text": how long its reading may take (§1.5, §10.3). */
@@ -117,6 +119,7 @@ function refusedText(r: WaitingWriteRefused): string {
         case 'not-sendable': return W.notSendable;
         case 'app-only': return W.appOnly;
         case 'bad-body': return W.badBody;
+        case 'bad-date': return W.badDate;
         case 'failed': return W.writeFailed;
         // The research's own sentence says what to do there (017 U7).
         case 'held': return r.held?.said || W.failed;
@@ -308,9 +311,11 @@ export const researchWaitingWriteMethods = uiModule({
                 else if (p) st.pending.set(id, { ...p, until });
             }
             if (said) {
-                const at = phase === 'sent' ? st.pending.get(ids[0])?.sentAt : undefined;
+                const first = phase === 'sent' ? st.pending.get(ids[0]) : undefined;
+                const at = first?.sentAt;
+                const day = first?.sentDay;
                 for (const id of said) {
-                    if (!ids.includes(id) && st.raw.some(w => w.id === id)) st.pending.set(id, { phase, ...(at ? { sentAt: at } : {}), until });
+                    if (!ids.includes(id) && st.raw.some(w => w.id === id)) st.pending.set(id, { phase, ...(at ? { sentAt: at } : {}), ...(day ? { sentDay: day } : {}), until });
                 }
             }
         } else if (result.code === 'none') {
@@ -330,9 +335,10 @@ export const researchWaitingWriteMethods = uiModule({
      * end until the research confirms (§7); "Undo" for a few seconds. Refused: the row back, its sentence and
      * "Try again" in it (a toast only when the row is not seen).
      */
-    async markWaitingSent(s: LiveSession, w: LiveWaiting): Promise<void> {
+    async markWaitingSent(s: LiveSession, w: LiveWaiting, day?: string): Promise<void> {
         const task = researchTaskRef(w.id);
-        if (!task || !this.liveWaitingWrites(s).sent) return;
+        const writes = this.liveWaitingWrites(s);
+        if (!task || !writes.sent) return;
         const st = writeState(s);
         // A second click while it is written sends nothing more.
         if (st.pending.get(w.id)?.until === Infinity) return;
@@ -340,22 +346,26 @@ export const researchWaitingWriteMethods = uiModule({
         const was = waitingPhase(st.raw.find(x => x.id === w.id) ?? w);
         const fromRow = focusInRow(w.id);
         const now = Date.now();
-        st.pending.set(w.id, { phase: 'sent', sentAt: new Date(now).toISOString(), until: Infinity });
+        // A day other than today (spec 149): only where the bridge takes it; today goes as before (the moment kept).
+        const at = writes.sentDay && day && day !== localDayOf(now) ? day : undefined;
+        const shownDay = at ?? localDayOf(now);
+        st.pending.set(w.id, { phase: 'sent', sentAt: at ? `${at}T12:00:00.000Z` : new Date(now).toISOString(), sentDay: shownDay, until: Infinity });
         this.startWaitingRows(s, [w.id]);
         this.reshowLiveWaiting(s);
         const before = await this.waitingHeadBeforeWrite(s);
-        const result = await postWaitingSent(s.bridge.base, task, 'sent');
+        const result = await postWaitingSent(s.bridge.base, task, 'sent', at ? { at } : {});
         this.takeWaitingWriteHead(s, before, result);
         // The answer says where the task is now (already sent: `sent: []`, phase sent): the row follows it.
         const phase = waitingWrittenPhase(result, task, 'sent');
         if (phase !== 'sent') st.pending.set(w.id, { phase, until: Infinity });
         const refused = !result.ok && result.code !== 'none' ? result : null;
-        this.endWaitingRows(s, [w.id], refused ? this.waitingRowRefusal(refused, was, () => { void this.markWaitingSent(s, w); }) : null);
+        this.endWaitingRows(s, [w.id], refused ? this.waitingRowRefusal(refused, was, () => { void this.markWaitingSent(s, w, day); }) : null);
         const ok = this.settleWaitingWrite(s, [w.id], phase, result, back);
         if (!stillFollowing(s)) return;
         const W = strings.live.waitingWrite;
         if (ok && phase === 'sent') {
-            this.showToast(W.sentToast(waitingSentDay(now, getCurrentLanguage())), 6000, {
+            // The toast says the day the research recorded (its answer's), else the one asked.
+            this.showToast(W.sentToast(waitingDayShown((result.ok && result.sentDay) || shownDay, now, getCurrentLanguage())), 6000, {
                 kind: 'waiting-sent',
                 // Undo works in the toast (4d): "Undoing…" and its end there.
                 action: { label: W.undo, run: () => this.markWaitingUnsent(s, w.id, { inToast: true }),
@@ -364,6 +374,51 @@ export const researchWaitingWriteMethods = uiModule({
         } else if (refused) {
             this.sayWaitingRowRefused(w.id, refused, fromRow);
         }
+    },
+
+    /**
+     * "Change the day it was sent" (spec 149 K2.1): a sent task's day written through the bridge (`waiting.sentDay`),
+     * the row's day at once, saying "saving"; the toast says the day recorded and Undo writes the day before back.
+     */
+    async changeWaitingSentDay(s: LiveSession, w: LiveWaiting, day: string, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
+        const task = researchTaskRef(w.id);
+        if (!task || !this.liveWaitingWrites(s).sentDay || !calendarDay(day)) return undefined;
+        const st = writeState(s);
+        if (st.pending.get(w.id)?.until === Infinity) return undefined;
+        const shown = s.waiting.find(x => x.id === w.id) ?? w;
+        if (waitingPhase(shown) !== 'sent') return undefined;
+        const previous = waitingSentDayOf(shown);
+        if (previous === day) return undefined;
+        const back = new Map([[w.id, st.pending.get(w.id)]]);
+        const fromRow = focusInRow(w.id);
+        st.pending.set(w.id, { phase: 'sent', sentAt: `${day}T12:00:00.000Z`, sentDay: day, until: Infinity });
+        this.startWaitingRows(s, [w.id]);
+        this.reshowLiveWaiting(s);
+        const before = await this.waitingHeadBeforeWrite(s);
+        const result = await postWaitingSent(s.bridge.base, task, 'sent', { at: day });
+        this.takeWaitingWriteHead(s, before, result);
+        const phase = waitingWrittenPhase(result, task, 'sent');
+        if (phase !== 'sent') st.pending.set(w.id, { phase, until: Infinity });
+        const refused = !result.ok && result.code !== 'none' ? result : null;
+        this.endWaitingRows(s, [w.id], refused && !opts.inToast
+            ? this.waitingRowRefusal(refused, 'sent', () => { void this.changeWaitingSentDay(s, w, day); }) : null);
+        const ok = this.settleWaitingWrite(s, [w.id], phase, result, back);
+        if (!stillFollowing(s)) return undefined;
+        const W = strings.live.waitingWrite;
+        const now = Date.now();
+        if (ok && phase === 'sent') {
+            const text = W.sentDayChangedToast(waitingDayShown((result.ok && result.sentDay) || day, now, getCurrentLanguage()));
+            if (opts.inToast) return { ok: true, text };
+            this.showToast(text, 6000, {
+                kind: 'waiting-sent',
+                ...(previous ? { action: { label: W.undo, run: () => this.changeWaitingSentDay(s, w, previous, { inToast: true }),
+                    work: { label: strings.busy.reverting, ...(w.what ? { sub: w.what } : {}) } } } : {}),
+            });
+        } else if (refused) {
+            if (opts.inToast) return { ok: false, text: refusedText(refused), whole: true };
+            this.sayWaitingRowRefused(w.id, refused, fromRow);
+        }
+        return undefined;
     },
 
     /** A refusal as its row says it: the research's sentence, "Try again" where another try may mend it, the seal's way. */
@@ -413,8 +468,9 @@ export const researchWaitingWriteMethods = uiModule({
     },
 
     /** "Sent" for a whole place: its items to do that offer it move at once, saying "saving"; the research writes the place. */
-    async markWaitingGroupSent(s: LiveSession, key: string): Promise<void> {
-        if (!this.liveWaitingWrites(s).sent) return;
+    async markWaitingGroupSent(s: LiveSession, key: string, day?: string): Promise<void> {
+        const writes = this.liveWaitingWrites(s);
+        if (!writes.sent) return;
         const st = writeState(s);
         if (st.groups.has(key)) return;
         const items = waitingGroupSendable(s.waiting.filter(w => w.group?.key === key));
@@ -423,20 +479,23 @@ export const researchWaitingWriteMethods = uiModule({
         const back = new Map(ids.map(id => [id, st.pending.get(id)]));
         const fromRow = ids.some(focusInRow) || !!document.activeElement?.closest('.research-overview__waiting-groupwrite');
         const now = Date.now();
-        for (const id of ids) st.pending.set(id, { phase: 'sent', sentAt: new Date(now).toISOString(), until: Infinity });
+        // One day for all of them (spec 149 K1.6); today goes as before.
+        const at = writes.sentDay && day && day !== localDayOf(now) ? day : undefined;
+        const shownDay = at ?? localDayOf(now);
+        for (const id of ids) st.pending.set(id, { phase: 'sent', sentAt: at ? `${at}T12:00:00.000Z` : new Date(now).toISOString(), sentDay: shownDay, until: Infinity });
         st.groups.add(key);
         this.startWaitingRows(s, ids);
         this.reshowLiveWaiting(s);
         let result: WaitingSentResult;
         try {
             const before = await this.waitingHeadBeforeWrite(s);
-            result = await postGroupSent(s.bridge.base, key);
+            result = await postGroupSent(s.bridge.base, key, at ? { at } : {});
             this.takeWaitingWriteHead(s, before, result);
         } finally {
             st.groups.delete(key);
         }
         const refused = !result.ok && result.code !== 'none' ? result : null;
-        this.endWaitingRows(s, ids, refused ? this.waitingRowRefusal(refused, 'todo', () => { void this.markWaitingGroupSent(s, key); }) : null);
+        this.endWaitingRows(s, ids, refused ? this.waitingRowRefusal(refused, 'todo', () => { void this.markWaitingGroupSent(s, key, day); }) : null);
         const ok = this.settleWaitingWrite(s, ids, 'sent', result, back, true);
         if (!stillFollowing(s)) return;
         const W = strings.live.waitingWrite;
@@ -444,7 +503,7 @@ export const researchWaitingWriteMethods = uiModule({
             const n = result.sent.length || ids.length;
             // Undo puts back exactly what the bridge said it marked (an answer naming none: no Undo).
             const marked = [...result.sent];
-            this.showToast(W.groupSentToast(n, waitingSentDay(now, getCurrentLanguage())), 6000, {
+            this.showToast(W.groupSentToast(n, waitingDayShown(result.sentDay || shownDay, now, getCurrentLanguage())), 6000, {
                 kind: 'waiting-sent',
                 ...(marked.length > 0 ? { action: { label: W.undo, run: () => this.markWaitingGroupUnsent(s, key, marked),
                     work: { label: strings.busy.reverting, ...(items[0]?.group?.name ? { sub: items[0].group.name } : {}) } } } : {}),
@@ -895,6 +954,44 @@ export const researchWaitingWriteMethods = uiModule({
         this.takeWaitingWriteHead(s, before, result);
         if (result.ok && stillFollowing(s)) this.researchStatusAfterWrite(s);
         return result;
+    },
+
+    /**
+     * The day a request went out, asked under its button (spec 149 K2.1): `sent` an item's Sent, `group` a place's
+     * (one day for all), `change` a sent item's day. Without `waiting.sentDay` a Sent goes at once as before (today)
+     * and there is no change of the day. Cancelled: nothing is written, the button works again.
+     */
+    askWaitingSentDay(s: LiveSession, anchor: HTMLElement, ask: { kind: 'sent' | 'change'; w: LiveWaiting } | { kind: 'group'; key: string; n: number }): void {
+        const writes = this.liveWaitingWrites(s);
+        if (!writes.sent) return;
+        if (!writes.sentDay) {
+            if (ask.kind === 'sent') void this.markWaitingSent(s, ask.w);
+            else if (ask.kind === 'group') void this.markWaitingGroupSent(s, ask.key);
+            return;
+        }
+        const W = strings.live.waitingWrite;
+        const now = Date.now();
+        const shown = ask.kind === 'change' ? s.waiting.find(x => x.id === ask.w.id) ?? ask.w : null;
+        const day = (shown && waitingSentDayOf(shown)) || localDayOf(now);
+        const btn = anchor instanceof HTMLButtonElement ? anchor : null;
+        let saved = false;
+        openSentDayPopover({
+            anchor, day, now,
+            labels: {
+                title: ask.kind === 'change' ? W.changeSentDay : W.sentDayTitle,
+                ...(ask.kind === 'group' && ask.n > 1 ? { note: W.sentDayGroup(ask.n) } : {}),
+                save: W.sentDaySave, cancel: W.sentDayCancel, future: W.sentDayFuture,
+            },
+            onSave: (d) => {
+                saved = true;
+                if (ask.kind === 'sent') void this.markWaitingSent(s, ask.w, d);
+                else if (ask.kind === 'group') void this.markWaitingGroupSent(s, ask.key, d);
+                else void this.changeWaitingSentDay(s, ask.w, d);
+            },
+            onClose: () => {
+                if (!saved && btn) btn.disabled = false;
+            },
+        });
     },
 
     /** A write button (no research mark: it stays here); one click only. */

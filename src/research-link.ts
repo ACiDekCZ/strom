@@ -3298,6 +3298,8 @@ export interface LiveWaiting {
     phase?: 'sent';
     /** When it was sent (ISO; only with phase 'sent'). */
     sentAt?: string;
+    /** The day it was sent ("2026-11-24"; only with phase 'sent', from a research with `waiting.sentDay`): shown as it is (spec 149). */
+    sentDay?: string;
     /** The research's order (the list comes sorted; kept for after a filter). */
     order?: number;
     /** A task's priority, 1–5. */
@@ -5320,6 +5322,8 @@ function waitingGroupFields(r: Record<string, unknown>, kind: LiveWaiting['kind'
         out.phase = 'sent';
         const sentAt = cleanText(r.sentAt, 40);
         if (Number.isFinite(Date.parse(sentAt))) out.sentAt = sentAt;
+        const sentDay = importAskDay(r.sentDay);
+        if (sentDay) out.sentDay = sentDay;
     }
     const order = asCount(r.order);
     if (order !== null) out.order = order;

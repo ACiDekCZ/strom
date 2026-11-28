@@ -5,9 +5,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { setLanguage } from '../strings';
 import {
-    PHONE_WAITING_MAX, phoneWaitingActions, phoneWaitingKind, phoneWaitingSentMeta, phoneWaitingShown, waitingIsNew,
+    PHONE_WAITING_MAX, phoneWaitingActions, phoneWaitingKind, phoneWaitingRowData, phoneWaitingSentMeta, phoneWaitingShown, waitingIsNew,
 } from '../ui/phone-research-ui';
-import type { DeviceGlanceWaiting } from '../device/device-research-data';
+import type { DeviceGlance, DeviceGlanceWaiting } from '../device/device-research-data';
 
 const NOW = Date.parse('2026-11-25T14:40:00Z');
 
@@ -92,5 +92,26 @@ describe('a sent row', () => {
     it('says when, and the photos when any went', () => {
         expect(phoneWaitingSentMeta('14:41', 1)).toBe('Sent 14:41 · 1 photo');
         expect(phoneWaitingSentMeta('14:41', 0)).toBe('Sent 14:41');
+    });
+});
+
+describe('the day a request went out (spec 149)', () => {
+    const row = (it: DeviceGlanceWaiting, sentDay: boolean) => phoneWaitingRowData(it, undefined, {
+        g: { people: {} } as unknown as DeviceGlance, lang: 'en', now: NOW, seen: null, pc: 'PC', allows: () => true, sentDay,
+    });
+    const sent = (sentAt: string) => item('T1', { phase: 'sent', sentAt, do: ['sent', 'unsent', 'answer'] });
+
+    it('a day given is said as that day, never a clock or the day beside it; today\'s moment as its clock', () => {
+        expect(row(sent('2026-11-20T12:00:00.000Z'), true).meta).toBe('Sent 11/20');
+        // Today's moment, two hours before now (in any time zone).
+        const moment = row(sent(new Date(NOW - 2 * 3600_000).toISOString()), true).meta;
+        expect(moment).toMatch(/^Sent \d{1,2}:\d{2}/);
+        expect(moment).not.toMatch(/\d+\/\d+/);
+    });
+
+    it('Change the day after Back to To do, only with waiting.sentDay', () => {
+        expect(row(sent('2026-11-20T12:00:00.000Z'), true).acts.map(a => a.do)).toEqual(['answer', 'unsent', 'sent-day']);
+        expect(row(sent('2026-11-20T12:00:00.000Z'), false).acts.map(a => a.do)).toEqual(['answer', 'unsent']);
+        expect(row(item('T1', { do: ['sent', 'answer'] }), true).acts.map(a => a.do)).toEqual(['answer', 'sent']);
     });
 });

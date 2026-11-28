@@ -32,7 +32,9 @@ import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waitin
 import { computeEvidenceGaps } from '../stats.js';
 import { LiveBook, type LiveDirection, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, waitingGainOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchDeviceAllows, researchLinkMark, inShowcase, showcaseOff, researchNow } from '../research-link.js';
 import { bookById, bookHeadTitle, bookImagesText, bookMetaParts, bookOfferText, bookTitle, bookWebUrl, urgentBooks, urgentBooksShown } from '../research-books.js';
-import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
+import {
+    waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable, waitingSentDayOf, waitingDayShown, waitingDayAgo,
+} from '../research-waiting-write.js';
 import {
     FLAT_GROUP, PLACES_GROUP, WaitingFilter, WaitingGroupOpts, WaitingGroupRows, WaitingOrder, WaitingPhase, isSortedOrder, isTimeOrder, listedBook, sortWaiting, waitingOrdersFor, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
@@ -2188,8 +2190,9 @@ export const researchOverviewMethods = uiModule({
         if (key && writes.sent && phase === 'todo') {
             const sendable = waitingGroupSendable(s.waiting.filter(w => w.group?.key === key));
             if (sendable.length > 0) {
-                const btn = this.waitingWriteButton(W.groupSent, 'group-sent', () => { void this.markWaitingGroupSent(s, key); },
-                    'research-overview__waiting-groupwrite');
+                // The day they went out is asked first where the bridge takes it (spec 149 K1.6: one day for all).
+                const btn: HTMLButtonElement = this.waitingWriteButton(W.groupSent, 'group-sent',
+                    () => this.askWaitingSentDay(s, btn, { kind: 'group', key, n: sendable.length }), 'research-overview__waiting-groupwrite', !writes.sentDay);
                 btn.setAttribute('aria-label', W.groupSentLabel(name, sendable.length));
                 box.appendChild(btn);
             }
@@ -2356,12 +2359,15 @@ export const researchOverviewMethods = uiModule({
         const img = imagesState(w);
         if (img) meta.appendChild(imagesShortEl(itemKey(s, w.id), img));
         if (waitingPhase(w) === 'sent') {
-            const ts = Date.parse(w.sentAt || w.at);
-            if (Number.isFinite(ts)) {
-                meta.appendChild(el('span', 'research-overview__waiting-sent',
-                    L.waitingSentOn(new Date(ts).toLocaleDateString(getCurrentLanguage(), { day: 'numeric', month: 'numeric' }))));
+            // The day it went out as the research says it (`sentDay`), counted by the calendar (spec 149 K1.4).
+            const day = waitingSentDayOf(w.sentAt ? w : { sentAt: w.at });
+            if (day) {
+                const now = researchNow();
+                const lang = getCurrentLanguage();
+                const sent = meta.appendChild(el('span', 'research-overview__waiting-sent', L.waitingSentOn(waitingDayShown(day, now, lang))));
+                sent.dataset.day = day;
+                meta.appendChild(el('span', 'research-overview__waiting-age', waitingDayAgo(day, now, lang)));
             }
-            if (Number.isFinite(ts)) meta.appendChild(el('span', 'research-overview__waiting-age', waitingDaysAgo(ts, researchNow(), getCurrentLanguage())));
         } else if (!isTimeOrder(drawnAs.order)) {
             // A time order says it beside the row instead.
             const at = timeEl(w.at, 'ago');
@@ -2739,6 +2745,8 @@ export const researchOverviewMethods = uiModule({
         // With a finding shown, Discuss with the agent lives in its row (spec 109 §3), not again here.
         const audited = !!waitingAuditShown(s, w);
         const list: ItemAction[] = [];
+        // What the day of a Sent opens under: the actions' row (its ⋯), else the detail (asked at the click).
+        const actionsAnchor = (): HTMLElement => detail.querySelector<HTMLElement>('.waiting-more') ?? detail.querySelector<HTMLElement>('.waiting-actions') ?? detail;
         for (const v of views) {
             if (v.key === 'chat' && audited) continue;
             // Back to the agent through the bridge (spec 089 §1.2): no mark, its count on the button.
@@ -2771,7 +2779,7 @@ export const researchOverviewMethods = uiModule({
         for (const action of waitingTaskActions(w) ?? []) {
             if (!task || action === 'answer' || action === 'chat' || action === 'folder') continue;
             if (action === 'sent' && writes.sent && waitingSendable(w)) {
-                list.push({ key: 'sent', label: W.sent, write: true, run: () => { void this.markWaitingSent(s, w); } });
+                list.push({ key: 'sent', label: W.sent, write: true, run: () => this.askWaitingSentDay(s, actionsAnchor(), { kind: 'sent', w }) });
             } else if (action === 'file' && writes.file && waitingFileWritable(w)) {
                 list.push({ key: 'file', label: W.file, write: true, run: () => this.pickWaitingFile(s, w) });
             } else if (links) {
@@ -2781,6 +2789,8 @@ export const researchOverviewMethods = uiModule({
         }
         if (task && writes.sent && waitingUnsendable(w)) {
             list.push({ key: 'unsent', label: W.unsent, write: true, run: () => { void this.markWaitingUnsent(s, w.id); } });
+            // A sent request's day changed afterwards (spec 149 K2.1).
+            if (writes.sentDay) list.push({ key: 'sent-day', label: W.changeSentDay, write: true, run: () => this.askWaitingSentDay(s, actionsAnchor(), { kind: 'change', w }) });
         }
         // The showcase (spec 143 K4.1): the answer greyed, the website read; nothing else is written or asked.
         // "All images added" is an answer too.
@@ -3027,6 +3037,12 @@ export const researchOverviewMethods = uiModule({
         const appendUnsent = (): void => {
             if (task && writes.sent && waitingUnsendable(w)) {
                 host.appendChild(this.waitingWriteButton(W.unsent, 'unsent', () => { void this.markWaitingUnsent(s, w.id); }));
+                // A sent request's day changed afterwards (spec 149 K2.1).
+                if (writes.sentDay) {
+                    const day: HTMLButtonElement = this.waitingWriteButton(W.changeSentDay, 'sent-day',
+                        () => this.askWaitingSentDay(s, day, { kind: 'change', w }), undefined, false);
+                    host.appendChild(day);
+                }
             }
         };
         // With a finding shown, Discuss with the agent lives in its row (spec 109 §3), not again here.
@@ -3036,7 +3052,10 @@ export const researchOverviewMethods = uiModule({
             for (const action of offered) {
                 if (action === 'chat' && audited) continue;
                 if (action === 'sent' && writes.sent && waitingSendable(w)) {
-                    host.appendChild(this.waitingWriteButton(W.sent, 'sent', () => { void this.markWaitingSent(s, w); }));
+                    // The day it went out is asked first where the bridge takes it (spec 149 K2.1).
+                    const sent: HTMLButtonElement = this.waitingWriteButton(W.sent, 'sent',
+                        () => this.askWaitingSentDay(s, sent, { kind: 'sent', w }), undefined, !writes.sentDay);
+                    host.appendChild(sent);
                     continue;
                 }
                 if (action === 'file' && writes.file && waitingFileWritable(w)) {
