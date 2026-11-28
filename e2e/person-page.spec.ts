@@ -350,7 +350,7 @@ test.describe('desktop', () => {
         await expect(dlg.locator('[data-ppx-privacy="full"]')).toHaveAttribute('aria-checked', 'true');
     });
 
-    test('a story in draft is on the page and in the file, marked as a draft', async ({ page }) => {
+    test('a story in draft is on the page, marked as a draft, and in the file as the story', async ({ page }) => {
         await openApp(page);
         await seedFisek(page);
         await page.evaluate(() => window.Strom.UI.showPersonPage('karel' as never));
@@ -362,10 +362,11 @@ test.describe('desktop', () => {
         const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
         const html = readFileSync(await download.path(), 'utf-8');
         expect(html).toContain('Karel kept the farm in Capkov.');
-        expect(html).toContain('<span class="pp-draft-tag">Draft</span>');
+        // The file prints a draft as the story, untagged (spec 145 T8, Milan 28. 11.).
+        expect(html).not.toContain('<span class="pp-draft-tag">');
     });
 
-    test('a couple’s story is told on the person page and in the file, with its own heading', async ({ page }) => {
+    test('a couple’s story is told on the person page and in the file, with its own heading (a draft marked in the app only)', async ({ page }) => {
         await openApp(page);
         await seedFisek(page);
         await page.evaluate(() => {
@@ -383,7 +384,8 @@ test.describe('desktop', () => {
         const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
         const html = readFileSync(await download.path(), 'utf-8');
         expect(html).toContain('Jan and Marie ran the farm at number 12.');
-        expect(html).toContain('<h3 class="pp-ch-title">Jan Fisek and Marie Dvorakova <span class="pp-draft-tag">Draft</span></h3>');
+        expect(html).toContain('<h3 class="pp-ch-title">Jan Fisek and Marie Dvorakova</h3>');
+        expect(html).not.toContain('<span class="pp-draft-tag">');
     });
 
     test('the contents list the story and mark the last section at the end; years end at one edge; folded sources keep their header', async ({ page, browser }) => {
