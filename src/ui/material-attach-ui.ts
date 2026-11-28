@@ -35,9 +35,16 @@ import { type MaterialsContext, materialItemSha } from './materials-ui.js';
 import { uiModule } from './module.js';
 import { isBusy } from './busy.js';
 import { materialScopeSource } from './search-scope-ui.js';
+import { collectHouses, houseNamedTitle, houseTitle, type TreeHouse } from '../houses.js';
+import { houseMatches } from '../houses-view.js';
+import { houseFeature, sendHouseMaterial } from '../house-bridge.js';
+import { houseMaterialError } from './house-material-ui.js';
+import type { HouseId } from '../types.js';
 
-type Target = 'person' | 'event' | 'couple' | 'source';
+type Target = 'person' | 'event' | 'couple' | 'source' | 'house';
 const TARGETS: Target[] = ['person', 'event', 'couple', 'source'];
+/** A material of the research (I…): what a house takes (`POST /houses/material`, 1128). */
+const RESEARCH_FILE = /^I\d{1,9}$/;
 const PICKER_ID = 'mdlg-attach-picker';
 const ONE_PICKER_ID = 'mdlg-attach-one';
 const MAX_PEOPLE = 50;
@@ -219,10 +226,10 @@ export const materialAttachMethods = uiModule({
         const note = h('p', 'mdlg-note');
         note.hidden = true;
         dialog.body.append(seg, pane, note);
-        if (outside.length) {
-            dialog.body.appendChild(h('p', 'mdlg-text mdlg-attach-arch', one ? (mc?.agent ? m.archiveOnlyResearch : m.archiveOnly)
-                : (mc?.agent ? m.attachArchNResearch : m.attachArchN)(outside.length)));
-        }
+        // "Linking brings the file into the tree": not for a house (the research's write alone, the tree unchanged).
+        const archNote = outside.length ? h('p', 'mdlg-text mdlg-attach-arch', one ? (mc?.agent ? m.archiveOnlyResearch : m.archiveOnly)
+            : (mc?.agent ? m.attachArchNResearch : m.attachArchN)(outside.length)) : null;
+        if (archNote) dialog.body.appendChild(archNote);
         const off = outside.length > 0 && !bridgeUp;
         if (off) dialog.body.appendChild(h('p', 'mdlg-text mdlg-attach-off', m.actionsWhenRunning));
         // A tree followed live is read-only (1122 F): said at once with the way out, the choice kept meanwhile.
@@ -246,6 +253,11 @@ export const materialAttachMethods = uiModule({
         let target: Target = 'person';
         let chosenPeople: PersonId[] = [];
         let chosenPlace: MediaPlace | null = null;
+        let chosenHouse: TreeHouse | null = null;
+        // A house of the tree (1128): only while the bridge takes material of houses and every file is the research's.
+        const houseBridge = this.houseResearchBridge();
+        const houseOn = !!houseBridge && houseFeature(houseBridge.features, 'house.material') && files.every(i => !!i.file && RESEARCH_FILE.test(i.file.id));
+        const targets: Target[] = houseOn ? [...TARGETS, 'house'] : TARGETS;
         let multi: MultiPersonPicker | null = null;
         let single: PersonPicker | null = null;
         const cleanup = () => { multi?.destroy(); multi = null; single?.destroy(); single = null; };
@@ -256,16 +268,19 @@ export const materialAttachMethods = uiModule({
         dialog.close = () => { window.removeEventListener(LIVE_FOLLOW_EVENT, onFollow); cleanup(); close(); };
 
         const refresh = () => {
-            const n = target === 'person' ? chosenPeople.length : chosenPlace ? 1 : 0;
+            const n = target === 'person' ? chosenPeople.length : target === 'house' ? (chosenHouse ? 1 : 0) : chosenPlace ? 1 : 0;
             const followed = DataManager.isLiveFollowing();
             followedNote.hidden = !followed;
+            if (archNote) archNote.hidden = target === 'house';
             confirm.textContent = target === 'person' && n ? m.attachN(n) : m.attachBtn;
-            confirm.disabled = off || followed || n === 0;
+            // A house is the research's write alone: the bridge running is enough, no working copy is read.
+            confirm.disabled = (target === 'house' ? !bridgeUp : off) || followed || n === 0;
             let text = '';
             if (target === 'person' && mc?.caps.list && chosenPeople.some(id => !researchPersonRef(DataManager.getPerson(id)?.refn))) {
                 text = mc.agent ? m.noRefnTreeResearch : m.noRefnTree;
             } else if (target === 'couple') text = m.coupleNote;
             else if (target === 'source') text = m.sourceDocNote;
+            else if (target === 'house') text = m.houseAttachNote;
             note.textContent = text;
             note.hidden = !text;
         };
@@ -330,6 +345,7 @@ export const materialAttachMethods = uiModule({
             cleanup();
             chosenPlace = null;
             chosenPeople = [];
+            chosenHouse = null;
             pane.replaceChildren();
             seg.querySelectorAll<HTMLButtonElement>('.sel-opt').forEach(b => {
                 const on = b.dataset.target === next;
@@ -379,6 +395,34 @@ export const materialAttachMethods = uiModule({
                     pane.appendChild(places.length ? radioList(places, null) : h('p', 'mdlg-text', m.attachNoCouples));
                     pane.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus();
                 });
+            } else if (next === 'house') {
+                const input = h('input', 'mdlg-attach-search');
+                input.type = 'search';
+                input.placeholder = m.attachHousePh;
+                input.setAttribute('aria-label', m.attachHousePh);
+                const host = h('div', 'mdlg-attach-houses');
+                const all = collectHouses(DataManager.getData());
+                const draw = () => {
+                    const found = all.filter(x => houseMatches(x, input.value)).slice(0, MAX_SOURCES);
+                    chosenHouse = null;
+                    const list = h('div', 'mdlg-attach-list');
+                    list.setAttribute('role', 'radiogroup');
+                    for (const house of found) {
+                        const label = h('label', 'mdlg-radio');
+                        const radio = h('input');
+                        radio.type = 'radio';
+                        radio.name = 'mdlg-attach-house';
+                        radio.addEventListener('change', () => { chosenHouse = house; refresh(); });
+                        label.append(radio, h('span', 'mdlg-radio-text', houseNamedTitle(house)));
+                        list.appendChild(label);
+                    }
+                    host.replaceChildren(found.length ? list : h('p', 'mdlg-text', m.attachNoHouses));
+                    refresh();
+                };
+                input.addEventListener('input', draw);
+                pane.append(input, host);
+                draw();
+                input.focus();
             } else {
                 const input = h('input', 'mdlg-attach-search');
                 input.type = 'search';
@@ -412,7 +456,7 @@ export const materialAttachMethods = uiModule({
             refresh();
         };
 
-        for (const t of TARGETS) {
+        for (const t of targets) {
             const b = h('button', 'sel-opt', m.attachTarget[t]);
             b.type = 'button';
             b.setAttribute('role', 'radio');
@@ -427,8 +471,8 @@ export const materialAttachMethods = uiModule({
             const typing = el instanceof HTMLInputElement && (el.type === 'text' || el.type === 'search');
             if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (seg.contains(el) || (!typing && !(el instanceof HTMLInputElement)))) {
                 e.preventDefault();
-                const i = TARGETS.indexOf(target);
-                const next = TARGETS[(i + (e.key === 'ArrowRight' ? 1 : TARGETS.length - 1)) % TARGETS.length];
+                const i = targets.indexOf(target);
+                const next = targets[(i + (e.key === 'ArrowRight' ? 1 : targets.length - 1)) % targets.length];
                 show(next);
                 seg.querySelector<HTMLElement>(`[data-target="${next}"]`)?.focus();
                 return;
@@ -445,8 +489,32 @@ export const materialAttachMethods = uiModule({
             dialog.busy(false);
             dialog.error(text, retry ? { label: m.retry, run: () => void run() } : undefined);
         };
+        /** The files attached to the chosen house in the research (`POST /houses/material {house, files}`, 1128). */
+        const runHouse = async (house: TreeHouse) => {
+            const b = this.houseResearchBridge();
+            if (!b) return;
+            dialog.busy(true);
+            dialog.error(null);
+            const key = this.houseRequestKey(house);
+            const ids = files.map(i => i.file!.id);
+            const res = await sendHouseMaterial(b.base, { house: key as HouseId, files: ids }, b.features);
+            if (!res.ok) {
+                console.warn('Link to…: the house did not take the files', res.code, res.bridgeCode);
+                refused(houseMaterialError(res, () => this.researchWriteHeldText(res.held!, false).toast), res.code !== 'invalid' && res.code !== 'town');
+                return;
+            }
+            dialog.busy(false);
+            dialog.close();
+            this.houseMaterialsChanged(key);
+            this.showToast(m.attachedToast.house(houseTitle(house)));
+            ctx.done?.();
+        };
         const run = async () => {
             if (confirm.disabled || isBusy(confirm)) return;
+            if (target === 'house') {
+                if (chosenHouse) await runHouse(chosenHouse);
+                return;
+            }
             const places: MediaPlace[] = target === 'person' ? chosenPeople.map(id => ({ personId: id })) : chosenPlace ? [chosenPlace] : [];
             if (!places.length) return;
             dialog.busy(true);

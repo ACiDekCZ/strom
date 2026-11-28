@@ -185,6 +185,43 @@ async function openAttach(page: Page): Promise<void> {
 }
 
 test.describe('Houses: material of a house', () => {
+    test('Link to… a house: the research\'s file attached with houses/material, then among the house\'s materials (1128)', async ({ page }) => {
+        const archive = fakeMaterial({ files: [materialFile(1, { title: 'Křest na faře' })], batches: [], people: {} });
+        const { houses } = await setup(page, { media: true, material: archive, features: [...HOUSE, ...MATERIAL_FEATURES] });
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        await page.locator('#materials-modal .mw-canvas .mw-tile', { hasText: 'Křest na faře' }).click();
+        await page.locator('#image-viewer-panel .mv-act[data-action="attach"]').click();
+        const dialog = page.locator('.mdlg-overlay .mdlg');
+        await dialog.locator('.mdlg-seg [data-target="house"]').click();
+        await expect(dialog.locator('.mdlg-note')).toHaveText('The research keeps the file as material of the house; the tree stays as it is.');
+        await expect(dialog.locator('.mdlg-attach-arch')).toBeHidden();
+        await dialog.locator('.mdlg-attach-search').fill('16');
+        await dialog.locator('.mdlg-radio', { hasText: 'Bělokamen čp. 16' }).click();
+        // What the research answers after the POST: the file among the house's materials, counted in its row.
+        houses.materials = [{ id: 'I0001', kind: 'photo', title: 'Křest na faře', at: '2027-03-20', file: 'scan-1.jpg' }];
+        houses.rows = [row({ summary: { events: 0, holders: 0, residents: 0, unknown: 0, materials: 1, passed: 0 } })];
+        await dialog.locator('.mdlg-foot .mdlg-btn.is-primary').click();
+        await expect(dialog).toHaveCount(0);
+        await expect.poll(() => houses.posts).toEqual([{ house: KEY, files: ['I0001'] }]);
+        await expect(page.locator('.toast', { hasText: 'Attached to the house Bělokamen' })).toBeVisible();
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await openHouses(page);
+        await houseRow(page).locator('.house-chev').click();
+        await expect(page.locator('#houses-modal .house-detail .house-research .house-mat', { hasText: 'Křest na faře' })).toBeVisible();
+    });
+
+    test('Link to… without house.material: no House tab', async ({ page }) => {
+        const archive = fakeMaterial({ files: [materialFile(1, { title: 'Křest na faře' })], batches: [], people: {} });
+        await setup(page, { media: true, material: archive, features: ['house', ...MATERIAL_FEATURES] });
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        await page.locator('#materials-modal .mw-canvas .mw-tile', { hasText: 'Křest na faře' }).click();
+        await page.locator('#image-viewer-panel .mv-act[data-action="attach"]').click();
+        const dialog = page.locator('.mdlg-overlay .mdlg');
+        await expect(dialog.locator('.mdlg-seg [data-target="source"]')).toBeVisible();
+        await expect(dialog.locator('.mdlg-seg [data-target="house"]')).toHaveCount(0);
+    });
+
     test('⋯ "Attach material…": a memory without the witness\'s consent goes as family memory, no mark; then with it', async ({ page }) => {
         const { houses } = await setup(page);
         await openHouses(page);
