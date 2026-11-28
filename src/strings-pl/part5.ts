@@ -772,6 +772,8 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         distAnd: 'i',
         distBorn: (m: string) => `miejsce urodzenia ${m}`,
         distLived: (m: string) => `zamieszkanie ${m}`,
+        distJob: (j: string) => `zawód ${j}`,
+        distGeneration: (offset: number) => offset === 0 ? 'pokolenie w centrum' : `pokolenie ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
     },
 
     // Errors

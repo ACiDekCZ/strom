@@ -18,6 +18,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { shownName } from '../person-name.js';
 import { yearOf } from '../dates.js';
 import { filterAndSort } from '../person-picker.js';
+import { personHints } from '../person-disambiguation.js';
 import { withBusyRetry } from '../research-directions.js';
 import {
     createDirection, directionPeopleKept, editDirection, fetchDirectionPeople, previewDirection, undoGather, DirectionCreateBody, DirectionEditBody,
@@ -730,13 +731,20 @@ export const directionFormMethods = uiModule({
         }
     },
 
-    /** The list under the search: Focus and Recent, or the results (the research's unknown people greyed). */
+    /**
+     * The list under the search: Focus and Recent, or the results (the research's unknown people greyed).
+     * A row without years, or of a name another row has too, says quietly who it is (1128).
+     */
     renderDirectionFormPicks(f: FormState): void {
         const L = strings.live;
         const picks = f.root.querySelector<HTMLElement>('#direction-form-picks');
         if (!picks) return;
         picks.replaceChildren();
         const head = (text: string): void => { picks.appendChild(el('div', 'direction-form__pick-head', text)); };
+        let hints = new Map<PersonId, string>();
+        const hintsFor = (listed: Person[]): void => {
+            hints = personHints(listed, DataManager.getData(), { hasYears: p => !!personYears(p), rootId: TreeRenderer.getFocusPersonId() });
+        };
         const row = (p: Person): void => {
             const b = el('button', 'direction-form__pick');
             b.type = 'button';
@@ -746,6 +754,12 @@ export const directionFormMethods = uiModule({
             const years = personYears(p);
             if (years) top.appendChild(el('span', 'direction-form__pick-years', years));
             b.appendChild(top);
+            const hint = hints.get(p.id);
+            if (hint) {
+                const h = el('span', 'direction-form__pick-hint', hint);
+                h.title = hint;
+                b.appendChild(h);
+            }
             if (!p.refn) {
                 b.setAttribute('aria-disabled', 'true');
                 b.appendChild(el('span', 'direction-form__pick-note', L.dirNoLink));
@@ -768,6 +782,7 @@ export const directionFormMethods = uiModule({
         const query = f.search.trim();
         if (query) {
             const hits = filterAndSort(query, persons, DataManager.getData()).slice(0, MAX_RESULTS);
+            hintsFor(hits);
             // Nobody of that name: a sentence, not a group.
             if (hits.length === 0) picks.appendChild(el('p', 'direction-form__pick-none', L.dirPickNone));
             else head(L.dirPickResults);
@@ -776,16 +791,18 @@ export const directionFormMethods = uiModule({
         }
         const focusId = TreeRenderer.getFocusPersonId();
         const focus = focusId ? DataManager.getPerson(focusId) : null;
-        if (focus && !focus.isPlaceholder) {
-            head(L.dirPickFocus);
-            row(focus);
-        }
         const treeId = DataManager.getCurrentTreeId();
         const recent = (treeId ? readRecent(treeId) : [])
             .filter(id => id !== focusId)
             .map(id => DataManager.getPerson(id as PersonId))
             .filter((p): p is Person => !!p && !p.isPlaceholder)
             .slice(0, MAX_RECENT);
+        const shownFocus = focus && !focus.isPlaceholder ? focus : null;
+        hintsFor(shownFocus ? [shownFocus, ...recent] : recent);
+        if (shownFocus) {
+            head(L.dirPickFocus);
+            row(shownFocus);
+        }
         if (recent.length > 0) {
             head(L.dirPickRecent);
             recent.forEach(row);

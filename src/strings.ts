@@ -6167,6 +6167,9 @@ const stringsEN = {
         distAnd: 'and',
         distBorn: (m: string) => `born in ${m}`,
         distLived: (m: string) => `lived in ${m}`,
+        distJob: (j: string) => `occupation ${j}`,
+        /** The generation counted from the focus, as the tree's generation rules say it. */
+        distGeneration: (offset: number) => offset === 0 ? 'focus generation' : `generation ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
     },
 
     // Errors
@@ -19414,6 +19417,8 @@ const stringsCZ: StringsType = {
         distAnd: 'a',
         distBorn: (m: string) => `rodiště ${m}`,
         distLived: (m: string) => `bydliště ${m}`,
+        distJob: (j: string) => `povolání ${j}`,
+        distGeneration: (offset: number) => offset === 0 ? 'zaměřená generace' : `generace ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
     },
 
     // Errors
@@ -32441,6 +32446,8 @@ const stringsDE: StringsType = {
         distAnd: 'und',
         distBorn: (m: string) => `Geburtsort ${m}`,
         distLived: (m: string) => `Wohnort ${m}`,
+        distJob: (j: string) => `Beruf ${j}`,
+        distGeneration: (offset: number) => offset === 0 ? 'Fokusgeneration' : `Generation ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
     },
 
     // Errors

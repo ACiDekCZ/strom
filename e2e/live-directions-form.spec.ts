@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-    BridgeReply, CAPS, MANAGED_DIRECTIONS, directionRow, directionWrites, followManaged, launchedLinks, openOverview, overview, UUID,
+    BridgeReply, CAPS, GED, MANAGED_DIRECTIONS, directionRow, directionWrites, followManaged, launchedLinks, openOverview, overview, UUID,
 } from './live-directions-bridge.js';
 import { card, openPersonSubmenu } from './helpers.js';
 
@@ -82,6 +82,51 @@ test.describe('the direction form', () => {
         await toast.locator('.toast-action').click();
         expect(await launchedLinks(page)).toEqual([`strom-research://chat?tree=${UUID}&research=G0014`]);
     });
+
+    for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+        test(`the same name without years: a quiet line says who each one is (1128, ${size.width})`, async ({ page }) => {
+            // Two Kateřina Brousilová without years: one Josef and Anna's daughter, the other of another couple.
+            const ged = GED.replace('1 CHIL @P0012@', '1 CHIL @P0012@\n1 CHIL @P0060@').replace('0 TRLR', [
+                '0 @P0060@ INDI', '1 NAME Kateřina /Brousilová/', '1 SEX F', '1 REFN P0060', '1 FAMC @F0001@',
+                '0 @P0061@ INDI', '1 NAME Kateřina /Brousilová/', '1 SEX F', '1 REFN P0061', '1 FAMC @F0002@',
+                '0 @P0070@ INDI', '1 NAME Vavřinec /Brousil/', '1 SEX M', '1 REFN P0070', '1 FAMS @F0002@',
+                '0 @P0071@ INDI', '1 NAME Ludmila /Kapradníková-Ohnivcová/', '1 SEX F', '1 REFN P0071', '1 FAMS @F0002@',
+                '0 @F0002@ FAM', '1 HUSB @P0070@', '1 WIFE @P0071@', '1 CHIL @P0061@',
+                '0 TRLR',
+            ].join('\n'));
+            await followManaged(page, { ged, size });
+            if (size.width > 640) {
+                await openOverview(page);
+                await openNew(page);
+            } else {
+                // A phone: the form as the person menu's Find ancestors opens it, then Change.
+                await page.evaluate(() => window.Strom.UI.openDirectionForm({ mode: 'new' }));
+                await expect(form(page)).toBeVisible();
+            }
+            const f = form(page);
+            await f.locator('#direction-form-search').fill('katerina brous');
+            const rows = f.locator('.direction-form__pick', { hasText: 'Kateřina Brousilová' });
+            await expect(rows).toHaveCount(2);
+            const hints = f.locator('.direction-form__pick-hint');
+            await expect(hints).toHaveText(['daughter of Josef Fíšek and Anna Svobodová', 'daughter of Vavřinec Brousil and Ludmila Kapradníková-Ohnivcová']);
+            // A row with years and a name of its own stays as it was.
+            await f.locator('#direction-form-search').fill('fiskova');
+            await expect(f.locator('.direction-form__pick', { hasText: 'Marie Fíšková' })).toHaveCount(1);
+            await expect(hints).toHaveCount(0);
+            // Nothing wider than the list: the line is cut, whole in its title.
+            await f.locator('#direction-form-search').fill('katerina brous');
+            await expect(hints).toHaveCount(2);
+            const over = await f.locator('#direction-form-picks').evaluate(el => {
+                const box = el.getBoundingClientRect();
+                return el.scrollWidth > el.clientWidth + 1
+                    || [...el.querySelectorAll('.direction-form__pick-hint')].some(h => h.getBoundingClientRect().right > box.right + 1);
+            });
+            expect(over).toBe(false);
+            await expect(hints.last()).toHaveAttribute('title', 'daughter of Vavřinec Brousil and Ludmila Kapradníková-Ohnivcová');
+            await rows.last().click();
+            await expect(f.locator('#direction-form-name')).toHaveValue('Ancestors: Kateřina Brousilová');
+        });
+    }
 
     test('a question: needs its question (said after a try), the name from its first six words', async ({ page }) => {
         const b = await followManaged(page);
