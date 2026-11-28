@@ -29559,10 +29559,19 @@
         .sent-day-pop__note { margin: 0; font-size: 12.5px; color: var(--text-muted); overflow-wrap: anywhere; }
         .sent-day-pop__error { margin: 0; font-size: 12.5px; color: var(--danger, #c0392b); overflow-wrap: anywhere; }
         .sent-day-pop__buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-        .sent-day-pop__buttons .btn { min-width: 0; }
+        .sent-day-pop__buttons button {
+            min-width: 0; padding: 8px 16px; border-radius: var(--r-lg); font: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s;
+        }
+        .sent-day-pop__buttons button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        .sent-day-pop__buttons button.primary { background: var(--primary); color: var(--on-primary); border: 1px solid var(--primary); }
+        .sent-day-pop__buttons button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .sent-day-pop__buttons button.secondary:hover { background: var(--hover-bg); }
+            .sent-day-pop__buttons button.primary:hover { background: var(--primary-dark); }
+        }
         @media (max-width: 640px) {
             .sent-day-pop { width: auto; max-width: none; }
-            .sent-day-pop__buttons .btn { flex: 1 1 auto; }
+            .sent-day-pop__buttons button { flex: 1 1 auto; }
         }
         @media (min-width: 641px) and (max-width: 1024px) {
             .sent-day-pop { width: 300px; }
@@ -29572,7 +29581,7 @@
         }
         @media (pointer: coarse) {
             .sent-day-pop__input { height: 44px; font-size: 16px; }
-            .sent-day-pop__buttons .btn { min-height: 44px; }
+            .sent-day-pop__buttons button { min-height: 44px; }
         }
         .tov-pop {
             position: fixed; z-index: 260; width: 320px; display: flex; flex-direction: column; gap: 4px; padding: 8px;

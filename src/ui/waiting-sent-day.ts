@@ -65,11 +65,11 @@ export function openSentDayPopover(o: SentDayPopoverOptions): () => void {
     buttons.className = 'sent-day-pop__buttons';
     const cancel = doc.createElement('button');
     cancel.type = 'button';
-    cancel.className = 'btn btn-secondary sent-day-pop__cancel';
+    cancel.className = 'secondary sent-day-pop__cancel';
     cancel.textContent = o.labels.cancel;
     const save = doc.createElement('button');
     save.type = 'button';
-    save.className = 'btn btn-primary sent-day-pop__save';
+    save.className = 'primary sent-day-pop__save';
     save.textContent = o.labels.save;
     buttons.append(cancel, save);
     pop.append(error, buttons);
