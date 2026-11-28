@@ -113,7 +113,7 @@ describe('Awaiting action written through the viewed research\'s bridge: its sta
         fake.session = s;
         const ui = uiWith(researchWaitingWriteMethods);
         await researchWaitingWriteMethods.markWaitingSent.call(ui as never, s, s.waiting[0]);
-        expect(postWaitingSent).toHaveBeenCalledWith(BASE, 'T0042', 'sent');
+        expect(postWaitingSent).toHaveBeenCalledWith(BASE, 'T0042', 'sent', {});
         expect(ui.researchStatusAfterWrite).toHaveBeenCalledWith(s);
         ui.researchStatusAfterWrite.mockClear();
         await researchWaitingWriteMethods.markWaitingUnsent.call(ui as never, s, 'T0042');
