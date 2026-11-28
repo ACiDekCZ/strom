@@ -49,13 +49,13 @@ describe('a file of the material linked into the tree keeps the sender\'s note',
         const item = materialItem('audio/mpeg', 2048);
         expect(materialRecordNote(item)).toBe(NOTE);
         // A recording is linked as its original only: no fetch from the bridge.
-        const record = await materialAttachMethods.materialWorkingCopy.call({} as never, item, { base: 'http://127.0.0.1:9/t' } as never);
+        const record = await materialAttachMethods.materialWorkingCopy.call({} as never, item, { base: 'http://127.0.0.1:9/t' } as never, undefined, new Map());
         expect(record?.note).toBe(NOTE);
     });
 
     it('linked to a person, the send writes the note under its OBJE and reads it back', async () => {
         const item = materialItem('audio/mpeg', 2048);
-        const record = await materialAttachMethods.materialWorkingCopy.call({} as never, item, { base: 'http://127.0.0.1:9/t' } as never);
+        const record = await materialAttachMethods.materialWorkingCopy.call({} as never, item, { base: 'http://127.0.0.1:9/t' } as never, undefined, new Map());
         const data = treeWith({ att1: { ...record!, id: 'att1', places: [{ personId: 'p1' as never }] } as Attachment });
         const ged = exportToGedcom(data, 'T', { appMedia: true }).content;
         const obje = ged.slice(ged.indexOf('1 OBJE'), ged.indexOf('\n1 ', ged.indexOf('1 OBJE') + 1));

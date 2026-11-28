@@ -17,7 +17,7 @@ import {
     setMaterialsBackend, memoryMaterialsBackend, saveMaterialList, mergeIntoCache, cachedMaterialList, primeMaterials,
     clearMaterialsCache, putCachedThumb, getCachedThumb, personMaterialCount,
     directPersons, materialFromKey, addedPersons, assignUndoRequests, batchUndoRequest, applyBatchPersons, mergeAssignIntoCache,
-    materialDate,
+    materialDate, materialFilesQueries,
 } from '../materials.js';
 import { formatFlexDate } from '../dates.js';
 
@@ -599,5 +599,16 @@ describe('materialDate', () => {
     });
     it('keeps a free text as written', () => {
         expect(materialDate('spring of the flood')).toBe('spring of the flood');
+    });
+});
+
+describe('materialFilesQueries (1128)', () => {
+    it('asks once per batch, else per person; the whole list for a file of neither or too many asks', () => {
+        expect(materialFilesQueries([
+            { batch: 'b1', persons: [] }, { batch: 'b1', persons: ['P0001'] }, { persons: ['P0002'] }, { persons: ['P0002', 'P0003'] },
+        ])).toEqual([{ batch: 'b1' }, { person: 'P0002' }]);
+        expect(materialFilesQueries([{ persons: ['P0002'] }, { persons: [] }])).toEqual([{}]);
+        expect(materialFilesQueries([{ persons: ['P0001'] }, { persons: ['P0002'] }, { persons: ['P0003'] }, { persons: ['P0004'] }])).toEqual([{}]);
+        expect(materialFilesQueries([])).toEqual([]);
     });
 });

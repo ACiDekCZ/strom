@@ -17,7 +17,10 @@ import { isPendingImageUrl } from '../research-image-refs.js';
 import { DataManager, LIVE_FOLLOW_EVENT } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source } from '../types.js';
 import { strings } from '../strings.js';
-import { MATERIAL_TIMEOUT_MS, MaterialError, MaterialItem, directPersons, fileUrl, materialErrorOf, materialRecordNote, researchPersonsOf, type AssignRequest } from '../materials.js';
+import {
+    MATERIAL_TIMEOUT_MS, MaterialError, MaterialFile, MaterialItem, directPersons, fetchMaterial, fileUrl, materialErrorOf, materialFileItem,
+    materialFilesQueries, materialRecordNote, mergeIntoCache, researchPersonsOf, type AssignRequest,
+} from '../materials.js';
 import { mediaAt, mediaPersonIds, placePersonId } from '../media.js';
 import { mediaPlaceLabel, mediaUseLabel, mediaUses } from '../media-uses.js';
 import { MultiPersonPicker, PersonPicker } from '../person-picker.js';
@@ -450,9 +453,11 @@ export const materialAttachMethods = uiModule({
             dialog.error(null);
             try {
                 const targets: Array<{ id: string } | { record: Omit<Attachment, 'id' | 'places'> }> = files.filter(i => treeRecord(i)).map(i => ({ id: treeRecord(i)!.id }));
+                // Their details as the research has them now, asked once for all of them (1128).
+                const now = await this.materialFilesNow(mc, outside);
                 for (const item of outside) {
                     const why: { error?: MaterialError } = {};
-                    const record = await this.materialWorkingCopy(item, mc, why);
+                    const record = await this.materialWorkingCopy(item, mc, why, now);
                     if (!record) {
                         console.warn('Link to…: the working copy was not read', item.file?.id, why.error ?? 'no file or bridge');
                         const busy = why.error?.kind === 'busy';
@@ -507,18 +512,23 @@ export const materialAttachMethods = uiModule({
      * the bridge (an image reduced as an attachment, a PDF up to 2 MB; any
      * other kind only its original) and what the research knows of it.
      */
-    async materialWorkingCopy(item: MaterialItem, mc: MaterialsContext | null, why?: { error?: MaterialError }): Promise<Omit<Attachment, 'id' | 'places'> | null> {
+    async materialWorkingCopy(
+        item: MaterialItem, mc: MaterialsContext | null, why?: { error?: MaterialError }, now?: Map<string, MaterialFile>,
+    ): Promise<Omit<Attachment, 'id' | 'places'> | null> {
         const sha = materialItemSha(item);
         const file = item.file;
         if (!sha || !file || !mc?.base) return null;
         const mime = file.mime || item.mime || 'application/octet-stream';
         const original = { sha256: sha, name: file.name, mimeType: mime, bytes: file.bytes ?? 0 };
-        // The sender's note goes with it: a send of the tree without it would take it off in the research.
-        const note = materialRecordNote(item);
+        // Its title, kind, date and the sender's note as the research has them now (1128): a send of the tree
+        // without one would take it off in the research — the remembered list may be older (another window).
+        const fresh = item.attachment ? undefined : (now ?? await this.materialFilesNow(mc, [item])).get(file.id);
+        const src = fresh ? materialFileItem(fresh, { batches: [] }) : item;
+        const note = materialRecordNote(src);
         const details = {
-            ...(item.titled ? { title: item.title } : {}),
-            ...(item.kind ? { kind: item.kind } : {}),
-            ...(item.date ? { date: item.date } : {}),
+            ...(src.titled ? { title: src.title } : {}),
+            ...(src.kind ? { kind: src.kind } : {}),
+            ...(src.date ? { date: src.date } : {}),
             ...(note ? { note } : {}),
         };
         const shown = ATTACHMENT_IMAGE_TYPES.includes(mime) || (mime === 'application/pdf' && (file.bytes ?? 0) <= MAX_PDF_BYTES);
@@ -556,6 +566,29 @@ export const materialAttachMethods = uiModule({
         } finally {
             clearTimeout(timer);
         }
+    },
+
+    /**
+     * Research files as the research has them now (1128), by id: what a file
+     * of the tree made of them takes (materialWorkingCopy). The remembered
+     * list may be older than the research — a title given in another window,
+     * a proposal just accepted — and a file of the tree without that title
+     * would read in the next send as the title taken off. Asked once per
+     * batch or person (materialFilesQueries), kept in the remembered list
+     * too. Not answered: none (the remembered details go).
+     */
+    async materialFilesNow(mc: MaterialsContext | null, items: readonly MaterialItem[]): Promise<Map<string, MaterialFile>> {
+        const out = new Map<string, MaterialFile>();
+        const files = items.filter(i => !i.attachment).map(i => i.file).filter((f): f is MaterialFile => !!f);
+        if (!mc?.base || !mc.caps.bridgeUp || !files.length) return out;
+        const wanted = new Set(files.map(f => f.id));
+        for (const q of materialFilesQueries(files)) {
+            const res = await fetchMaterial(mc.base, mc.caps.trees ? { ...q, trees: true } : q, { timeoutMs: MATERIAL_TIMEOUT_MS });
+            if (!res.ok) continue;
+            for (const f of res.value.files) if (wanted.has(f.id)) out.set(f.id, f);
+            await mergeIntoCache(mc.treeId, res.value.files, res.value.people ?? {});
+        }
+        return out;
     },
 
     /** After a file of the tree changed here: the person's lists, the window, the viewer. */

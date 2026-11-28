@@ -19,7 +19,7 @@ import { allMedia } from '../media.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import type { Attachment, MaterialKind, MediaPlace, PersonId } from '../types.js';
 import {
-    MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_FILES, SORT_MAX_TEXT, type EditRequest,
+    MaterialFile, MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_FILES, SORT_MAX_TEXT, type EditRequest,
     startMaterialSort, fetchMaterialSort, cancelMaterialSort, fetchMaterialSortRun, cancelMaterialSortRun, fetchMaterial, cachedMaterialList,
     decideMaterialSort, type SortDecision,
     type SortRunState,
@@ -1813,6 +1813,8 @@ export const materialSortMethods = uiModule({
             // Material outside the tree: its details and people through the bridge; what the research's
             // assign does not carry (an event, a couple, a source) makes it a file of the tree (§4).
             const staged: Array<{ row: SortRow; w: SortWrite; rv: SortRevert; id: string | null; record: Omit<Attachment, 'id' | 'places'> | null }> = [];
+            /** The files as the research's answers to these writes have them: what their file of the tree takes (1128). */
+            const answered = new Map<string, MaterialFile>();
             /** The research's part of a row: its details (`/material/edit`) and people (`/material/assign`); `rv` gets what undoes it. */
             const bridgeWrite = async (row: SortRow, w: SortWrite, fileId: string, rv: SortRevert): Promise<boolean> => {
                 if (!now?.base || !now.caps.bridgeUp) return false;
@@ -1824,6 +1826,7 @@ export const materialSortMethods = uiModule({
                     if (!now.caps.edit) return false;
                     const res = await this.writeMaterialEdit(now, edit);
                     if (!res.ok) return false;
+                    for (const f of res.value.files) answered.set(f.id, f);
                     const was = res.value.was[fileId] ?? {};
                     rv.was = {};
                     for (const k of ['title', 'kind', 'date'] as const) if (edit[k] !== undefined) rv.was[k] = (was[k] as string | undefined) ?? '';
@@ -1834,7 +1837,9 @@ export const materialSortMethods = uiModule({
                     const added = w.persons.filter(p => !has.includes(p));
                     if (!now.caps.assign) return false;
                     if (added.length) {
-                        if (!(await this.writeAssign(now, { files: [fileId], add: added })).ok) return false;
+                        const res = await this.writeAssign(now, { files: [fileId], add: added });
+                        if (!res.ok) return false;
+                        for (const f of res.value.files) answered.set(f.id, f);
                         rv.persons = added;
                     }
                 }
@@ -1848,7 +1853,9 @@ export const materialSortMethods = uiModule({
                 let good = await bridgeWrite(row, w, w.fileId, rv);
                 if (good && (w.places.length || w.newSources.length)) {
                     const id = row.item?.removedId ?? null;
-                    const record = readOnly || id || !row.item ? null : await this.materialWorkingCopy(row.item, now);
+                    // Its title, kind and date as just written, not as the row had them before (1128).
+                    const record = readOnly || id || !row.item ? null
+                        : await this.materialWorkingCopy(row.item, now, undefined, answered.has(w.fileId) ? answered : undefined);
                     if (readOnly || (!id && !record)) good = false;
                     else staged.push({ row, w, rv, id, record });
                 }

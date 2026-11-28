@@ -1249,6 +1249,22 @@ export function materialUrl(base: string, q: MaterialQuery = {}): string | null 
     return withAppVersion(`${base}/material${params.length ? `?${params.join('&')}` : ''}`);
 }
 
+/**
+ * The fewest `GET /material` asks that list these research files as the
+ * research has them now (1128): one per batch, else per person, the whole
+ * list for a file of neither or when more than `most` asks would go.
+ */
+export function materialFilesQueries(files: readonly Pick<MaterialFile, 'batch' | 'persons'>[], most = 3): MaterialQuery[] {
+    const out = new Map<string, MaterialQuery>();
+    for (const f of files) {
+        const person = f.persons.map(p => researchPersonRef(p)).find((p): p is string => !!p);
+        const q: MaterialQuery | null = f.batch && materialUrl('', { batch: f.batch }) ? { batch: f.batch } : person ? { person } : null;
+        if (!q) return [{}];
+        out.set(q.batch !== undefined ? `b:${q.batch}` : `p:${q.person}`, q);
+    }
+    return out.size > most ? [{}] : [...out.values()];
+}
+
 /** The research's materials (`GET /material`). */
 export async function fetchMaterial(base: string, q: MaterialQuery = {}, opts: BridgeOptions = {}): Promise<MaterialResult<MaterialList>> {
     const url = materialUrl(base, q);

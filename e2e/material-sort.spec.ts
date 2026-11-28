@@ -446,6 +446,9 @@ test.describe('Sort with the agent', () => {
                 at99: media.filter(m => m.places.some(p => at99.includes(p.sourceId))).length };
         });
         await expect.poll(async () => (await tree()).kinds).toEqual(['partnershipId', 'sourceId', 'sourceId']);
+        // The file of the tree with the title and kind just accepted, not the row's earlier ones (1128): a send without them takes them off.
+        expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().media ?? {}) as Array<{ title?: string; kind?: string; places: Array<Record<string, string>> }>)
+            .filter(m => m.places.some(p => p.partnershipId)).map(m => ({ title: m.title, kind: m.kind })))).toEqual([{ title: 'Marriage record', kind: 'record' }]);
         // The source the research has and the tree did not: made with the research's number, as one loaded from it.
         expect((await tree()).sources.filter(src => src.refn === 'S0099')).toEqual([{ title: 'Marriage record', refn: 'S0099' }]);
         // Another file of the same source: the same source, never a second one.
