@@ -1,7 +1,7 @@
 /**
  * A house's story in the family book (spec 145 T4), "now" fixed at 20 Nov 2026: in the Houses chapter before the
- * house's sections, the approved text only (a draft never, a new version beside an approved one not either); left out
- * when it names a protected person; under the story of a person who lived there a link to the house in the chapter,
+ * house's sections, the approved text or a draft tagged as one (spec 145 T8; a new version beside an approved one
+ * never); left out when it names a protected person (a draft too); under the story of a person who lived there a link to the house in the chapter,
  * only when the chapter has the house with its story.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,8 +57,13 @@ describe('the Houses chapter: a house\'s story', () => {
         expect(ch.indexOf(TEXT)).toBeLessThan(ch.indexOf('Časová osa'));
     });
 
-    it('a draft never; a new version beside an approved one stays out, the approved one in', () => {
-        expect(chapter(book({ ...final(), status: 'draft' }))).not.toContain(TEXT);
+    it('a draft tagged (T8); a new version beside an approved one stays out, the approved one in', () => {
+        const draft = chapter(book({ ...final(), status: 'draft' }));
+        expect(draft).toContain(TEXT);
+        expect(draft).toContain('<p class="book-house-story-tag"><span>koncept, čeká na schválení</span></p>');
+        expect(draft).toContain('book-house-story--draft');
+        expect(chapter(book(final()))).not.toContain('book-house-story-tag');
+        expect(chapter(book({ ...final({ people: [...OLD, { id: 'P0005', died: false }] }), status: 'draft' }))).not.toContain(TEXT);
         const both = chapter(book(final({ draft: { text: 'Nová verze o gruntu.', facts: [], sources: [], people: [] } })));
         expect(both).toContain(TEXT);
         expect(both).not.toContain('Nová verze o gruntu.');
@@ -80,10 +85,10 @@ describe('a person\'s story: the link to the house', () => {
         expect(chapter(html)).toContain(`id="${href}"`);
     });
 
-    it('none without the chapter, without a story of the house, or with only its draft', () => {
+    it('none without the chapter or without a story of the house; its draft shown in the chapter links too (T8)', () => {
         expect(personStory(book(final(), false))).not.toContain('book-story-houses');
         expect(personStory(book(undefined))).not.toContain('book-story-houses');
-        expect(personStory(book({ ...final(), status: 'draft' }))).not.toContain('book-story-houses');
+        expect(personStory(book({ ...final(), status: 'draft' }))).toContain('book-story-houses');
         expect(personStory(book(undefined))).toContain('Svatobor hospodařil');
     });
 });

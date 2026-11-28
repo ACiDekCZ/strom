@@ -134,7 +134,7 @@ describe('houses in the family pages (spec 145 T6)', () => {
         expect(section(buildPageSetHtml(prouzalSet()), set.houseSlug!.get(HOUSE_ID)!)).not.toContain('hp-sec--people');
     });
 
-    it('the house\'s page shows its approved story through the same filter (spec 145 T4), never a draft', () => {
+    it('the house\'s page shows its story through the same filter (spec 145 T4), a draft tagged (T8)', () => {
         const story = (status: 'draft' | 'final', people: { id: string; died: boolean }[]) => research(r => {
             r.story = { status, title: 'Grunt na návsi', text: 'Grunt založil Svatobor Prouzal.', facts: ['h1'], sources: [], people };
         });
@@ -143,7 +143,11 @@ describe('houses in the family pages (spec 145 T6)', () => {
         const shown = page(story('final', [{ id: 'P0001', died: true }]));
         expect(shown).toContain('hp-sec--story');
         expect(shown).toContain('Grunt založil Svatobor Prouzal.');
-        expect(page(story('draft', [{ id: 'P0001', died: true }]))).not.toContain('Grunt založil');
+        const draft = page(story('draft', [{ id: 'P0001', died: true }]));
+        expect(draft).toContain('Grunt založil');
+        expect(draft).toContain('<span class="hp-story-tag">draft, waiting for approval</span>');
+        expect(draft).not.toContain('<button');
+        expect(page(story('draft', [{ id: 'P0001', died: true }, { id: 'P0003', died: true }]))).not.toContain('Grunt založil');
         // A story naming a person of the last ~100 years is left out whole.
         expect(page(story('final', [{ id: 'P0001', died: true }, { id: 'P0003', died: true }]))).not.toContain('Grunt založil');
     });

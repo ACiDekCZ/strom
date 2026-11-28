@@ -80,6 +80,10 @@ export const HOUSE_PAGE_CSS = `
 .hp .hp-figs--img { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .hp .hp-figs--img .hp-fig { margin: 0; min-width: 0; }
 .hp .hp-figs--img .hp-img { width: 100%; height: 150px; }
+/* The saved file's pictures from the web (spec 145 T8): no fixed height and no border, so a picture that cannot load
+   takes no room (empty alt: no broken mark) and its caption stays; a loaded one keeps its proportions up to a height. */
+.hp .hp-img.hp-img--web { height: auto; max-height: 240px; width: auto; border: 0; }
+.hp .hp-figs--img .hp-img.hp-img--web { width: 100%; height: auto; max-height: 200px; }
 .hp .hp-fig-what { display: block; font-size: 13px; color: var(--text-light); }
 .hp .hp-fig-by { display: block; }
 .hp .hp-fn { min-width: 0; overflow-wrap: anywhere; }
@@ -203,11 +207,13 @@ export const HOUSE_PAGE_CSS = `
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
     .hp .hp-num { grid-template-columns: 96px 80px minmax(0, 1fr); }
     .hp .hp-img { height: 140px; }
+    .hp .hp-img.hp-img--web { height: auto; max-height: 160px; }
     .hp .hmap { height: 200px; }
 }
 @media print {
     .hp .hp-name-edit, .hp .hp-reveal, .hp .hp-mini, .hp .hp-acts, .hp .hp-out, .hp .hmap-zoom, .hp .hmap-acts, .hp .hmap-top, .hp .hmap-out { display: none !important; }
     .hp .hp-num, .hp .hp-tl-r, .hp .hp-table tr, .hp .hp-sr, .hp .hp-mat { break-inside: avoid; }
     .hp .hp-story-nv { display: none !important; }
+    .hp .hp-fig { break-inside: avoid; }
 }
 `;

@@ -206,6 +206,18 @@ ${PERSON_PAGE_CHART_CSS}
 .book-house-story { margin: 4px 0 10px; }
 .book-house-story h4.book-house-story-title { font-style: italic; font-weight: 400; color: #4a4438; }
 .book-house-story-src { margin: 2px 0 0; text-align: left; }
+/* A draft story (spec 145 T8): a small tag above it */
+.book-house-story-tag { margin: 0 0 3px; text-align: left; }
+.book-house-story-tag span { display: inline-block; font: 600 8.5pt ${SANS}; color: #5c5546; background: #f1ece1; border-radius: 3px; padding: 1px 6px; }
+/* The pictures of a house and its town (spec 145 T8): from the web without a fixed size (one that cannot load takes no
+   room, its caption with the link stays), never split across pages */
+.book-house-figs { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 6px 0 10px; }
+.book-house-fig { margin: 0; flex: 1 1 200px; min-width: 0; max-width: 100%; break-inside: avoid; page-break-inside: avoid; }
+.book-house-fig--link { flex-basis: 100%; }
+.book-house-img { display: block; max-width: 100%; max-height: 220px; width: auto; height: auto; }
+.book-house-fig figcaption { margin-top: 3px; font: 9pt ${SANS}; color: #5c5546; overflow-wrap: anywhere; }
+.book-house-fig-what { display: block; color: #4a4438; }
+.book-house-fig a { color: #8a5a2b; }
 .book-story-houses { font: 12px ${SANS}; margin: 4px 0 0; text-align: left; }
 .book-story-houses a { color: #8a5a2b; margin-right: 10px; }
 .book-house-rows { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 1px 12px; font-size: 10.5pt; }

@@ -14,12 +14,18 @@
  * out, the location only of a house without people of those years and not
  * hidden by hand (spec 145 T3: a cut of today's map, its coordinates, how sure
  * it is; the book option off: the town only); a note at the end
- * says what is left out. Pure and DOM-free.
+ * says what is left out. Its story a draft too, tagged (spec 145 T8). The
+ * pictures of the house and its town under a free licence (spec 145 T8): from
+ * the web by the setting "Web photos in outputs" (default; a plain http(s)
+ * <img>, without the network the caption with its link stays) or the caption
+ * and the link only. Pure and DOM-free.
  */
 
 import type { PersonId, StromData } from './types.js';
 import type { BookCtx, BookHouseEntry } from './book-blocks.js';
-import type { HouseResearch, HouseSource, HouseStoryText } from './house-bridge.js';
+import type { HouseResearch, HouseSource } from './house-bridge.js';
+import type { HouseOutputStory } from './house-privacy.js';
+import { safeHttpUrl } from './validation.js';
 import { proseHtml } from './story-text.js';
 import { getStringsForLang } from './strings.js';
 import { formatFlexDate, yearOf } from './dates.js';
@@ -33,8 +39,8 @@ import type { HouseMapShot } from './house-map-shot.js';
 /** One house of the chapter: as the index of houses shows it, with the research's result for its sources and building. */
 export interface BookHouseChapterEntry extends BookHouseEntry {
     research: HouseResearch | null;
-    /** Its approved story as outputs may show it (houseStoryForOutput, spec 145 T4); null none. */
-    story?: HouseStoryText | null;
+    /** Its story as outputs may show it (houseStoryForOutput, spec 145 T4; a draft tagged, T8); null none. */
+    story?: HouseOutputStory | null;
     /**
      * Its location, where outputs may show it and the book does (spec 145 T3): the point, how sure it is, the cut of
      * today's map made before the book (null: the coordinates only).
@@ -49,6 +55,40 @@ export function bookHouseAnchor(h: Pick<TreeHouse, 'id'>): string {
 
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** "commons.wikimedia.org" of an address (its link's text). */
+function hostOf(url: string): string {
+    try { return new URL(url).host.replace(/^www\./, ''); } catch { return url; }
+}
+
+/**
+ * The pictures of a house in the chapter (spec 145 T8): the house's own, then its town's not shown at an earlier
+ * house of the chapter (`seen`). Each its caption (what it shows, author · licence · link); with `web` the picture
+ * itself from its address (no referrer, empty alt: without the network it takes no room).
+ */
+function picturesHtml(research: HouseResearch | null, web: boolean, seen: Set<string>, townLabel: string): string {
+    const fig = (url: string, what: string, by: string): string => {
+        const img = web ? `<img class="book-house-img" src="${esc(url)}" alt="" referrerpolicy="no-referrer">` : '';
+        const link = `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(hostOf(url))} ↗</a>`;
+        return `<figure class="book-house-fig${web ? '' : ' book-house-fig--link'}">${img}<figcaption>`
+            + `${what ? `<span class="book-house-fig-what">${esc(what)}</span>` : ''}`
+            + `<span class="book-house-fig-by">${by ? `${esc(by)} · ` : ''}${link}</span></figcaption></figure>`;
+    };
+    const own = (research?.look?.images ?? []).flatMap(im => {
+        const url = im.license && im.url ? safeHttpUrl(im.url) : null;
+        if (!url || seen.has(url)) return [];
+        seen.add(url);
+        return [fig(url, '', [im.credit, im.license].filter(Boolean).join(' · '))];
+    });
+    const town = (research?.town?.pictures ?? []).flatMap(p => {
+        const url = safeHttpUrl(p.url);
+        if (!url || seen.has(url)) return [];
+        seen.add(url);
+        return [fig(url, p.shows, [p.credit, p.license].filter(Boolean).join(' · '))];
+    });
+    return (own.length ? `<div class="book-house-figs">${own.join('')}</div>` : '')
+        + (town.length ? `<div class="book-sub">${esc(townLabel)}</div><div class="book-house-figs">${town.join('')}</div>` : '');
 }
 
 /** The chapter's notes: each source once, numbered in the order it is first cited. */
@@ -92,7 +132,7 @@ class HouseNotes {
  * book's drops a source no shown person cites, while the research's items of the house cite it).
  */
 export function housesChapterHtml(ctx: BookCtx, entries: readonly BookHouseChapterEntry[], from: number,
-    sources: StromData['sources'] = ctx.tree.sources): string {
+    sources: StromData['sources'] = ctx.tree.sources, webPhotos = true): string {
     const S = getStringsForLang(ctx.lang);
     const B = S.book;
     const H = S.houses;
@@ -118,24 +158,29 @@ export function housesChapterHtml(ctx: BookCtx, entries: readonly BookHouseChapt
     };
     let shielded = false;
     const houses: string[] = [];
+    const seenPictures = new Set<string>();
     for (const e of entries) {
         const h = e.house;
         const out = e.out;
         if (out.hidden.events || out.hidden.facts || out.hidden.location || out.persons.some(p => p.recent || p.living)) shielded = true;
         const parts: string[] = [`<h3>${esc(houseTitle(h))}</h3>`];
         if (e.name) parts.push(`<div class="book-house-alias"><em>${esc(e.name)}</em></div>`);
-        // Its story first (spec 145 T4): the approved text only, its sources among the chapter's notes.
+        // Its story first (spec 145 T4): the approved text, or a draft tagged (T8); its sources among the chapter's notes.
         if (e.story) {
             const body = proseHtml(e.story.text, { headingLevel: 5, softBreak: 'space', dropStrayMarks: true });
             if (body) {
+                const tag = e.story.draft ? `<p class="book-house-story-tag"><span>${esc(P.storyDraft)}</span></p>` : '';
                 const title = e.story.title ? `<h4 class="book-house-story-title">${esc(e.story.title)}</h4>` : '';
                 const marks = notes.cite(e.story.sources);
-                parts.push(`<div class="book-story book-house-story">${title}${body}${marks ? `<p class="book-house-story-src">${marks}</p>` : ''}</div>`);
+                parts.push(`<div class="book-story book-house-story${e.story.draft ? ' book-house-story--draft' : ''}">${tag}${title}${body}`
+                    + `${marks ? `<p class="book-house-story-src">${marks}</p>` : ''}</div>`);
             }
         }
-        // The research's description of the building.
+        // The research's description of the building, its pictures and its town's (spec 145 T8).
         const look = e.research?.look?.text?.trim();
         if (look) parts.push(`<p class="book-house-text">${esc(look)}</p>`);
+        const pictures = picturesHtml(e.research, webPhotos, seenPictures, P.lookPictures);
+        if (pictures) parts.push(pictures);
         // Its location (spec 145 T3): the cut of today's map with the house's point, its coordinates, how sure it is.
         if (e.map) {
             const shot = e.map.shot;

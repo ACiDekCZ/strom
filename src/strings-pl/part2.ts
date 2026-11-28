@@ -7,7 +7,7 @@ const notWrittenPl = (n: number): string =>
 /** Polish past-tense ending by sex: '' (man), 'a' (woman), '(a)' (not given). */
 const sexEndPl = (sex: string | undefined): string => sex === 'female' ? 'a' : sex === 'male' ? '' : '(a)';
 
-export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap' | 'legend' | 'bulk'
+export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | 'outputWebPhotos' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap' | 'legend' | 'bulk'
     | 'name' | 'person' | 'titles' | 'spacing' | 'marriageOrder' | 'genLabels' | 'branchColors' | 'tour' | 'anniversaries' | 'releaseNotes'
     | 'familyWizard' | 'pwa' | 'fileAccess' | 'sync' | 'researchUpdate' | 'researchImages' | 'treeSettings' | 'media'
     | 'mediaQueue' | 'batch'> = {
@@ -79,6 +79,16 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
     },
 
     // Import filter: leave images out
+    // Web photos in outputs (spec 145 T8): the houses' and towns' pictures load from the web or are only linked.
+    outputWebPhotos: {
+        setting: 'Zdjęcia z internetu w wynikach',
+        load: 'Wczytaj z internetu',
+        link: 'Tylko odnośnik',
+        settingHint: 'Zapisana strona domu, księga rodzinna i strony rodzinne pokazują zdjęcia domów i miejscowości na wolnej licencji z internetu; bez internetu zostaje podpis z odnośnikiem. Tylko odnośnik: podpis i odnośnik.',
+        bookSwitch: 'Zdjęcia domów z internetu',
+        bookSwitchHint: 'Włączone: zdjęcia domów i miejscowości na wolnej licencji wczytują się z internetu (bez internetu zostaje podpis z odnośnikiem). Wyłączone: tylko podpis i odnośnik. To samo ustawienie jest w Ustawieniach → Dane.',
+    },
+
     importImages: {
         label: 'Importuj obrazy (wycinki, załączniki, zdjęcia)',
         size: (mb: string) => `≈ ${mb} MB`,

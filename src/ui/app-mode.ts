@@ -736,6 +736,11 @@ export const appModeMethods = uiModule({
         SettingsManager.setImportImages(enabled);
     },
 
+    /** Settings → Data → Web photos in outputs (spec 145 T8): 'load' from the web or 'link' only. */
+    setOutputWebPhotos(value: string): void {
+        SettingsManager.setOutputWebPhotos(value !== 'link');
+    },
+
     toggleFamilyButton(enabled: boolean): void {
         SettingsManager.setFamilyButton(enabled);
         this.updateViewModeUI(); // owns the toolbar family-button visibility

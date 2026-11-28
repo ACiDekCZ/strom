@@ -1,9 +1,9 @@
 /**
- * What outputs show of a house's story (spec 145 T4), "now" fixed at 20 Nov 2026: the approved text only (a draft
- * never, an approved one with a new version beside it as approved), left out whole when it names a living person, one
+ * What outputs show of a house's story (spec 145 T4, T8), "now" fixed at 20 Nov 2026: the approved text, or a draft
+ * tagged as one (an approved one with a new version beside it as approved), left out whole when it names a living person, one
  * of the last ~100 years or a person of the research the tree does not know whose death is not known, or rests on an
  * item the output leaves out. The house page: the story section in the app (draft, approved, new version, its task)
- * and in the file (approved only, the filter); without a story nothing.
+ * and in the file (approved or a draft tagged, never Approve or Compare; the filter); without a story nothing.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StromData } from '../types.js';
@@ -42,18 +42,21 @@ describe('houseStoryForOutput', () => {
         return houseStoryForOutput(r, houseOutputFilter(house, r, data, HOUSE_NOW, ctx), ctx);
     };
 
-    it('the approved text only; with a new version beside it still the approved one; a draft never', () => {
-        expect(of(final())).toEqual({ title: 'Grunt na návsi', text: TEXT, facts: ['e1', 'h1', 'h2'], sources: [{ source: 'S0001' }], at: '2026-11-20', people: OLD });
+    it('the approved text; with a new version beside it still the approved one; a draft as a draft (T8)', () => {
+        expect(of(final())).toEqual({ title: 'Grunt na návsi', text: TEXT, facts: ['e1', 'h1', 'h2'], sources: [{ source: 'S0001' }], at: '2026-11-20', people: OLD, draft: false });
         const both = of(final({ draft: { text: 'Nová verze s Bohuslavou.', facts: [], sources: [], people: [{ id: 'P0005', died: false }] } }));
         expect(both?.text).toBe(TEXT);
-        expect(both).not.toHaveProperty('draft');
-        expect(of({ ...final(), status: 'draft' })).toBeNull();
+        expect(both?.draft).toBe(false);
+        expect(of({ ...final(), status: 'draft' })).toEqual({ ...of(final()), draft: true });
         expect(of({ status: null, task: { id: 'T0001', state: 'open' } })).toBeNull();
         expect(houseStoryForOutput(null, houseOutputFilter(house, null, data, HOUSE_NOW, ctx), ctx)).toBeNull();
     });
 
     it('left out whole when it names the living, a person of the last ~100 years, or a stranger not known dead', () => {
         expect(of(final({ people: [...OLD, { id: 'P0005', died: false }] }))).toBeNull();
+        // A draft is checked the same (T8).
+        expect(of({ ...final({ people: [...OLD, { id: 'P0005', died: false }] }), status: 'draft' })).toBeNull();
+        expect(of({ ...final({ facts: ['e1', 'e9'] }), status: 'draft' })).toBeNull();
         expect(of(final({ people: [...OLD, { id: 'P0003', died: true }] }))).toBeNull();
         expect(of(final({ people: [{ id: 'P0777', died: false }] }))).toBeNull();
         expect(of(final({ people: [{ id: 'P0777', died: true }] }))?.text).toBe(TEXT);
@@ -115,10 +118,20 @@ describe('the house page\'s story', () => {
         expect(storySection(app(final({ task: { id: 'T0002', state: 'open' } })))).toContain('hp-story-task');
     });
 
-    it('in the file: the approved story through the filter; a draft, a task or a protected person never', () => {
+    it('in the file: the approved story through the filter, a draft tagged (T8); a task or a protected person never', () => {
         const file = (story: HouseStory) => storySection(buildHousePage(data, house, withStory(story), 'file', opts));
         expect(file(final())).toContain('Svatobor Prouzal');
-        expect(file({ ...final(), status: 'draft' })).toBe('');
+        expect(file(final())).not.toContain('hp-story-tag');
+        const draft = file({ ...final(), status: 'draft' });
+        expect(draft).toContain('Svatobor Prouzal');
+        expect(draft).toContain('hp-story--draft');
+        expect(draft).toContain('<span class="hp-story-tag">draft, waiting for approval</span>');
+        expect(draft).not.toContain('<button');
+        // Even with the window's buttons given, the file has none.
+        const withActs = storySection(buildHousePage(data, house, withStory({ ...final(), status: 'draft' }), 'file',
+            { ...opts, app: { storyApproveHtml: '<button id="ap">A</button>' } }));
+        expect(withActs).not.toContain('id="ap"');
+        expect(file({ ...final({ people: [...OLD, { id: 'P0005', died: false }] }), status: 'draft' })).toBe('');
         expect(file({ status: null, task: { id: 'T0001', state: 'doing' } })).toBe('');
         expect(file(final({ people: [...OLD, { id: 'P0005', died: false }] }))).toBe('');
         const both = file(final({ draft: { text: 'Nová verze.', facts: [], sources: [], people: [] } }));

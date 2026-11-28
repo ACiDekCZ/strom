@@ -2570,6 +2570,7 @@ export interface AppSettings {
     whatsNew30Shown?: boolean;       // the one-time "What's new in 3.0" card was shown
     fileCopyReminders?: boolean;     // default: true - notice when edits are only in a storage the browser may clear
     importImages?: boolean;          // default: true - imports bring photos, attachments and source excerpts
+    outputWebPhotos?: boolean;       // default: true - outputs (house page file, book, family pages) load the houses' and towns' web pictures (spec 145 T8); false: link only
     recentSourceIds?: Record<string, string[]>;  // per tree id: last cited sources, newest first (source picker)
     mergeRules?: Record<string, SavedMergeRule>;  // per program (mergeRuleKey): the import guide's saved scope and rule (spec 134 K10.4)
     /**

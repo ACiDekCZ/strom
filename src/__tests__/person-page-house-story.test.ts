@@ -1,6 +1,6 @@
 /**
  * The story of a house under a person's story (spec 145 T4): "House No. N ›" for a house the person lived in that has
- * an approved story — in the window a button to the house's page at its story, in a set an anchor only when the
+ * a story (in a set also a draft its page shows tagged, spec 145 T8) — in the window a button to the house's page at its story, in a set an anchor only when the
  * house's page there shows the story; nothing otherwise, and the house's text never repeated.
  */
 import { describe, expect, it } from 'vitest';
@@ -80,9 +80,14 @@ describe('the family pages — a person\'s story leads to the house\'s story', (
         expect(page).not.toContain(HOUSE_STORY);
     });
 
-    it('none for a draft, a story the house\'s page leaves out, or a house without a page', () => {
+    it('a draft the house\'s page shows tagged (spec 145 T8): the link to that page too', () => {
+        const { html, slug, person } = setHtml({ status: 'draft', people: [{ id: 'P0001', died: true }] });
+        expect(storyLinks(personPage(html, person))).toContain(`href="#${slug}"`);
+    });
+
+    it('none for a story the house\'s page leaves out (a draft too), or a house without a page', () => {
         for (const s of [
-            setHtml({ status: 'draft', people: [{ id: 'P0001', died: true }] }),
+            setHtml({ status: 'draft', people: [{ id: 'P0001', died: true }, { id: 'P0003', died: true }] }),
             // Names a person of the last ~100 years: the house's page leaves it out, so does the link.
             setHtml({ status: 'final', people: [{ id: 'P0001', died: true }, { id: 'P0003', died: true }] }),
             setHtml(),

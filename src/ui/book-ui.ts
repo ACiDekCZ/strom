@@ -55,6 +55,7 @@ import { openPersonPopover, openSearchPopover, type SearchPopoverRow } from './p
 import { collectHouses, findHouse, hasNumberedHouse, houseLabel, houseTitle, type TreeHouse } from '../houses.js';
 import { loadBookHouseResearch, type BookHouseResearch } from '../book-house-research.js';
 import { protectedHouseIndex } from '../person-page.js';
+import { housePicturesOf } from '../house-page.js';
 import { houseStatus, type HouseResearch } from '../house-bridge.js';
 import type { HouseMapShots } from '../house-map-shot.js';
 import { houseShotRequests, prepareHouseShots } from './house-map-shots.js';
@@ -69,6 +70,7 @@ import { treeImageChars } from '../memory-limit.js';
 import { showProgressToast, type ProgressToastHandle } from './toast.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 import { imageLoads } from '../image-loads.js';
+import { SettingsManager } from '../settings.js';
 import { GIFT_DEFAULT_DEPTH, GIFT_DEPTHS, giftCutIds, type GiftDepth } from '../gift-tree.js';
 
 type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'gift' | 'persons' | 'house';
@@ -425,7 +427,7 @@ function optionsHtml(s: DialogState): string {
     const seg = (name: string, items: ReadonlyArray<[string, string]>, label: string): string =>
         `<div class="book-seg sel-seg" role="radiogroup" aria-label="${esc(label)}">`
         + items.map(([v, l]) => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-${name}="${v}">${esc(l)}</button>`).join('') + `</div>`;
-    const sw = (key: 'notes' | 'research' | 'houseRecent' | 'houseMaps', title: string, hintText: string): string =>
+    const sw = (key: 'notes' | 'research' | 'houseRecent' | 'houseMaps' | 'webPhotos', title: string, hintText: string): string =>
         `<div class="book-switch-row"><button type="button" class="book-switch" role="switch" data-switch="${key}" aria-labelledby="book-sw-${key}">`
         + `<span class="book-switch-track" aria-hidden="true"></span></button>`
         + `<div class="book-switch-text"><span class="book-switch-t" id="book-sw-${key}">${esc(title)}</span><span class="book-hint">${esc(hintText)}</span></div></div>`;
@@ -474,13 +476,15 @@ function optionsHtml(s: DialogState): string {
     const privacyRadios = `<div class="book-radios" role="radiogroup" aria-labelledby="book-privacy-h">`
         + PRIVACY.map(m => `<label class="book-radio"><input type="radio" name="book-privacy" value="${m}"><span>${esc(privacyLabel[m])}</span></label>`).join('')
         + `</div>`;
-    if (pages) return head + pagesOptionsHtml(sum, privacyRadios);
+    // Web photos in outputs (spec 145 T8): the app's setting (Settings → Data), offered where the houses are.
+    const photos = `<div class="book-house-photos" hidden>${sw('webPhotos', strings.outputWebPhotos.bookSwitch, strings.outputWebPhotos.bookSwitchHint)}</div>`;
+    if (pages) return head + pagesOptionsHtml(sum, privacyRadios, photos);
     return head
         + `<div class="book-sum">${sum('parts', D.parts)}${sum('detail', D.detail)}${sum('notes', D.notesRow)}`
         + `${sum('privacy', D.privacy)}${sum('lang', D.lang)}${sum('title', D.title)}</div>`
         + `<section class="book-sec" data-sec="parts"><h3 class="book-sec-h">${esc(D.parts)}</h3><div class="book-parts">${parts}</div>`
         // The Houses chapter's locations (spec 145 T3): shown for a chapter with a house whose location outputs may show.
-        + `<div class="book-house-maps" hidden>${sw('houseMaps', D.houseMaps, D.houseMapsHint)}</div></section>`
+        + `<div class="book-house-maps" hidden>${sw('houseMaps', D.houseMaps, D.houseMapsHint)}</div>${photos}</section>`
         + `<section class="book-sec" data-sec="detail"><h3 class="book-sec-h">${esc(D.detail)}</h3><div class="book-detail-line">`
         + seg('detail', DETAILS.map(d => [d, T.detail[d]] as [string, string]), D.detail)
         + `<p class="book-hint book-detail-hint"></p></div></section>`
@@ -504,7 +508,7 @@ function optionsHtml(s: DialogState): string {
  * the families, the images, what the pages include; on a phone rows with a
  * summary, each opening a sub-sheet (6b).
  */
-function pagesOptionsHtml(sum: (sub: Sub, label: string) => string, privacyRadios: string): string {
+function pagesOptionsHtml(sum: (sub: Sub, label: string) => string, privacyRadios: string, photos: string): string {
     const D = strings.book.dlg;
     const F = strings.familyPages;
     const imgRow = (key: 'clips' | 'photos', label: string): string =>
@@ -533,7 +537,7 @@ function pagesOptionsHtml(sum: (sub: Sub, label: string) => string, privacyRadio
         + `<section class="book-sec" data-sec="houses" hidden><h3 class="book-sec-h" id="fp-houses-h">${esc(F.housesRow)}</h3>`
         + `<div class="book-radios" role="radiogroup" aria-labelledby="fp-houses-h">`
         + HOUSES_CHOICES.map(v => `<label class="book-radio"><input type="radio" name="fp-houses" value="${v}"><span>${esc(F.housesOpt[v])}</span></label>`).join('')
-        + `</div></section>`;
+        + `</div>${photos}</section>`;
 }
 
 function setText(root: ParentNode, sel: string, text: string): void {
@@ -699,11 +703,15 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
     modal.querySelectorAll<HTMLElement>('[data-switch]').forEach(b => {
         const k = b.dataset.switch;
         b.setAttribute('aria-checked', String(k === 'notes' ? s.opts.notes : k === 'research' ? s.opts.research
-            : k === 'houseMaps' ? bookHouseMaps(s.opts) : s.opts.houseRecent !== false));
+            : k === 'houseMaps' ? bookHouseMaps(s.opts) : k === 'webPhotos' ? SettingsManager.isOutputWebPhotos() : s.opts.houseRecent !== false));
     });
     modal.querySelectorAll<HTMLElement>('.book-house-recent').forEach(el => { el.hidden = s.kind !== 'house'; });
     const mapsShown = avail.houses.available && !!s.opts.parts.houses && bookHouseMapsState(s.data, opts, env).shown;
     modal.querySelectorAll<HTMLElement>('.book-house-maps').forEach(el => { el.hidden = !mapsShown; });
+    // Web photos (spec 145 T8): with the Houses chapter whose houses have pictures under a free licence.
+    const photosShown = avail.houses.available && !!s.opts.parts.houses
+        && bookChapterHousesFor(s.data, opts, env).some(h => housePicturesOf(env.houseResearch?.(h) ?? null));
+    modal.querySelectorAll<HTMLElement>('.book-house-photos').forEach(el => { el.hidden = !photosShown; });
     modal.querySelectorAll<HTMLElement>('[data-lang]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.lang === s.opts.lang)));
 
     // Title: automatic by the selection and the book's language, until edited
@@ -762,6 +770,12 @@ function syncPages(s: DialogState, modal: HTMLElement): void {
     // Houses (spec 145 T6): only when the selection's people lived in a house with history.
     const houses = !!s.est?.set.houseIds?.size;
     modal.querySelectorAll<HTMLElement>('[data-sec="houses"], [data-sub-open="houses"]').forEach(el => { el.hidden = !houses; });
+    // Web photos (spec 145 T8): for house pages whose houses have pictures under a free licence.
+    const photosOf = s.houseResearch;
+    const webPics = houses && p.houses === 'pages' && !!photosOf && housesOf(s)
+        .some(h => s.est!.set.houseIds!.has(h.id) && housePicturesOf(photosOf(h)));
+    modal.querySelectorAll<HTMLElement>('.book-house-photos').forEach(el => { el.hidden = !webPics; });
+    modal.querySelectorAll<HTMLElement>('[data-switch="webPhotos"]').forEach(b => b.setAttribute('aria-checked', String(SettingsManager.isOutputWebPhotos())));
     // The lines' timelines: hidden for a selection without lines (1102 §4.4).
     const noLines = s.kind === 'persons' || s.kind === 'gift' || s.kind === 'ancestors' || s.kind === 'descendants';
     const tl = modal.querySelector<HTMLElement>('[data-inc="timelines"]');
@@ -978,6 +992,8 @@ function pageSetOptionsOf(s: DialogState): PageSetOptions {
         lang: getCurrentLanguage(), privacy: s.opts.privacy, families: p.families, clips: p.clips, photos: p.photos,
         map: p.include.map, groups: { ...p.groups }, timelines: p.include.timelines, history: s.history,
         minimal: s.est?.minimal ?? false, houses: p.houses,
+        // Web photos in outputs (spec 145 T8): the app's setting.
+        ...(SettingsManager.isOutputWebPhotos() ? {} : { webPhotos: false }),
     };
 }
 
@@ -1437,6 +1453,12 @@ export const bookUiMethods = uiModule({
                     update(s => { s.opts = { ...s.opts, houseRecent: s.opts.houseRecent === false }; });
                     return;
                 }
+                // The app's setting, not the book's (spec 145 T8): Web photos in outputs.
+                if (sw.dataset.switch === 'webPhotos') {
+                    SettingsManager.setOutputWebPhotos(!SettingsManager.isOutputWebPhotos());
+                    update(() => { /* the switch and the preview follow the setting */ });
+                    return;
+                }
                 // Not a preset's value either: the Houses chapter's locations (spec 145 T3).
                 if (sw.dataset.switch === 'houseMaps') {
                     update(s => { s.opts = { ...s.opts, houseMaps: !bookHouseMaps(s.opts) }; });
@@ -1892,6 +1914,7 @@ export const bookUiMethods = uiModule({
             // The research's results of the book's houses (read before it), else those read so far (the Houses window).
             houseResearch: (house) => read?.research.get(house.id) ?? this.houseResearchRead(house),
             houseMapShot: (house) => bookHouseShots?.get(house.id)?.today ?? null,
+            webPhotos: SettingsManager.isOutputWebPhotos(),
             finishedHouses: new Set([
                 ...this.bookFinishedHouses(options.parts.houses && hasNumberedHouse(data) ? collectHouses(data) : []),
                 ...(read?.finished ?? []),

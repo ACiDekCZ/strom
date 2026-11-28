@@ -10,6 +10,7 @@
  * while the page is open and comes back when it closes.
  */
 
+import { SettingsManager } from '../settings.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { DataManager } from '../data.js';
 import type { HouseId, HouseUserData } from '../types.js';
@@ -547,6 +548,8 @@ export const housePageMethods = uiModule({
                 layers,
                 fontCss: appFontFaceCss([...POSTER_SERIF_FACES]),
                 mapShots: shots.get(house.id) ?? null,
+                // Web photos in outputs (spec 145 T8, Settings → Data): the pictures from the web or the links only.
+                webPhotos: SettingsManager.isOutputWebPhotos(),
             });
             const name = housePageFileName(house);
             const blob = new Blob([html], { type: 'text/html;charset=utf-8' });

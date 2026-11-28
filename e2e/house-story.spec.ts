@@ -6,8 +6,8 @@ import { fakeBridge, links, openResearch, poll, BRIDGE } from './research-bridge
  * sections — a draft with Approve (the research's link), the approved text, a new version beside it with Compare; ⋯
  * "Write the story of the house" asks the agent through the bridge (POST /houses/story, the AI badge alone) and the
  * page shows the task's state; an older research without the feature offers and shows nothing. Under a person's
- * story the house's story is a link; the family book's Houses chapter has the approved story only, never a draft or
- * one naming a living person; What waits leads to the house's page at its story.
+ * story the house's story is a link; the family book's Houses chapter has the approved story, a draft tagged as
+ * waiting when there is no approved one (spec 145 T8), never one naming a living person; What waits leads to the house's page at its story.
  * A fake bridge with invented data: the Fíšek family of Bělokamen čp. 16.
  */
 
@@ -304,12 +304,16 @@ test.describe('The story of a house in the family book', () => {
         await expect(link).toHaveAttribute('href', `#${await ch.getAttribute('id')}`);
     });
 
-    test('a draft never', async ({ page, context }) => {
+    test('a draft: tagged as waiting for approval, no button (spec 145 T8)', async ({ page, context }) => {
         await setup(page, { story: DRAFT });
         const book = await openBook(page, context);
-        await expect(book.locator('#book-houses .book-house-ch', { hasText: 'čp. 16' })).toBeVisible();
-        await expect(book.locator('.book-house-story')).toHaveCount(0);
-        await expect(book.locator('.book-story-houses')).toHaveCount(0);
+        const ch = book.locator('#book-houses .book-house-ch', { hasText: 'čp. 16' });
+        const story = ch.locator('.book-house-story');
+        await expect(story).toHaveClass(/book-house-story--draft/);
+        await expect(story.locator('.book-house-story-tag')).toHaveText('draft, waiting for approval');
+        await expect(story).toContainText('Stavení postavil roku 1830 Josef Fíšek.');
+        await expect(story.locator('button')).toHaveCount(0);
+        await expect(book.locator('.book-story', { hasText: 'Josef vyrostl' }).locator('.book-story-houses a')).toHaveText('House čp. 16 ›');
     });
 
     test('a story naming a living person: left out whole', async ({ page, context }) => {

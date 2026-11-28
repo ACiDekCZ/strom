@@ -17,7 +17,10 @@
  * and role only, their facts left out, the living named as an output names
  * them (initials), today's owners and residents never, sensitive events
  * until a person reveals them, the location only for a house without people
- * of the last ~100 years. Nothing in the file calls the network.
+ * of the last ~100 years. The file calls the network only for the pictures of
+ * the house and the town under a free licence (spec 145 T8, `webPhotos`, on by
+ * default): plain http(s) <img> without the referrer, never a script, a font
+ * or a frame; without the network their caption with the link stays.
  */
 
 import type { PersonId, PlaceRecord, StromData } from './types.js';
@@ -98,6 +101,11 @@ export interface HousePageOptions {
      * file shows the location; none: the location in words.
      */
     mapShots?: HouseMapShots | null;
+    /**
+     * The file (spec 145 T8, setting "Web photos in outputs"): the pictures of the house and the town come from the
+     * web (default) — an <img> of their http(s) address beside the caption; false: the caption and the link only.
+     */
+    webPhotos?: boolean;
 }
 
 export type { HouseMapInput } from './house-map.js';
@@ -709,6 +717,27 @@ function unknownRow(c: Ctx, u: HouseUnknown): string {
 const outLink = (url: string, text: string): string =>
     `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(text)} ↗</a>`;
 
+/** The house has pictures an output may show (its own under a free licence, its town's): the switch Web photos is offered. */
+export function housePicturesOf(r: HouseResearch | null): boolean {
+    return !!r && ((r.look?.images ?? []).some(im => im.license && im.url && safeHttpUrl(im.url))
+        || (r.town?.pictures ?? []).some(p => safeHttpUrl(p.url)));
+}
+
+/** The page shows the pictures from the web: always in the app, in the file by the setting (spec 145 T8, default on). */
+const webPictures = (c: Ctx): boolean => c.app || c.opts.webPhotos !== false;
+
+/**
+ * A picture of the house or the town ('' when the page only links to it). In the file an empty alt and no fixed
+ * height (`hp-img--web`): without the network the picture takes no room and no broken mark shows — the caption with
+ * its author, licence and link says what it is. No script (no onerror): the file stays without one.
+ */
+function pictureImg(c: Ctx, url: string, alt: string): string {
+    if (!webPictures(c)) return '';
+    return c.app
+        ? `<img class="hp-img" src="${esc(url)}" alt="${esc(alt)}" loading="lazy" referrerpolicy="no-referrer">`
+        : `<img class="hp-img hp-img--web" src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+}
+
 /** A house number without its marker ("čp. 16" → "16"), to tell a field name at this house. */
 const bareNumber = (n: string | undefined): string => (n ?? '').replace(/[^\p{N}/]+/gu, ' ').trim();
 
@@ -726,11 +755,11 @@ function lookHtml(c: Ctx): string {
     // Its certainty (a conjecture, probable), else where it came from, as elsewhere on the page.
     const tags = look ? certaintyTag(c, look.certainty) || (look.origin ? originTag(c, look.origin) : '') : '';
     const text = look?.text ? `<p class="hp-look">${esc(look.text)}${tags ? ` ${tags}` : ''}</p>` : '';
-    // Only images with a free licence; the file links to them (it calls no network).
+    // Only images with a free licence; the file shows them from the web or links to them (webPhotos, spec 145 T8).
     const images = (look?.images ?? []).filter(im => im.license && im.url && safeHttpUrl(im.url));
     const figs = images.map(im => {
         const url = safeHttpUrl(im.url)!;
-        const img = c.app ? `<img class="hp-img" src="${esc(url)}" alt="${esc(im.credit ?? '')}" loading="lazy" referrerpolicy="no-referrer">` : '';
+        const img = pictureImg(c, url, im.credit ?? '');
         const caption = [im.credit, im.license].filter(Boolean).map(t => esc(t!)).join(' · ') + ` · ${outLink(url, hostOf(url))}`;
         return `<figure class="hp-fig">${img}<figcaption>${caption}</figcaption></figure>`;
     }).join('');
@@ -751,8 +780,8 @@ function lookHtml(c: Ctx): string {
             + `${m.why ? `<span class="hp-ql-s">${esc(m.why)}</span>` : ''}</div>`).join('')}</div>` : '';
     const attach = notKnown && c.app && c.opts.app?.lookAttachHtml ? `<div class="hp-acts">${c.opts.app.lookAttachHtml}</div>` : '';
     // The town's pictures and field names.
-    const pictures = (r.town?.pictures ?? []).map(p => {
-        const img = c.app ? `<img class="hp-img" src="${esc(p.url)}" alt="${esc(p.shows)}" loading="lazy" referrerpolicy="no-referrer">` : '';
+    const pictures = (r.town?.pictures ?? []).filter(p => safeHttpUrl(p.url)).map(p => {
+        const img = pictureImg(c, safeHttpUrl(p.url)!, p.shows);
         const by = [p.credit, p.license].filter(Boolean).map(t => esc(t!)).join(' · ');
         return `<figure class="hp-fig">${img}<figcaption><span class="hp-fig-what">${esc(p.shows)}</span>`
             + `<span class="hp-fig-by">${by} · ${outLink(p.url, hostOf(p.url))}</span></figcaption></figure>`;
@@ -766,7 +795,7 @@ function lookHtml(c: Ctx): string {
             + `${sub ? `<span class="hp-ql-s">${sub}</span>` : ''}</div>`;
     }).join('');
     const body = text + figs + more + unknown + manual + attach
-        + (pictures ? `<h3 class="hp-h3">${esc(P.lookPictures)}</h3><div class="hp-figs${c.app ? ' hp-figs--img' : ''}">${pictures}</div>` : '')
+        + (pictures ? `<h3 class="hp-h3">${esc(P.lookPictures)}</h3><div class="hp-figs${webPictures(c) ? ' hp-figs--img' : ''}">${pictures}</div>` : '')
         + (names ? `<h3 class="hp-h3">${esc(P.lookFieldNames)}</h3><div class="hp-ql hp-fns">${names}</div>` : '');
     return body ? section('look', P.sec.look, body) : '';
 }
@@ -774,9 +803,9 @@ function lookHtml(c: Ctx): string {
 // ==================== THE STORY (spec 145 T4) ====================
 
 /**
- * The story's text the page shows: in the app the approved one or the draft (a new version beside an approved one
- * only through its notice); in the file the approved one alone, and only as the output's filter lets it
- * (houseStoryForOutput: none when it names a protected person).
+ * The story's text the page shows: the approved one or the draft (a new version beside an approved one only
+ * through its notice in the app); in the file only as the output's filter lets it (houseStoryForOutput: none when it
+ * names a protected person; a draft tagged, spec 145 T8).
  */
 function shownStory(c: Ctx): HouseStoryText | null {
     const st = c.research?.story;
@@ -796,13 +825,14 @@ function storyHtml(c: Ctx): string {
     if (st.status === null) return live ? section('story', P.sec.story, live) : '';
     const shown = shownStory(c);
     if (!shown) return '';
-    const draft = c.app && st.status === 'draft';
+    // A draft is tagged in the file too (spec 145 T8); Approve and Compare only in the app.
+    const draft = st.status === 'draft';
     const tag = draft ? `<span class="hp-story-tag">${esc(P.storyDraft)}</span>` : '';
     const nv = c.app && st.status === 'final' && st.draft
         ? `<div class="hp-story-nv" role="status"><span>${esc(P.storyNew(dayText(st.draft.at, c.lang) || undefined))}</span>${app?.storyCompareHtml ?? ''}</div>` : '';
     const title = shown.title ? `<h3 class="hp-story-title">${esc(shown.title)}</h3>` : '';
     const cites = citesHtml(c, shown.sources);
-    const approve = draft && app?.storyApproveHtml ? `<div class="hp-acts">${app.storyApproveHtml}</div>` : '';
+    const approve = draft && c.app && app?.storyApproveHtml ? `<div class="hp-acts">${app.storyApproveHtml}</div>` : '';
     const body = `${nv}<div class="hp-story${draft ? ' hp-story--draft' : ''}">${title}<div class="hp-story-prose pp-prose">${storyProseHtml(shown.text, { headingLevel: 4 })}</div>`
         + `${cites ? `<div class="hp-story-src">${cites}</div>` : ''}</div>${approve}${live}`;
     return section('story', P.sec.story, body, tag);

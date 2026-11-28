@@ -1828,6 +1828,16 @@ const stringsEN = {
     },
 
     // Import filter: leave images out
+    // Web photos in outputs (spec 145 T8): the houses' and towns' pictures load from the web or are only linked.
+    outputWebPhotos: {
+        setting: 'Web photos in outputs',
+        load: 'Load from web',
+        link: 'Link only',
+        settingHint: 'The saved house page, the family book and the family pages show the pictures of houses and towns under a free licence from the web; without internet the caption with its link stays. Link only: the caption and the link.',
+        bookSwitch: 'Photos of houses from the web',
+        bookSwitchHint: 'On: the pictures of houses and towns under a free licence load from the web (without internet the caption with its link stays). Off: the caption and the link only. The same setting is in Settings → Data.',
+    },
+
     importImages: {
         label: 'Import images (excerpts, attachments, photos)',
         size: (mb: string) => `≈ ${mb} MB`,
@@ -15170,6 +15180,16 @@ const stringsCZ: StringsType = {
     },
 
     // Filtr importu: bez obrázků
+    // Web photos in outputs (spec 145 T8): the houses' and towns' pictures load from the web or are only linked.
+    outputWebPhotos: {
+        setting: 'Fotky z webu ve výstupech',
+        load: 'Načíst z webu',
+        link: 'Jen odkaz',
+        settingHint: 'Uložená stránka domu, rodinná kniha a rodinné stránky ukážou fotky domů a obcí s volnou licencí z webu; bez internetu zůstane popisek s odkazem. Jen odkaz: popisek a odkaz.',
+        bookSwitch: 'Fotky domů z webu',
+        bookSwitchHint: 'Zapnuto: fotky domů a obcí s volnou licencí se načtou z webu (bez internetu zůstane popisek s odkazem). Vypnuto: jen popisek a odkaz. Totéž nastavení je v Nastavení → Data.',
+    },
+
     importImages: {
         label: 'Importovat obrázky (výřezy, přílohy, fotky)',
         size: (mb: string) => `≈ ${mb} MB`,
@@ -28203,6 +28223,16 @@ const stringsDE: StringsType = {
     },
 
     // Importfilter: ohne Bilder
+    // Web photos in outputs (spec 145 T8): the houses' and towns' pictures load from the web or are only linked.
+    outputWebPhotos: {
+        setting: 'Fotos aus dem Web in Ausgaben',
+        load: 'Aus dem Web laden',
+        link: 'Nur Link',
+        settingHint: 'Die gespeicherte Hausseite, das Familienbuch und die Familienseiten zeigen die Bilder von Häusern und Orten unter freier Lizenz aus dem Web; ohne Internet bleibt die Bildunterschrift mit dem Link. Nur Link: Bildunterschrift und Link.',
+        bookSwitch: 'Fotos der Häuser aus dem Web',
+        bookSwitchHint: 'Ein: Die Bilder von Häusern und Orten unter freier Lizenz werden aus dem Web geladen (ohne Internet bleibt die Bildunterschrift mit dem Link). Aus: nur Bildunterschrift und Link. Dieselbe Einstellung steht unter Einstellungen → Daten.',
+    },
+
     importImages: {
         label: 'Bilder importieren (Ausschnitte, Anhänge, Fotos)',
         size: (mb: string) => `≈ ${mb} MB`,

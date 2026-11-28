@@ -176,7 +176,7 @@ function setHousePrivacy(set: PageSet): HousePrivacyContext {
     return privacy;
 }
 
-/** The houses whose page in the set shows their approved story (spec 145 T4), once per set. */
+/** The houses whose page in the set shows their story (spec 145 T4; a draft too, tagged, T8), once per set. */
 const storyHousesOfSet = new WeakMap<PageSet, ReadonlySet<string>>();
 
 function setStoryHouses(set: PageSet): ReadonlySet<string> {
@@ -188,7 +188,7 @@ function setStoryHouses(set: PageSet): ReadonlySet<string> {
         const privacy = setHousePrivacy(set);
         for (const { house } of protectedHouseOutputs(prot, set.options.now).houses) {
             const research = set.houseResearch.get(house.id) ?? null;
-            if (!set.houseSlug.has(house.id) || research?.story?.status !== 'final') continue;
+            if (!set.houseSlug.has(house.id) || !research?.story?.status) continue;
             const out = houseOutputFilter(house, research, prot.tree, set.options.now, privacy);
             if (houseStoryForOutput(research, out, privacy)) ids.add(house.id);
         }
@@ -212,6 +212,7 @@ function housePageHtml(r: Render, page: SetPage): string {
     const body = buildHousePage(prot.tree, shown.house, set.houseResearch?.get(shown.house.id) ?? null, 'file', {
         lang: set.options.lang, now: set.options.now, names: prot.tree, privacy,
         mapShots: set.houseMapShots?.get(shown.house.id) ?? null,
+        webPhotos: set.webPhotos !== false,
         personLink: (id, html) => {
             const slug = isProtectedPerson(prot, id) ? undefined : set.personSlug.get(id);
             return slug ? pageLink(r, slug, html) : null;

@@ -229,15 +229,25 @@ describe('house page — the saved file (K7.1, K3.3)', () => {
         expect(doc).toContain('Svatobor');
     });
 
-    it('is self-contained: no script source, no remote image, no stylesheet link', () => {
+    it('is self-contained: no script source, no stylesheet link, no frame; a remote image only of a picture under a free licence (T8)', () => {
         const data = dataWithSources();
         const r = fullResearch();
-        r.look = { text: 'Stavení', images: [{ url: 'https://example.org/dum.jpg', license: 'CC BY 4.0', credit: 'Archiv Brodek' }] };
+        r.look = { text: 'Stavení', images: [{ url: 'https://example.org/dum.jpg', license: 'CC BY 4.0', credit: 'Archiv Brodek' },
+            { url: 'https://example.org/bez-licence.jpg', credit: 'Bez licence' }, { url: 'javascript:alert(1)', license: 'CC0' }] };
         const doc = buildHousePageDocument(data, houseOf(data, HOUSE_ID), r, opts);
         expect(doc.startsWith('<!doctype html>')).toBe(true);
-        expect(doc).not.toMatch(/<script[^>]+src=/);
-        expect(doc).not.toMatch(/<img[^>]+src="https?:/);
+        expect(doc).not.toMatch(/<script[^>]+src=/i);
+        // No handler on the page's elements (no onerror on a picture): the inline scripts are the page's own.
+        const article = doc.slice(doc.indexOf('<article'), doc.lastIndexOf('</article>'));
+        expect(article).not.toMatch(/\son[a-z]+=/i);
+        expect(doc).not.toMatch(/<iframe|<object|<embed/i);
         expect(doc).not.toMatch(/<link[^>]+stylesheet/);
+        expect(doc).not.toMatch(/@import|url\(\s*["']?https?:/i);
+        // The only network address the file loads: the licensed picture, without the referrer.
+        expect([...doc.matchAll(/<img[^>]+src="(https?:[^"]+)"/g)].map(m => m[1])).toEqual(['https://example.org/dum.jpg']);
+        expect(doc).toContain('<img class="hp-img hp-img--web" src="https://example.org/dum.jpg" alt="" loading="lazy" referrerpolicy="no-referrer">');
+        expect(doc).not.toContain('bez-licence.jpg');
+        expect(doc).not.toContain('javascript:');
         expect(doc).toContain('CC BY 4.0');
         expect(doc).toContain('class="pp-toc"');
     });
@@ -352,19 +362,41 @@ describe('house page — the building (spec 145 T1)', () => {
         expect(section(buildHousePage(data, houseOf(data, HOUSE_ID), fullResearch(), 'app', opts))).toContain('Zděné přízemní stavení');
     });
 
-    it('the saved file: links instead of pictures, no buttons, no names of people', () => {
+    it('the saved file: pictures from the web by default with their captions, no buttons, no names of people (T8)', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(HOUSE_NOW);
+        try {
+            const data = dataWithSources();
+            const look = section(buildHousePageDocument(data, houseOf(data, HOUSE_ID), fullLook(), { ...opts, look: true }));
+            expect(look).toContain('<img class="hp-img hp-img--web" src="https://example.org/dum.jpg" alt=""');
+            expect(look).toContain('<img class="hp-img hp-img--web" src="https://commons.example.org/naves.jpg" alt=""');
+            expect(look).toContain('hp-figs--img');
+            // The caption and the link stay beside the picture (without the network they say what it is).
+            expect(look).toContain('Archiv Brodek · CC BY 4.0');
+            expect(look).toContain('commons.example.org ↗');
+            expect(look).not.toContain('<button');
+            // The same with webPhotos true.
+            expect(section(buildHousePageDocument(data, houseOf(data, HOUSE_ID), fullLook(), { ...opts, look: true, webPhotos: true }))).toBe(look);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('the saved file with Link only: links instead of pictures, no buttons, no names of people', () => {
         vi.useFakeTimers();
         vi.setSystemTime(HOUSE_NOW);
         try {
             const data = dataWithSources();
             const r = fullLook();
-            const doc = buildHousePageDocument(data, houseOf(data, HOUSE_ID), r, { ...opts, look: true, app: { lookAttachHtml: '<button class="house-attach">x</button>' } });
+            const doc = buildHousePageDocument(data, houseOf(data, HOUSE_ID), r, { ...opts, look: true, webPhotos: false, app: { lookAttachHtml: '<button class="house-attach">x</button>' } });
             const look = section(doc);
             expect(look).toContain('Pictures of the town');
             expect(look).toContain('Náves od kaple, 1912');
             expect(look).toContain('commons.example.org ↗');
             expect(look).toContain('Prouzalův mlýn');
             expect(doc).not.toMatch(/<img[^>]+src="https?:/);
+            expect(look).not.toContain('hp-figs--img');
+            expect(look).toContain('Archiv Brodek · CC BY 4.0');
             expect(look).not.toContain('<button');
             expect(doc).not.toContain(LIVING_NAME);
             // The not known state in the file: its sentence, no button.

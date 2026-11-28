@@ -85,6 +85,11 @@ export interface BookBuildEnv {
      * src/house-map-shot.ts); none: its coordinates and how sure the location is, without a picture.
      */
     houseMapShot?: (house: TreeHouse) => HouseMapShot | null;
+    /**
+     * The pictures of the houses and their towns from the web (spec 145 T8, the setting "Web photos in outputs";
+     * default true): false gives their captions with the links only.
+     */
+    webPhotos?: boolean;
 }
 
 function esc(text: string): string {
@@ -364,7 +369,7 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
             name: tree.houses?.[house.id]?.name?.trim() ?? '',
             numbers: research ? withResearchNumbers(house, research.numbers, data.houses?.[house.id]) : house.numbers,
             out,
-            // Its approved story, as outputs may show it (spec 145 T4).
+            // Its story, as outputs may show it (spec 145 T4; a draft tagged, T8).
             story: hctx ? houseStoryForOutput(research, out, hctx) : null,
             // Its location with the cut of today's map (spec 145 T3): only where outputs may show it and the book does.
             ...(out.location && bookHouseMaps(opts)
@@ -432,7 +437,7 @@ export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions
         back.push(`<section class="book-sheet book-back" id="book-small-rods">${smallRodsHtml(model.smallRods, ctx)}</section>`);
     }
     if (parts.houses && hctx) {
-        const chapter = housesChapterHtml(ctx, chapterHouses, hctx.from, data.sources);
+        const chapter = housesChapterHtml(ctx, chapterHouses, hctx.from, data.sources, env.webPhotos !== false);
         if (chapter) back.push(`<section class="book-sheet book-back book-houses" id="book-houses">${chapter}</section>`);
         else parts.houses = false;
     }

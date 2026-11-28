@@ -663,6 +663,20 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /**
+     * "Web photos in outputs" (spec 145 T8): the saved house page, the book and
+     * the family pages show the pictures of houses and towns from the web
+     * (default) or only their captions with the links.
+     */
+    isOutputWebPhotos(): boolean {
+        return this.settings.outputWebPhotos !== false;
+    }
+
+    setOutputWebPhotos(load: boolean): void {
+        this.settings.outputWebPhotos = load;
+        this.save();
+    }
+
     /** The import guide's rule saved for files of `program` (spec 134 K10.4), or null. */
     getMergeRule(program: string): SavedMergeRule | null {
         const key = mergeRuleKey(program);

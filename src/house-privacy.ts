@@ -194,16 +194,19 @@ export function houseOutputFilter(house: TreeHouse, research: HouseResearch | nu
     };
 }
 
+/** The house's story as an output shows it: its text, and whether it is a draft (the output tags it "draft"). */
+export type HouseOutputStory = HouseStoryText & { draft: boolean };
+
 /**
- * The house's story an output may show (spec 145 T4): its approved text only, never a draft or a version waiting
- * beside it. None when it names a protected person — living or of the last ~100 years, or a person of the research
+ * The house's story an output may show (spec 145 T4, T8): the approved text, or the draft when the story is only a
+ * draft yet (tagged so); a newer version waiting beside an approved one never (the approved text goes). None when it names a protected person — living or of the last ~100 years, or a person of the research
  * the tree does not know and whose death is not known — or rests on what the output leaves out (an event hidden, a
  * holder or resident left out or shown without years): the story is left out whole, as the book leaves out a
  * protected person's story; its text is never rewritten.
  */
-export function houseStoryForOutput(research: HouseResearch | null, out: HouseOutput, ctx: HousePrivacyContext): HouseStoryText | null {
+export function houseStoryForOutput(research: HouseResearch | null, out: HouseOutput, ctx: HousePrivacyContext): HouseOutputStory | null {
     const story = research?.story;
-    if (!story || story.status !== 'final') return null;
+    if (!story || story.status === null) return null;
     for (const p of story.people) {
         const id = ctx.personOfRef(p.id);
         if (id ? ctx.living(id) || ctx.recent(id) : !p.died) return null;
@@ -215,6 +218,6 @@ export function houseStoryForOutput(research: HouseResearch | null, out: HouseOu
     if (story.facts.some(f => items.has(low(f)) && !shown.has(low(f)))) return null;
     return {
         ...(story.title ? { title: story.title } : {}), text: story.text, facts: story.facts, sources: story.sources,
-        ...(story.at ? { at: story.at } : {}), people: story.people,
+        ...(story.at ? { at: story.at } : {}), people: story.people, draft: story.status === 'draft',
     };
 }

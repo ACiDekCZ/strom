@@ -421,6 +421,8 @@ export const miscMethods = uiModule({
 
         const importImagesToggle = document.getElementById('import-images-toggle') as HTMLInputElement | null;
         if (importImagesToggle) importImagesToggle.checked = SettingsManager.isImportImages();
+        const webPhotos = SettingsManager.isOutputWebPhotos() ? 'load' : 'link';
+        document.querySelectorAll<HTMLInputElement>('input[name="output-web-photos"]').forEach(r => { r.checked = r.value === webPhotos; });
         renderMergeRulesSetting();
         const advancedToggle = document.getElementById('advanced-fields-toggle') as HTMLInputElement | null;
         if (advancedToggle) advancedToggle.checked = SettingsManager.isAdvancedFields();
