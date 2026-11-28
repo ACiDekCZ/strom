@@ -107,7 +107,7 @@ function media(query: string): boolean {
 
 /** Controls that take each other's place when redrawn (the focus moves to the pair). */
 const FOCUS_PAIRS: Record<string, string> = {
-    'clear-person': 'person', 'clear-kind': 'kind', 'clear-batch': 'batch',
+    'clear-person': 'person', 'clear-kind': 'kind', 'clear-batch': 'batch', 'clear-files': 'files',
     'thumbs-pause': 'thumbs-resume', 'thumbs-resume': 'thumbs-pause', 'sel-hide': 'sel-restore', 'sel-restore': 'sel-hide',
 };
 
@@ -299,7 +299,7 @@ function emptyLayout(): OverviewLayout {
 
 export const materialsWindowMethods = uiModule({
     /** Fill the window `openMaterials` just put up (called once per opening). */
-    initMaterialsWindow(opts: { group?: MaterialsOpenOptions['group']; person: string | null; batch: string | null }): void {
+    initMaterialsWindow(opts: { group?: MaterialsOpenOptions['group']; person: string | null; batch: string | null; files?: string[] }): void {
         this.teardownMaterialsWindow();
         const overlay = document.getElementById(MODAL_ID);
         const body = overlay?.querySelector<HTMLElement>('#materials-window-body');
@@ -325,10 +325,11 @@ export const materialsWindowMethods = uiModule({
                 <div class="mw-selbar" role="region" hidden></div>
             </div>`;
         // The last filters come back (spec 102 §8), except for a window opened for a person or a batch.
-        const filters: OverviewFilters = { ...emptyFilters(), ...(opts.person || opts.batch ? {} : prefs.filters) };
+        const filters: OverviewFilters = { ...emptyFilters(), ...(opts.person || opts.batch || opts.files ? {} : prefs.filters) };
         if (model === 'app') filters.where = null;
         filters.person = opts.person;
         filters.batch = opts.batch;
+        if (opts.files?.length) filters.files = opts.files;
         const w: Win = {
             gen: ++generation,
             model,
@@ -772,6 +773,7 @@ export const materialsWindowMethods = uiModule({
                 `<button type="button" class="sel-opt" data-sel-form="seg" data-mw="${o.act}" aria-pressed="${o.on}"${o.icon ? ` aria-label="${esc(o.label)}" title="${esc(o.label)}"` : ''}>${o.icon ? `<span class="mw-seg-icon" aria-hidden="true">${o.icon}</span>` : ''}<span class="mw-seg-text">${esc(o.label)}</span></button>`).join('')}</div>`;
         redraw(tools, `
             <div class="mw-chips">
+                ${f.files?.length ? chip('files', m.fFiles, m.filterChip(m.fFiles, f.files.length.toLocaleString(getCurrentLanguage())), false) : ''}
                 ${chip('person', m.fPerson, f.person ? m.filterChip(m.fPerson, personName) : null)}
                 ${chip('kind', m.fKind, f.kinds.length ? m.filterChip(m.fKind, f.kinds.map(kindLabel).join(', ')) : null)}
                 ${w.model === 'archive' ? chip('batch', m.fBatch, f.batch ? m.filterChip(m.fBatch, batchName) : null) : ''}
@@ -2414,6 +2416,7 @@ export const materialsWindowMethods = uiModule({
             case 'person': this.mwOpenPop('person', btn); return;
             case 'kind': this.mwOpenPop('kind', btn); return;
             case 'batch': this.mwOpenPop('batch', btn); return;
+            case 'files': return;
             case 'sheet': this.mwOpenPop('sheet', btn); return;
             case 'sort-menu': this.mwSortMenu(btn); return;
             case 'where': this.mwOpenPop('where', btn); return;
@@ -2422,6 +2425,7 @@ export const materialsWindowMethods = uiModule({
             case 'clear-person': f.person = null; break;
             case 'clear-kind': f.kinds = []; break;
             case 'clear-batch': f.batch = null; w.focusBatch = null; break;
+            case 'clear-files': f.files = null; break;
             case 'noperson': f.noPerson = !f.noPerson; break;
             case 'notitle': f.noTitle = !f.noTitle; break;
             case 'nosource': f.noSource = !f.noSource; break;

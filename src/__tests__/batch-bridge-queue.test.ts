@@ -47,6 +47,17 @@ describe('the answer of media/known', () => {
         expect(said).toEqual(new Map([[sha(1), 'has'], [sha(2), 'queued'], [sha(3), 'none']]));
     });
 
+    it('the record of each hash the research has (a house attaches it, 1128); only a material I…', () => {
+        const ids = new Map<string, string>();
+        parseMediaKnown({ known: {
+            [sha(1)]: { id: 'I0126', kind: 'input' },
+            [sha(2)]: { queued: true },
+            [sha(3)]: { id: 'M0004', kind: 'media' },
+            [sha(4)]: { id: 'I12; drop', kind: 'input' },
+        } }, [sha(1), sha(2), sha(3), sha(4)], ids);
+        expect(ids).toEqual(new Map([[sha(1), 'I0126']]));
+    });
+
     it('not an answer: null', () => {
         expect(parseMediaKnown(null, [sha(1)])).toBeNull();
         expect(parseMediaKnown({ error: 'no' }, [sha(1)])).toBeNull();

@@ -511,7 +511,7 @@ export type MaterialsGroup = 'date' | 'batch' | 'added' | 'person';
 
 export type ResearchDialogArgs =
     /** The Materials window, filtered to a person (a REFN or a PersonId) or a batch. */
-    | { dialog: 'materials'; person?: string; batch?: string; group?: MaterialsGroup }
+    | { dialog: 'materials'; person?: string; batch?: string; group?: MaterialsGroup; files?: string[] }
     /** "Send material…" for a person or a source. */
     | { dialog: 'material'; personId: string }
     | { dialog: 'material'; sourceId: string }
@@ -522,7 +522,7 @@ export type ResearchDialogArgs =
 
 const MATERIALS_GROUPS: readonly MaterialsGroup[] = ['date', 'batch', 'added', 'person'];
 const DIALOG_KEYS: Record<ResearchDialogArgs['dialog'], ReadonlySet<string>> = {
-    materials: new Set(['dialog', 'person', 'batch', 'group']),
+    materials: new Set(['dialog', 'person', 'batch', 'group', 'files']),
     material: new Set(['dialog', 'personId', 'sourceId']),
     read: new Set(['dialog', 'readId', 'sourceId', 'personId']),
     'read-again': new Set(['dialog', 'sourceId', 'clip']),
@@ -541,9 +541,11 @@ export function readResearchDialogArgs(raw: unknown): ResearchDialogArgs | null 
             if (a.person !== undefined && !idOf(a.person)) return null;
             if (a.batch !== undefined && !idOf(a.batch)) return null;
             if (a.group !== undefined && !MATERIALS_GROUPS.includes(a.group as MaterialsGroup)) return null;
+            const files = a.files;
+            if (files !== undefined && !(Array.isArray(files) && files.length <= 5000 && files.every(f => typeof f === 'string' && /^I\d{1,9}$/.test(f)))) return null;
             return {
                 dialog, ...(a.person ? { person: a.person as string } : {}), ...(a.batch ? { batch: a.batch as string } : {}),
-                ...(a.group ? { group: a.group as MaterialsGroup } : {}),
+                ...(a.group ? { group: a.group as MaterialsGroup } : {}), ...(Array.isArray(files) && files.length ? { files: files as string[] } : {}),
             };
         }
         case 'material':

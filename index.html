@@ -23163,6 +23163,11 @@
         .batch-done-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
         .batch-done-row.is-warn { color: var(--warning-text); }
         .batch-done-text { font-size: 13px; color: var(--text-light); margin: 14px 0; }
+        /* A batch with nothing new (1128): the files Materials has already, by their titles. */
+        .batch-done--had .batch-had-one { font-size: 14px; color: var(--text); overflow-wrap: anywhere; }
+        .batch-had-list { margin: -6px 0 14px; padding-left: 18px; font-size: 14px; overflow-wrap: anywhere; }
+        .batch-had-list li { margin: 2px 0; }
+        .batch-had-more { color: var(--text-light); list-style: none; margin-left: -18px; }
         .is-danger-text { color: var(--danger) !important; }
         .material-big-batch { display: inline-block; margin: 2px 0 10px; }
         /* A touch device of the home network (094 §5): tiles, a grid of photos, each photo's state. */

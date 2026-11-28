@@ -69,6 +69,8 @@ export interface MaterialsOpenOptions {
     person?: string;
     batch?: string;
     group?: 'batch' | 'date' | 'added' | 'person';
+    /** Only these files of the research (I…): a batch with nothing new (1128). */
+    files?: string[];
 }
 
 /** Where a research write on items was asked from (the dialogs' context). */
@@ -443,7 +445,7 @@ export const materialsMethods = uiModule({
             this.hideContextMenu?.();
             main.run(RESEARCH_DIALOG_ACTION, {
                 dialog: 'materials', ...(opts.person ? { person: opts.person } : {}), ...(opts.batch ? { batch: opts.batch } : {}),
-                ...(opts.group ? { group: opts.group } : {}),
+                ...(opts.group ? { group: opts.group } : {}), ...(opts.files?.length ? { files: opts.files } : {}),
             }, true);
             return;
         }
@@ -465,6 +467,7 @@ export const materialsMethods = uiModule({
         const batch = archive && typeof opts.batch === 'string' && BATCH_ID.test(opts.batch) ? opts.batch : null;
         if (person) overlay.dataset.person = person;
         if (batch) overlay.dataset.batch = batch;
+        const files = archive ? (opts.files ?? []).filter(f => /^I\d{1,9}$/.test(f)) : [];
         const group = archive
             ? (opts.group === 'date' || opts.group === 'batch' ? opts.group : undefined)
             : (opts.group === 'added' || opts.group === 'person' ? opts.group : undefined);
@@ -504,7 +507,7 @@ export const materialsMethods = uiModule({
             const ctx = this.materialsContext();
             if (ctx) void markBatchOpened(ctx.treeId, batch);
         }
-        this.initMaterialsWindow({ ...(group ? { group } : {}), person, batch });
+        this.initMaterialsWindow({ ...(group ? { group } : {}), person, batch, ...(files.length ? { files } : {}) });
         (overlay.querySelector('.close-btn') as HTMLElement | null)?.focus();
     },
 

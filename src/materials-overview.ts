@@ -48,6 +48,8 @@ export interface OverviewFilters {
     left: boolean;
     showHidden: boolean;
     query: string;
+    /** Only these files of the research (I…): a batch with nothing new opens on them (1128; not remembered). */
+    files?: readonly string[] | null;
 }
 
 export function emptyFilters(): OverviewFilters {
@@ -57,12 +59,12 @@ export function emptyFilters(): OverviewFilters {
 /** Filters that narrow the list ("Filters · N"; the search is not counted, showing hidden is). */
 export function activeFilterCount(f: OverviewFilters): number {
     return (f.person ? 1 : 0) + (f.kinds.length ? 1 : 0) + (f.batch ? 1 : 0) + (f.noPerson ? 1 : 0)
-        + (f.noTitle ? 1 : 0) + (f.noSource ? 1 : 0) + (f.where ? 1 : 0) + (f.left ? 1 : 0) + (f.showHidden ? 1 : 0);
+        + (f.noTitle ? 1 : 0) + (f.noSource ? 1 : 0) + (f.where ? 1 : 0) + (f.left ? 1 : 0) + (f.showHidden ? 1 : 0) + (f.files?.length ? 1 : 0);
 }
 
 /** Something leaves items out (groups then say "k of n" and skip groups without a match). */
 export function narrowing(f: OverviewFilters): boolean {
-    return !!(f.person || f.kinds.length || f.batch || f.noPerson || f.noTitle || f.noSource || f.where || f.left || f.query.trim());
+    return !!(f.person || f.kinds.length || f.batch || f.noPerson || f.noTitle || f.noSource || f.where || f.left || f.files?.length || f.query.trim());
 }
 
 /** The remembered filters (`strom.materials.view` `filters`; the search and the person are not kept). */
@@ -241,6 +243,7 @@ export function passesFilters(item: MaterialItem, f: OverviewFilters, words: str
     if (f.person && !item.persons.includes(f.person)) return false;
     if (f.kinds.length && !f.kinds.includes(itemKindFilter(item))) return false;
     if (f.batch && item.batch?.id !== f.batch) return false;
+    if (f.files?.length && !(item.file && f.files.includes(item.file.id))) return false;
     if (f.noPerson && !itemWithoutPerson(item)) return false;
     // A family tree file has no title nor source to give (spec 117 §5): the review filters leave it out.
     if (f.noTitle && (item.titled || item.tree)) return false;

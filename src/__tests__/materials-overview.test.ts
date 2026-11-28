@@ -130,6 +130,12 @@ describe('filters', () => {
         expect(keys({ kinds: ['none'] })).toEqual(['m:I0002', 'm:I0005', 'm:I0006', 'm:I0007', 'm:I0008']);
     });
 
+    it('only the files of a batch with nothing new (1128): one filter, not remembered', () => {
+        expect(keys({ files: ['I0003', 'I0005', 'I9999'] })).toEqual(['m:I0003', 'm:I0005']);
+        expect(activeFilterCount(filters({ files: ['I0003'] }))).toBe(1);
+        expect(storedFilters(filters({ files: ['I0003'] }))).toEqual({});
+    });
+
     it('without a person: nobody directly nor through the batch', () => {
         expect(keys({ noPerson: true })).toEqual(['m:I0002', 'm:I0003', 'm:I0007']);
     });

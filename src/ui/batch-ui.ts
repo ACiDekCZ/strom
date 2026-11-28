@@ -29,7 +29,7 @@ import { mountPhonePersonSearch } from './phone-person-search.js';
 import { phoneComputerOnlyNote, type BatchQueueInfo } from './phone-research-ui.js';
 import { computerLabelOf, pairingNow } from '../device/device-store.js';
 import type { DevicePersonHit } from '../device/device-research-data.js';
-import type { TreeId } from '../types.js';
+import type { HouseId, TreeId } from '../types.js';
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { isWriteHeldCode, joinSaid, writeHeldOfRefusal } from '../research-write-held.js';
 import { formatBytesShort } from './originals-ui.js';
@@ -39,7 +39,9 @@ import { uiModule } from './module.js';
 import { runBusy } from './busy.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { statusAskUrl } from '../status-parts.js';
-import { batchDoneHouse } from '../house-bridge.js';
+import { batchDoneHouse, houseFeature, sendHouseMaterial } from '../house-bridge.js';
+import { houseMaterialError } from './house-material-ui.js';
+import { cachedMaterialList, primeMaterials } from '../materials.js';
 
 const DIALOG_ID = 'batch-modal';
 const UNFINISHED_KEY = 'strom-batch:';
@@ -130,6 +132,16 @@ interface Run {
     personId: string;
     /** The house the files are material of (HouseId, spec 030): `house` of `batch/<id>/done` with `house.material`. */
     house?: string;
+    /** That house as shown ("Bělokamen čp. 16"). */
+    houseTitle?: string;
+    /**
+     * The files the research had already, by their record (I… → the file's path here): never part of the batch,
+     * so a batch of a house attaches them to it on its own (`POST /houses/material`, 1128), and a batch with
+     * nothing new says them and opens Materials on them.
+     */
+    had: Map<string, string>;
+    /** Those files attached to the house: done, or why not ('' none asked). */
+    hadHouse: '' | 'ok' | { why: string };
     note: string;
     queue: Item[];
     index: number;
@@ -152,6 +164,8 @@ interface Run {
     knownAsked: Set<number>;
     /** What `media/known` said of a hash (absent: not said — the file is asked on its own as before). */
     knownOf: Map<string, MediaKnownState>;
+    /** The record (I…) `media/known` said of a hash the research has. */
+    knownIdOf: Map<string, string>;
     refused: { path: string; why: string }[];
     current: string;
     paused: boolean;
@@ -191,8 +205,9 @@ let st: {
     name: string;
     nameTouched: boolean;
     personId: string;
-    /** The house the batch is material of (opened from a house, spec 030). */
+    /** The house the batch is material of (opened from a house, spec 030), and as shown. */
     house?: string;
+    houseTitle?: string;
     note: string;
     search: string;
     full: Set<string>;
@@ -210,6 +225,11 @@ const deviceResumed = new Set<string>();
 /** A batch id safe inside the line's inline handler (the bridge's ids are UUIDs or `b-…`). */
 const BATCH_LINK_ID = /^[A-Za-z0-9_.-]{1,120}$/;
 let downTimer: ReturnType<typeof setInterval> | null = null;
+
+/** A file the research had already, by its record (only a material I…: what Materials and a house take). */
+function noteHad(r: Run, id: string, path: string): void {
+    if (/^I\d{1,9}$/.test(id) && !r.had.has(id)) r.had.set(id, path);
+}
 
 /** The loop reached a pause or its end: whoever waits for it looks again. */
 function wakeRun(r: Run): void {
@@ -290,7 +310,7 @@ export const batchMethods = uiModule({
      * same for the gallery or any file. `screen` (a phone's Research screen, spec 094 K3.13 §6): the batch of that
      * research, no tree needed here — its person found through the bridge.
      */
-    showBatchDialog(opts: { personId?: string; files?: { file: File; path: string }[]; capture?: boolean; pick?: BatchPick; screen?: string; house?: string } = {}): void {
+    showBatchDialog(opts: { personId?: string; files?: { file: File; path: string }[]; capture?: boolean; pick?: BatchPick; screen?: string; house?: string; houseTitle?: string } = {}): void {
         if (run && !run.finished && !run.cancelled) {
             run.hidden = false;
             this.openBatchOverlay();
@@ -310,7 +330,7 @@ export const batchMethods = uiModule({
         st = {
             step: 'pick', items: [], name: resume?.name ?? '', nameTouched: !!resume, personId: opts.personId ?? resume?.personId ?? '',
             note: resume?.note ?? '', search: '', full: new Set(), collapsed: new Set(), resume, held: false,
-            ...(opts.house ? { house: opts.house } : {}),
+            ...(opts.house ? { house: opts.house, ...(opts.houseTitle ? { houseTitle: opts.houseTitle } : {}) } : {}),
         };
         run = null;
         this.openBatchOverlay();
@@ -935,12 +955,17 @@ export const batchMethods = uiModule({
         const sortBlock = materials && sorting !== 'auto' ? this.batchSortHtml(received) : '';
         const text = materials && stored ? b.doneTextMaterials : archive ? b.doneTextArchive : stored ? b.doneTextStored
             : sorting === 'auto' ? b.doneTextAuto : sorting === 'manual' ? (sortBlock ? b.doneTextUnsorted : b.doneTextUnsortedLater) : b.doneText;
+        // The files of a house the research had: not attached to the house after all (1128), said with why.
+        const hadHouseRow = typeof r.hadHouse === 'object'
+            ? `<div class="batch-done-row is-warn batch-had-house"><span>${esc(b.hadHouseFailed(r.houseTitle ?? r.house ?? '', r.hadHouse.why))}</span></div>` : '';
+        if (materials && this.batchNothingNew(r)) return this.batchHadHtml(hadHouseRow, open);
         return `
                 <div class="modal-content batch-content batch-done">
                     <h3 class="batch-confirm-title">✓ ${esc(archive ? b.doneTitleArchive(r.name) : b.doneTitle(r.name))}</h3>
                     <div class="batch-done-row"><span>${esc(archive ? b.receivedArchive : b.received)}</span><strong>${received}</strong></div>
                     ${known ? `<div class="batch-done-row"><span>${esc(archive ? b.alreadyHadArchive : b.alreadyHad)}</span><strong>${known}</strong></div>` : ''}
                     ${refusedRow}
+                    ${hadHouseRow}
                     ${!stored && r.result?.tasks ? `<div class="batch-done-row"><span>${esc(b.tasks)}</span><strong>${r.result.tasks}</strong></div>` : ''}
                     <p class="batch-done-text">${esc(text)}</p>
                     ${sortBlock}
@@ -953,6 +978,45 @@ export const batchMethods = uiModule({
                     <button type="button" class="primary" data-act="open-materials">${esc(b.openInMaterials)}</button>` : `
                     <span class="batch-foot-note"></span>
                     <button type="button" class="primary" data-act="close">${esc(strings.batch.done)}</button>`}
+                </div>`;
+    },
+
+    /** Nothing new came of the batch: every file was in the research already (and said by its record, 1128). */
+    batchNothingNew(r: Run): boolean {
+        return (r.result?.inputs ?? r.received) === 0 && r.refused.length === 0 && r.had.size > 0;
+    },
+
+    /**
+     * The end of a batch with nothing new (1128): the files are in Materials already — said by their titles,
+     * attached to the house the batch came from, and Open in Materials shows them (not the empty batch).
+     */
+    batchHadHtml(hadHouseRow: string, open: string | null): string {
+        const b = strings.batch;
+        const r = run!;
+        const list = cachedMaterialList(this.materialsContext()?.treeId);
+        const titleOf = (id: string, path: string): string => {
+            const f = list?.files.find(x => x.id === id);
+            return f?.title || f?.name || path.split('/').pop() || id;
+        };
+        const titles = [...r.had].map(([id, path]) => titleOf(id, path));
+        const n = titles.length;
+        const shown = titles.slice(0, 5);
+        const names = n === 1
+            ? `<p class="batch-done-text batch-had-one">${esc(b.hadOne(titles[0]))}</p>`
+            : `<p class="batch-done-text">${esc(b.hadMany(n))}</p><ul class="batch-had-list">${shown.map(t => `<li>${esc(b.hadQuote(t))}</li>`).join('')}${n > shown.length ? `<li class="batch-had-more">${esc(b.hadMore(n - shown.length))}</li>` : ''}</ul>`;
+        const house = r.hadHouse === 'ok' ? `<p class="batch-done-text batch-had-house">${esc(b.hadHouse(r.houseTitle ?? r.house ?? '', n))}</p>` : '';
+        return `
+                <div class="modal-content batch-content batch-done batch-done--had">
+                    <h3 class="batch-confirm-title">✓ ${esc(b.hadTitle)}</h3>
+                    ${names}
+                    ${house}
+                    ${hadHouseRow}
+                </div>
+                <div class="buttons batch-footer">
+                    ${open ? `<button type="button" class="research-sync-link batch-foot-link" data-act="open-research">${researchActionLabel(b.openInResearch, researchLinkMark('open'))}</button>` : ''}
+                    <span class="batch-foot-note"></span>
+                    <button type="button" class="secondary" data-act="close">${esc(strings.buttons.close)}</button>
+                    <button type="button" class="primary" data-act="open-materials">${esc(b.openInMaterials)}</button>
                 </div>`;
     },
 
@@ -1063,9 +1127,12 @@ export const batchMethods = uiModule({
                     break;
                 }
                 case 'open-materials': {
-                    const id = run?.id;
+                    const r = run;
+                    const id = r?.id;
+                    // Nothing new: the files the research had, not the batch it never knew (1128).
+                    const had = r && this.batchNothingNew(r) ? [...r.had.keys()] : null;
                     this.closeBatchDialog();
-                    this.openMaterials(id ? { batch: id } : {});
+                    this.openMaterials(had ? { files: had } : id ? { batch: id } : {});
                     break;
                 }
                 case 'open-research': {
@@ -1238,9 +1305,10 @@ export const batchMethods = uiModule({
         run = {
             id: resume?.id ?? newBatchId(), treeId: link.treeId, researchId: link.researchId, base: bridge.base,
             name: s.name.trim() || strings.batch.defaultName(new Date().toLocaleDateString(getCurrentLanguage())),
-            person, personId: s.personId, ...(s.house ? { house: s.house } : {}), note: s.note.trim(), queue, index: 0, total: queue.length,
+            person, personId: s.personId, ...(s.house ? { house: s.house, ...(s.houseTitle ? { houseTitle: s.houseTitle } : {}) } : {}),
+            had: new Map(), hadHouse: '', note: s.note.trim(), queue, index: 0, total: queue.length,
             totalBytes: queue.reduce((sum, i) => sum + i.size, 0), doneBytes: 0, received: 0, skipped: 0, skippedAsked: 0,
-            queued: new Map(), shaOf: new Map(), knownAsked: new Set(), knownOf: new Map(), refused: [],
+            queued: new Map(), shaOf: new Map(), knownAsked: new Set(), knownOf: new Map(), knownIdOf: new Map(), refused: [],
             current: '', paused: false, lost: false, held: '', heldSeal: false, cancelled: false, finished: false, hidden: false, result: null, resume: null,
             pauseAsked: false, waits: [], closeWait: false, closeFailed: false, unclosed: false, closeSaid: '',
             states: [], errs: new Map(), curDone: 0,
@@ -1380,6 +1448,9 @@ export const batchMethods = uiModule({
             return;
         }
         writeUnfinished(r.treeId, null);
+        // A house's files the research had already: attached to the house on their own (1128).
+        await this.batchHadToHouse(r);
+        await this.batchHadTitles(r);
         // A device: what reached the research leaves its queue; the failed photos stay for Try again.
         if (researchDevice()) {
             const failed = r.queue.filter((_, i) => r.states[i] === 'error' && r.queue[i].key);
@@ -1394,7 +1465,7 @@ export const batchMethods = uiModule({
         if (r.hidden || !document.getElementById(DIALOG_ID)) {
             const link = this.batchLink();
             const archive = !!link && this.researchModeOf(link.researchId) === 'archive';
-            this.showToast(strings.batch.doneToast(r.name, r.result?.inputs ?? r.received, r.refused.length), 8000, {
+            this.showToast(this.batchNothingNew(r) ? strings.batch.hadTitle : strings.batch.doneToast(r.name, r.result?.inputs ?? r.received, r.refused.length), 8000, {
                 closable: true, action: { label: strings.batch.summary, run: () => { r.hidden = false; this.openBatchOverlay(); this.renderBatchDialog(); } },
             });
             void archive;
@@ -1423,13 +1494,23 @@ export const batchMethods = uiModule({
         }
         const url = `${r.base}/media/${sha}`;
         const said = zip ? undefined : r.knownOf.get(sha);
-        if (said === 'has') { r.skippedAsked++; return 'ok'; }
+        if (said === 'has') {
+            r.skippedAsked++;
+            const id = r.knownIdOf.get(sha);
+            if (id) noteHad(r, id, item.path);
+            return 'ok';
+        }
         // Already came and waits in the bridge's queue (another window, an attempt before): never sent again.
         if (said === 'queued') { r.queued.set(sha, item.path); return 'ok'; }
         if (!zip && said === undefined) {
             try {
                 const res = await fetchWithTimeout(url, ASK_TIMEOUT_MS);
-                if (res.ok && mediaReplyId(await res.json().catch(() => null))) { r.skippedAsked++; return 'ok'; }
+                const id = res.ok ? mediaReplyId(await res.json().catch(() => null)) : null;
+                if (id) {
+                    r.skippedAsked++;
+                    noteHad(r, id, item.path);
+                    return 'ok';
+                }
             } catch (err) {
                 // Only asked whether it has the file already: a slow answer (a busy research) is no
                 // reason to pause, the file goes as if it had not (its sha makes a second copy one).
@@ -1483,12 +1564,15 @@ export const batchMethods = uiModule({
                 if (z) {
                     r.received += Array.isArray(z.inputs) ? z.inputs.length : 0;
                     r.skipped += Array.isArray(z.known) ? z.known.length : 0;
+                    for (const id of Array.isArray(z.known) ? z.known.slice(0, 5000) : []) if (typeof id === 'string') noteHad(r, id, item.path);
                     for (const x of Array.isArray(z.refused) ? z.refused.slice(0, 200) : []) {
                         const rec = x as Record<string, unknown>;
                         r.refused.push({ path: String(rec.path ?? item.path), why: this.batchRefusalText(r, rec, '') });
                     }
-                } else if (body && typeof body.known === 'string') r.skipped++;
-                else r.received++;
+                } else if (body && typeof body.known === 'string') {
+                    r.skipped++;
+                    noteHad(r, body.known, item.path);
+                } else r.received++;
                 return 'ok';
             }
             // Busy or a file held a moment by another program (`media.held`, W136): the body's `retry`
@@ -1548,7 +1632,7 @@ export const batchMethods = uiModule({
                 method: 'POST', mode: 'cors', credentials: 'omit', cache: 'no-store',
                 headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: JSON.stringify({ shas: [...new Set(shas)] }), signal: ctl?.signal,
             });
-            const said = res.ok ? parseMediaKnown(await res.json().catch(() => null), shas) : null;
+            const said = res.ok ? parseMediaKnown(await res.json().catch(() => null), shas, r.knownIdOf) : null;
             for (const [sha, state] of said ?? []) r.knownOf.set(sha, state);
         } catch {
             // Asked one by one then (a bridge gone pauses there, as before).
@@ -1632,6 +1716,37 @@ export const batchMethods = uiModule({
             ...(typeof j.sort === 'boolean' ? { sort: j.sort } : {}), ...(typeof j.auto === 'boolean' ? { auto: j.auto } : {}) };
     },
 
+    /**
+     * The files of a house's batch the research had already (1128): never part of the batch, so its close does not
+     * make them the house's — attached on their own (`POST /houses/material {house, files}`, `house.material`), at
+     * most 500 at once; the house's materials read again.
+     */
+    async batchHadToHouse(r: Run): Promise<void> {
+        const features = this.researchStatusOf(r.researchId)?.features;
+        const ids = [...r.had.keys()];
+        if (!r.house || !ids.length || !houseFeature(features, 'house.material')) return;
+        for (let i = 0; i < ids.length; i += 500) {
+            const res = await sendHouseMaterial(r.base, { house: r.house as HouseId, files: ids.slice(i, i + 500) }, features);
+            if (!res.ok) {
+                console.warn('Batch: the files the research had were not attached to the house', res.code, res.bridgeCode);
+                r.hadHouse = { why: houseMaterialError(res, () => this.researchWriteHeldText(res.held!, false).toast) };
+                return;
+            }
+        }
+        r.hadHouse = 'ok';
+        this.houseMaterialsChanged(r.house);
+    },
+
+    /** A batch with nothing new names its files by their titles in Materials: the list read when not held here yet. */
+    async batchHadTitles(r: Run): Promise<void> {
+        if (!this.materialsListOn() || !this.batchNothingNew(r)) return;
+        const treeId = this.materialsContext()?.treeId;
+        if (!treeId) return;
+        const missing = (): boolean => [...r.had.keys()].some(id => !cachedMaterialList(treeId)?.files.some(f => f.id === id));
+        if (missing()) await primeMaterials(treeId);
+        if (missing()) await this.refreshAllMaterials();
+    },
+
     /** What a batch not closed yet means: its files wait in the bridge's queue (media.queued), or they are in and only the close is missing. */
     batchCloseWhat(r: Run): string {
         const queued = r.queued.size > 0 || !!this.researchStatusOf(r.researchId)?.features?.includes(MEDIA_QUEUED_FEATURE);
@@ -1674,8 +1789,10 @@ export const batchMethods = uiModule({
                 r.skipped += f.zip.known;
                 for (const z of f.zip.refused) r.refused.push({ path: z.path || path, why: this.batchRefusalText(r, z, '') });
             } else if (f.input) r.received++;
-            else if (f.known) r.skipped++;
-            else if (f.refused) r.refused.push({ path: f.path || path, why: this.batchRefusalText(r, f.refused, f.refused.code || '') });
+            else if (f.known) {
+                r.skipped++;
+                noteHad(r, f.known, f.path || path);
+            } else if (f.refused) r.refused.push({ path: f.path || path, why: this.batchRefusalText(r, f.refused, f.refused.code || '') });
         }
     },
 

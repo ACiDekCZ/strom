@@ -252,9 +252,10 @@ export function batchKnownChunk(items: readonly { path: string; size: number }[]
 /**
  * The answer of `POST /media/known` (untrusted): each asked hash with what
  * the research has of it. A hash it did not answer is left out (asked again
- * one by one); null for an answer that is not one.
+ * one by one); null for an answer that is not one. `ids` gets the record
+ * (I…) of each hash the research has (a file from a house is attached to it).
  */
-export function parseMediaKnown(value: unknown, asked: readonly string[]): Map<string, MediaKnownState> | null {
+export function parseMediaKnown(value: unknown, asked: readonly string[], ids?: Map<string, string>): Map<string, MediaKnownState> | null {
     const r = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
     const known = r?.known && typeof r.known === 'object' && !Array.isArray(r.known) ? r.known as Record<string, unknown> : null;
     if (!known) return null;
@@ -266,7 +267,10 @@ export function parseMediaKnown(value: unknown, asked: readonly string[]): Map<s
         else if (v && typeof v === 'object' && !Array.isArray(v)) {
             const rec = v as Record<string, unknown>;
             if (rec.queued === true) out.set(sha, 'queued');
-            else if (typeof rec.id === 'string' && rec.id) out.set(sha, 'has');
+            else if (typeof rec.id === 'string' && rec.id) {
+                out.set(sha, 'has');
+                if (ids && /^I\d{1,9}$/.test(rec.id)) ids.set(sha, rec.id);
+            }
         }
     }
     return out;

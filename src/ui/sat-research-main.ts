@@ -51,7 +51,7 @@ export interface SatResearchMainDeps {
     openHistoryAlignDialog(): void;
     /** A history write through this window's bridge, its answer as a satellite reads it. */
     historyWriteHere(step: HistoryWriteStep): Promise<unknown>;
-    openMaterials(opts?: { person?: string; batch?: string; group?: MaterialsGroup }): void;
+    openMaterials(opts?: { person?: string; batch?: string; group?: MaterialsGroup; files?: string[] }): void;
     showMaterialDialog(target: { personId: PersonId } | { sourceId: string }): void;
     showReadDocumentDialog(opts?: { readId?: string; sourceId?: string; personId?: string }): void;
     showReadSourceAgain(sourceId: string, clip?: string): void;
@@ -156,7 +156,7 @@ export function registerSatelliteResearchActions(ui: SatResearchMainDeps): void 
         run: (a) => {
             switch (a.dialog) {
                 case 'materials':
-                    ui.openMaterials({ ...(a.person ? { person: a.person } : {}), ...(a.batch ? { batch: a.batch } : {}), ...(a.group ? { group: a.group } : {}) });
+                    ui.openMaterials({ ...(a.person ? { person: a.person } : {}), ...(a.batch ? { batch: a.batch } : {}), ...(a.group ? { group: a.group } : {}), ...(a.files ? { files: a.files } : {}) });
                     break;
                 case 'material':
                     ui.showMaterialDialog('personId' in a ? { personId: a.personId as PersonId } : { sourceId: a.sourceId });

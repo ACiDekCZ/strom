@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { test, expect, Page, Route } from '@playwright/test';
-import { fakeBridge, links, openResearch, poll, BRIDGE, FakeBridge } from './research-bridge.js';
+import { fakeBridge, fakeMaterial, links, materialFile, openResearch, poll, BRIDGE, FakeBridge, FakeMaterial, MATERIAL_FEATURES } from './research-bridge.js';
 
 /**
  * The research's houses in the Houses window (spec 030 §2 K7.5, §7): the state of a house the research lists in
@@ -41,14 +42,14 @@ function row(init: Record<string, unknown> = {}): Record<string, unknown> {
     };
 }
 
-async function setup(page: Page, opts: { features?: string[]; houses?: FakeHouses; media?: boolean } = {}): Promise<{ bridge: FakeBridge; houses: FakeHouses }> {
+async function setup(page: Page, opts: { features?: string[]; houses?: FakeHouses; media?: boolean; material?: FakeMaterial } = {}): Promise<{ bridge: FakeBridge; houses: FakeHouses }> {
     await page.clock.setFixedTime(new Date('2027-03-20T10:30:00Z'));
     const houses = opts.houses ?? fakeHouses();
     const bridge = await fakeBridge(page, {
         features: opts.features ?? HOUSE, links: LINKS,
         statusExtra: { houses: { on: true, rev: houses.rev, counts: { done: 0, running: 1, queued: 0, waiting: 0, held: 0 } } },
         waiting: [{ id: 'T0042', what: 'Which house is čp. 16 after the renumbering?', on: 'user', at: '2027-03-19T09:00:00Z' }],
-        ...(opts.media ? { accepts: BATCH_ACCEPTS } : {}),
+        ...(opts.media ? { accepts: BATCH_ACCEPTS } : {}), ...(opts.material ? { material: opts.material } : {}),
     });
     await page.route(u => `${u.origin}${u.pathname}` === `${BRIDGE}/houses`, async (route: Route) => {
         houses.lists++;
@@ -285,6 +286,33 @@ test.describe('Houses: material of a house', () => {
         await dialog.getByRole('button', { name: /^Send/ }).click();
         await expect.poll(() => bridge.batchDone?.length ?? 0).toBe(1);
         expect(bridge.batchDone![0].body).toMatchObject({ house: KEY });
+    });
+
+    test('a file the research has already: attached to the house on its own, the end names it and opens Materials on it (1128)', async ({ page }) => {
+        const buffer = Buffer.from('obrazek domu');
+        const sha = createHash('sha256').update(buffer).digest('hex');
+        const archive = fakeMaterial({ files: [materialFile(126, { title: 'Stavení v roce 1930' }), materialFile(1, { title: 'Jiný snímek' })], batches: [], people: {} });
+        const { bridge, houses } = await setup(page, { media: true, material: archive, features: [...HOUSE, 'media.known', ...MATERIAL_FEATURES] });
+        bridge.mediaKnown.set(sha, 'I0126');
+        await openHouses(page);
+        await openAttach(page);
+        await material(page).locator('.house-files-input').setInputFiles([{ name: 'dum-1930.jpg', mimeType: 'image/jpeg', buffer }]);
+        await material(page).getByRole('button', { name: 'Attach and continue…', exact: true }).click();
+        const dialog = page.locator('#batch-modal');
+        await dialog.locator('[data-act="next"]').click();
+        await dialog.getByRole('button', { name: /^Send/ }).click();
+        // Never part of the batch, so the house gets it on its own.
+        await expect.poll(() => houses.posts).toEqual([{ house: KEY, files: ['I0126'] }]);
+        await expect(dialog.locator('.batch-confirm-title')).toHaveText('✓ Already in Materials');
+        await expect(dialog.locator('.batch-had-one')).toHaveText('This file is in Materials already: “Stavení v roce 1930”.');
+        await expect(dialog.locator('p.batch-had-house')).toHaveText('Attached to the house Bělokamen čp. 16.');
+        await expect(dialog).not.toContainText('Received');
+        await dialog.getByRole('button', { name: 'Open in Materials', exact: true }).click();
+        const win = page.locator('#materials-modal');
+        await expect(win).toBeVisible();
+        await expect(win.locator('.mw-tile', { hasText: 'Stavení v roce 1930' })).toBeVisible();
+        await expect(win.locator('.mw-tile', { hasText: 'Jiný snímek' })).toHaveCount(0);
+        await expect(win.locator('.mw-chip.is-active', { hasText: 'Files: 1' })).toBeVisible();
     });
 });
 

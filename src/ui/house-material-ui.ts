@@ -191,6 +191,16 @@ export const houseMaterialMethods = uiModule({
         return false;
     },
 
+    /**
+     * Material attached to a house elsewhere (a batch of the house, Link to…; 1128): its materials read again
+     * when drawn next, the research's list of houses asked anew (a new rev redraws the windows).
+     */
+    houseMaterialsChanged(key: string): void {
+        detailRead.delete(key);
+        void this.loadHouseStates();
+        this.refreshHousesWindow();
+    },
+
     /** The dialog "Attach material to the house". */
     showHouseMaterialDialog(house: TreeHouse): void {
         const b = this.houseResearchBridge();
@@ -282,7 +292,7 @@ export const houseMaterialMethods = uiModule({
             this.closeHouseSubDialog(MATERIAL_ID);
             if (files.length) {
                 // The files the usual way: a batch of the house (spec 030 §7, `batch/<id>/done` with `house`).
-                this.showBatchDialog({ files: files.map(file => ({ file, path: file.name })), house: key });
+                this.showBatchDialog({ files: files.map(file => ({ file, path: file.name })), house: key, houseTitle: houseTitle(house) });
                 if (body) showToast(s.attached);
             } else {
                 showToast(s.attached);

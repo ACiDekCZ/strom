@@ -246,6 +246,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         fPerson: 'Osoba',
         fKind: 'Rodzaj',
         fBatch: 'Partia',
+        fFiles: 'Pliki',
         noPerson: 'Bez osoby',
         showHidden: 'Pokaż ukryte',
         groupBatch: 'Partie',
