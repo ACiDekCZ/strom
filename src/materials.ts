@@ -48,6 +48,8 @@ export const MATERIAL_SAME_AS_FEATURE = 'material.sameAs';
  * on every device (spec 147 K2); GET /material then says it as `left.why` accepted / refused.
  */
 export const MATERIAL_DECIDED_FEATURE = 'material.decided';
+/** `houses: [{id?, key}]` on a file of `/material` that is material of houses (research 1.38, 1128): the rows of `GET /houses`. */
+export const MATERIAL_HOUSES_FEATURE = 'material.houses';
 /** `POST /material/delete` with `dryRun` and the bridge's `confirm`: a file deleted for good (spec 102 K1.17). */
 export const MATERIAL_DELETE_FEATURE = 'material.delete';
 /**
@@ -118,8 +120,16 @@ export interface MaterialFile {
     left?: MaterialLeft;
     /** The oldest other file of the material with the same content (`material.sameAs`, spec 102 K1.13). */
     sameAs?: string;
+    /** The houses it is material of (`material.houses`): `key` and `id` of their rows in `GET /houses`; absent: none. */
+    houses?: MaterialHouse[];
     /** A family tree file (`kind: "tree"`, only with `?trees=1` and `material.trees`, spec 117 §5): never sorted nor edited. */
     tree?: boolean;
+}
+
+/** A house a file is material of (`houses` of `/material`): its row's key ("belokamen|16") and record (A…). */
+export interface MaterialHouse {
+    key: string;
+    id?: string;
 }
 
 /** A file the agent left unassigned, as the research says it (`left`). */
@@ -361,7 +371,26 @@ export function parseMaterialFile(raw: unknown): MaterialFile | null {
     const left = leftOf(r.left);
     if (left) file.left = left;
     if (typeof r.sameAs === 'string' && FILE_ID.test(r.sameAs) && r.sameAs !== id) file.sameAs = r.sameAs;
+    const houses = materialHousesOf(r.houses);
+    if (houses) file.houses = houses;
     return file;
+}
+
+/** `houses` of a file: each house once by its key ("<town>|<house>"), its A… when valid; none: undefined. */
+export function materialHousesOf(v: unknown): MaterialHouse[] | undefined {
+    if (!Array.isArray(v)) return undefined;
+    const out: MaterialHouse[] = [];
+    const seen = new Set<string>();
+    for (const x of v.slice(0, 200)) {
+        if (!x || typeof x !== 'object') continue;
+        const o = x as Record<string, unknown>;
+        const key = typeof o.key === 'string' && o.key.length <= 200 && /^[^|\s][^|]*\|[^|]+$/.test(o.key) ? o.key : '';
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push({ key, ...(typeof o.id === 'string' && /^A\d{1,9}$/.test(o.id) ? { id: o.id } : {}) });
+        if (out.length >= 50) break;
+    }
+    return out.length ? out : undefined;
 }
 
 const LEFT_WHYS: readonly MaterialLeft['why'][] = ['nothing-said', 'nothing-new', 'dropped', 'accepted', 'refused'];
@@ -798,6 +827,11 @@ export function matDecided(env: MaterialEnv): boolean {
     return matSort(env) && has(env, MATERIAL_DECIDED_FEATURE);
 }
 
+/** The research says which houses a file is material of (`material.houses`, 1128). */
+export function matHouses(env: MaterialEnv): boolean {
+    return matList(env) && has(env, MATERIAL_HOUSES_FEATURE);
+}
+
 /** The research says which files have the same content as an older one (`material.sameAs`). */
 export function matSameAs(env: MaterialEnv): boolean {
     return matList(env) && has(env, MATERIAL_SAME_AS_FEATURE);
@@ -834,6 +868,8 @@ export interface MaterialCaps {
     left: boolean;
     /** The research says which files have the same content as an older one (`material.sameAs`). */
     sameAs: boolean;
+    /** The research says which houses a file is material of (`material.houses`); absent: an older research. */
+    houses?: boolean;
     /** The research keeps a sorting's rows decided for good (`material.decided`, spec 147 K2); absent: an older research. */
     decided?: boolean;
     /** The research deletes a file for good (`material.delete`). */
@@ -855,6 +891,7 @@ export function materialCaps(env: MaterialEnv & { openLinks?: boolean }): Materi
         mediaApp: env.linked && has(env, MEDIA_APP_FEATURE),
     };
     if (matDecided(env)) caps.decided = true;
+    if (matHouses(env)) caps.houses = true;
     if (env.openLinks !== undefined) caps.openLinks = env.openLinks;
     return caps;
 }

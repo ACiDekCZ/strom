@@ -417,7 +417,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         used: 'Gdzie użyto',
         usedInTree: 'W drzewie',
         usedInArchive: 'W archiwum',
-        usedType: { person: 'Osoba', portrait: 'Portret', couple: 'Związek', event: 'Wydarzenie', source: 'Źródło', excerpt: 'Wycinek' },
+        usedType: { person: 'Osoba', portrait: 'Portret', couple: 'Związek', event: 'Wydarzenie', source: 'Źródło', excerpt: 'Wycinek', house: 'Dom' },
         usedCouple: (a: string, b: string) => `${a} i ${b}`,
         unknownPerson: 'Nieznana osoba',
         unknownSource: 'Źródło',

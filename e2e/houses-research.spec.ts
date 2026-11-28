@@ -211,6 +211,39 @@ test.describe('Houses: material of a house', () => {
         await expect(page.locator('#houses-modal .house-detail .house-research .house-mat', { hasText: 'Křest na faře' })).toBeVisible();
     });
 
+    test('Where used: the houses a file is material of, "House Bělokamen čp. 16" into its page (material.houses, 1128)', async ({ page }) => {
+        const archive = fakeMaterial({ files: [
+            materialFile(1, { title: 'Křest na faře', houses: [{ id: 'A0001', key: KEY }, { key: 'lhota|9' }] }),
+            materialFile(2, { title: 'Dopis z Lhoty' }),
+        ], batches: [], people: {} });
+        await setup(page, { material: archive, houses: fakeHouses([row(), row({ id: 'A0002', key: 'lhota|9', place: { key: 'lhota', name: 'Lhota' }, house: '9' })]),
+            features: [...HOUSE, ...MATERIAL_FEATURES, 'material.houses'] });
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        await page.locator('#materials-modal .mw-canvas .mw-tile', { hasText: 'Křest na faře' }).click();
+        const uses = page.locator('#image-viewer-panel .mv-uses');
+        await expect(uses.locator('.mv-uses-count')).toHaveText('2 places');
+        await expect(uses.locator('.mv-use-type')).toHaveText(['House', 'House']);
+        // The tree's house a link; one only the research has, its row's text.
+        const link = uses.locator('.mv-use-link[data-use="house"]');
+        await expect(link).toHaveText('Bělokamen čp.\u00a016');
+        await expect(uses.locator('.mv-use-text[data-use="house"]')).toHaveText('Lhota 9');
+        await expect(uses.locator('.mv-uses-none')).toHaveCount(0);
+        await link.click();
+        await expect(page.locator('#image-viewer')).toBeHidden();
+        await expect(page.locator('#house-page-modal')).toBeVisible();
+        await expect(page.locator('#house-page-modal')).toContainText('Bělokamen');
+    });
+
+    test('Where used of an older research (no material.houses): no house, as before', async ({ page }) => {
+        const archive = fakeMaterial({ files: [materialFile(1, { title: 'Křest na faře', houses: [{ id: 'A0001', key: KEY }] })], batches: [], people: {} });
+        await setup(page, { material: archive, features: [...HOUSE, ...MATERIAL_FEATURES] });
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        await page.locator('#materials-modal .mw-canvas .mw-tile', { hasText: 'Křest na faře' }).click();
+        const uses = page.locator('#image-viewer-panel .mv-uses');
+        await expect(uses.locator('.mv-uses-none')).toHaveText(/^Not in the tree yet\./);
+        await expect(uses.locator('[data-use="house"]')).toHaveCount(0);
+    });
+
     test('Link to… without house.material: no House tab', async ({ page }) => {
         const archive = fakeMaterial({ files: [materialFile(1, { title: 'Křest na faře' })], batches: [], people: {} });
         await setup(page, { media: true, material: archive, features: ['house', ...MATERIAL_FEATURES] });

@@ -1614,6 +1614,8 @@ export interface FakeMaterialFile {
     left?: { at: string; sort?: string; why: 'nothing-said' | 'nothing-new' | 'dropped'; said?: string };
     /** The oldest other file with the same content (`material.sameAs`). */
     sameAs?: string;
+    /** The houses it is material of (`material.houses`): their rows' key and record. */
+    houses?: { id?: string; key: string }[];
 }
 
 export interface FakeMaterialBatch {

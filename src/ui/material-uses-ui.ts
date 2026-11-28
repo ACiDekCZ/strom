@@ -13,7 +13,8 @@
 import { DataManager } from '../data.js';
 import { PersonId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { MaterialItem, MaterialSourceOf, cachedMaterialList } from '../materials.js';
+import { MaterialHouse, MaterialItem, MaterialSourceOf, cachedMaterialList } from '../materials.js';
+import { houseLabel, houseNamedTitle } from '../houses.js';
 import { MediaUse, materialPersonLabel, mediaUseLabel, mediaUses } from '../media-uses.js';
 import { placePersonId } from '../media.js';
 import { nameWithoutYears } from '../materials-overview.js';
@@ -63,6 +64,9 @@ export const materialUsesMethods = uiModule({
         const att = item.attachment ? DataManager.getMedia(item.attachment.id) : undefined;
         const uses = att && att.places.length ? mediaUses(data, att.id) : [];
         const archive = !!ctx?.caps.list;
+        // The houses it is material of in the research (`material.houses`, 1128): rows "House …" beside its places.
+        const houses = archive && ctx!.caps.houses && !item.tree ? item.file?.houses ?? [] : [];
+        if (houses.length) this.houseStatesSync();
         const block = h('section', 'mv-uses');
         block.dataset.uses = String(uses.length);
 
@@ -73,7 +77,8 @@ export const materialUsesMethods = uiModule({
         const head = h('div', 'mv-uses-head');
         const title = h('h3', 'mv-uses-title', item.tree ? m.del.refs(1) : m.used);
         head.appendChild(title);
-        const count = item.tree ? '' : [of.length ? m.agentSort.sourcesN(of.length) : '', uses.length ? m.places(uses.length) : ''].filter(Boolean).join(' · ');
+        const placed = uses.length + houses.length;
+        const count = item.tree ? '' : [of.length ? m.agentSort.sourcesN(of.length) : '', placed ? m.places(placed) : ''].filter(Boolean).join(' · ');
         if (count) head.appendChild(h('span', 'mv-uses-count', count));
         block.appendChild(head);
         if (item.tree) {
@@ -83,14 +88,15 @@ export const materialUsesMethods = uiModule({
         }
         if (of.length) block.appendChild(this.materialSourceOfRows(of, ctx!, opts));
         // In the tree only through a source and nowhere of its own: no "Not in the tree yet." (Link to… stays an action).
-        const viaSourceOnly = !uses.length && of.some(s => s.inTree);
+        const viaSourceOnly = !uses.length && !houses.length && of.some(s => s.inTree);
         if (archive && !viaSourceOnly) block.appendChild(h('div', 'mv-uses-sub', m.usedInTree));
 
-        if (uses.length) {
+        if (uses.length || houses.length) {
             const collapse = uses.length > COLLAPSE_OVER && !opts.expanded;
             const shown = collapse ? uses.slice(0, COLLAPSED_ROWS) : uses;
             const grid = h('div', 'mv-uses-grid');
             for (const use of shown) this.materialUseRow(grid, item, att!.id, use, ctx, opts);
+            for (const house of houses) this.materialHouseRow(grid, house, opts);
             block.appendChild(grid);
             if (collapse) {
                 const more = h('button', 'link-button mv-uses-more', m.moreN(uses.length - COLLAPSED_ROWS));
@@ -278,6 +284,40 @@ export const materialUsesMethods = uiModule({
         }
         row.appendChild(chips);
         return row;
+    },
+
+    /**
+     * A house the file is material of (1128): "House | Bělokamen čp. 16", the text of the tree's house (else of
+     * the research's row), a link to the house's page; a house the tree does not have: its text alone.
+     */
+    materialHouseRow(grid: HTMLElement, mh: MaterialHouse, opts: MaterialUsesOpts): void {
+        const m = strings.materials;
+        const row = this.houseResearchRowOf(mh.key, mh.id);
+        const tree = this.treeHouseOf(mh.key) ?? (row && row.key !== mh.key ? this.treeHouseOf(row.key) : null);
+        const text = tree ? houseNamedTitle(tree)
+            : row ? `${row.place.name} ${houseLabel(row.house)}${row.name ? ` · ${row.name}` : ''}`
+            : mh.key.slice(mh.key.indexOf('|') + 1);
+        grid.appendChild(h('span', 'mv-use-type', m.usedType.house));
+        const main = h('div', 'mv-use-main');
+        if (tree) {
+            const link = h('button', 'mv-use-link', text);
+            link.type = 'button';
+            link.dataset.use = 'house';
+            const id = tree.id;
+            link.addEventListener('click', () => {
+                opts.leave?.();
+                closeImageViewer();
+                if (document.getElementById('materials-modal')) this.closeMaterials();
+                this.openHouse(id);
+            });
+            main.appendChild(link);
+        } else {
+            const plain = h('span', 'mv-use-text', text);
+            plain.dataset.use = 'house';
+            main.appendChild(plain);
+        }
+        grid.appendChild(main);
+        grid.appendChild(h('span'));
     },
 
     /** A use's link: the person (a couple: its first partner) in the tree, or the source. */

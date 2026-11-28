@@ -5,6 +5,7 @@
  * Asking for a history (part 2): src/ui/house-request-ui.ts, its action beside the badge.
  */
 
+import { redrawViewerList } from './image-viewer.js';
 import { strings, getCurrentLanguage, type Language } from '../strings.js';
 import { collectHouses, houseTitle, type TreeHouse } from '../houses.js';
 import { houseOfQuestion, houseTaskView, type HouseTaskView } from '../house-tasks.js';
@@ -161,6 +162,8 @@ export const houseStateMethods = uiModule({
         this.refreshPlaceHousesRows();
         this.refreshMapHouses();
         this.refreshPlaceMenuHouses();
+        // A file's houses in the viewer's "Where used" (1128): their text from the rows read now.
+        if (document.querySelector('#image-viewer-panel .mv-uses [data-use="house"]')) redrawViewerList();
     },
 
     /** The rev of the list read now ('' none). */
@@ -181,6 +184,13 @@ export const houseStateMethods = uiModule({
             const row = this.houseResearchRow(h);
             return row?.state === 'done' ? row.at ?? '' : null;
         };
+    },
+
+    /** The research's row of `GET /houses` by its key, else by its record (A…), or null (not read yet). */
+    houseResearchRowOf(key: string, id?: string): HouseListRow | null {
+        const b = this.houseResearchBridge();
+        if (!b || list?.base !== b.base) return null;
+        return list.byKey.get(key) ?? (id ? list.rows.find(r => r.id === id) ?? null : null);
     },
 
     /** The research's row of a house of the tree (any of its joined numbers), or null. */
