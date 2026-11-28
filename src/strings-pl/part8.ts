@@ -704,6 +704,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         },
         accordingTo: (v: string, src: string) => `${v} (źródło: ${src})`,
         historyPending: 'Historia tego regionu jest jeszcze uzupełniana.',
+        waitingOpen: (n: number) => `Czeka na załatwienie · ${n} ›`,
         waiting: 'Czeka na załatwienie:',
         storyDraft: 'W badaniu czeka nowa wersja opowieści; strona pokazuje zatwierdzony tekst.',
         edgeMissing: {

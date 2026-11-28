@@ -26528,6 +26528,13 @@
         /* "Awaiting action": chips by kind, To do / Awaiting a reply, groups by place, compact rows with one detail open. */
         /* The kinds wrap onto further lines like the other chip rows: no chip is cut at the panel's edge (1105). */
         .research-overview__waiting-filters { margin: 6px 0 2px; flex-wrap: wrap; overflow: visible; }
+        /* Awaiting action narrowed to a direction or a person (spec 150): the pressed chip "Direction: … ✕",
+           a long name cut with an ellipsis inside it, never past the panel. */
+        .research-overview__waiting-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0 2px; min-width: 0; }
+        .research-overview__scope-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
+        .research-overview__scope-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .research-overview__scope-x { flex: none; font-size: 11px; opacity: .75; }
+        .research-overview__scope-none { margin: 0; font-size: 12px; }
         .research-overview__filter.has-new { position: relative; }
         .research-overview__filter.has-new::after {
             content: ''; position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%;
@@ -27864,6 +27871,9 @@
         }
         .research-direction__meta .live-person-link { font-size: 12px; }
         .research-direction__waiting { color: var(--warning-text); }
+        /* "N awaiting an answer ›" with the research's directions at the items (spec 150 K1.2): a link to them. */
+        .research-direction__meta .research-direction__waiting.is-link { padding: 0; min-height: 0; font-size: inherit; color: var(--warning-text); text-align: left; }
+        .research-direction__run-why .research-direction__run-waiting { color: var(--warning-text); text-align: left; white-space: normal; overflow-wrap: anywhere; }
         .research-direction__do { font-size: 13px; }
         .research-direction__more { width: 28px; height: 28px; }
         .research-direction__detail { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; width: 100%; }
@@ -27968,6 +27978,7 @@
         .research-direction__meta .research-direction__in-now { font-size: inherit; }
         @media (pointer: coarse) {
             .research-direction__run-why .link-button, .research-direction__in-now { min-height: 44px; }
+            .research-direction__meta .research-direction__waiting.is-link { min-height: 44px; }
         }
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .research-direction__run-btn { width: 100%; }
@@ -28335,6 +28346,8 @@
             .research-overview__knows-kinds .research-overview__filter { height: 32px; }
             /* Awaiting action's kinds on touch: 32 px chips, each a 44 px target. */
             .research-overview__waiting-filters, .research-overview__knows-kinds { row-gap: 12px; }
+            .research-overview__scope-chip { position: relative; height: 32px; }
+            .research-overview__scope-chip::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
             .research-overview__waiting-filters .research-overview__filter,
             .research-overview__knows-kinds .research-overview__filter { position: relative; height: 32px; }
             .research-overview__waiting-filters .research-overview__filter::before,

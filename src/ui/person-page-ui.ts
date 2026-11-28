@@ -19,6 +19,7 @@ import { PrivacyMode } from '../privacy.js';
 import { placeKey, isMapKind } from '../places.js';
 import { SettingsManager } from '../settings.js';
 import { researchPersonRef } from '../research-link.js';
+import { scopedWaiting, waitingNames } from '../research-waiting.js';
 import { personSourceRows } from '../person-sources.js';
 import { shownName } from '../person-name.js';
 import { isDesktop, isTablet, isMobile, MQ_PHONE_BAR } from '../breakpoints.js';
@@ -620,9 +621,13 @@ export const personPageMethods = uiModule({
         const ref = researchPersonRef(DataManager.getPerson(personId)?.refn);
         if (ref) {
             const waiting = (this.researchWaiting()?.items ?? [])
-                .filter(w => w.person === ref && w.kind !== 'story' && w.kind !== 'permission')
+                .filter(w => waitingNames(w, ref) && w.kind !== 'story' && w.kind !== 'permission')
                 .map(w => w.what).filter(Boolean);
             if (waiting.length) ctx.waiting = waiting;
+            // "Awaiting action · N ›" (spec 150 K2.3): only while the research is followed here (its overview opens).
+            const live = this.researchWaiting();
+            const n = live?.live ? scopedWaiting(live.items, { kind: 'person', ref, name: '' }).length : 0;
+            if (n > 0) ctx.waitingOpen = n;
         }
         const treeId = DataManager.getCurrentTreeId();
         const meta = treeId ? TreeManager.getTreeMetadata(treeId) : null;
@@ -971,6 +976,13 @@ export const personPageMethods = uiModule({
                 this.closePersonPage({ focus: false });
                 this.showPersonMaterials(personId);
             }
+            return;
+        }
+        if (action === 'research:waiting') {
+            const ref = researchPersonRef(person?.refn);
+            if (!ref || !person) return;
+            this.closePersonPage({ focus: false });
+            this.openWaitingScope({ kind: 'person', ref, name: shownName(person) });
             return;
         }
         if (action === 'research:open' || action === 'research:find') {

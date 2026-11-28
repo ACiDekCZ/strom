@@ -41,6 +41,7 @@ import {
     WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingAllImagesOffered, waitingForImages, waitingGroupBandLines, waitingGroupMissing, waitingPhaseLines, textWithLinks,
     waitingRetryCount, waitingRetryLimitText, waitingRetryMain, waitingRetryReason,
     WaitingGroupRetry, groupRetryAria, groupRetryConfirmText, groupRetryCountText, groupRetryLaterText, waitingGroupRetry, waitingGroupRetryReason,
+    scopedWaiting, type WaitingScope,
 } from '../research-waiting.js';
 import { WaitingAnswerForm, WaitingAnswerMode, allImagesAnswerTexts, answerFormKey, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
@@ -742,6 +743,7 @@ export const researchOverviewMethods = uiModule({
         // What was unfolded, opened and new in "Awaiting action" lasts while the overview is open;
         // so do the sections shown whatever their choice.
         s.waitingView = newWaitingView();
+        s.waitingScope = null;
         s.overviewShown.clear();
         // The sections' searches and the kind shown in "What the research knows" last while the overview is open.
         overviewSearches.reset();
@@ -1319,6 +1321,57 @@ export const researchOverviewMethods = uiModule({
     },
 
     /**
+     * The scope's chip over "Awaiting action" (spec 150): "Direction: … ✕" / "Person: … ✕", pressed; a click drops it.
+     * Nothing of it waits now: a quiet line under it says so.
+     */
+    waitingScopeChip(scope: WaitingScope, none: boolean): HTMLElement {
+        const L = strings.live;
+        const box = el('div', 'research-overview__waiting-scope');
+        const chip = el('button', 'research-overview__filter sel-opt research-overview__scope-chip');
+        chip.type = 'button';
+        chip.dataset.scope = scope.kind;
+        chip.setAttribute('aria-pressed', 'true');
+        const text = scope.kind === 'line' ? L.waitingScopeLine(scope.name) : L.waitingScopePerson(scope.name);
+        chip.appendChild(el('span', 'research-overview__scope-text', text));
+        const x = el('span', 'research-overview__scope-x', '✕');
+        x.setAttribute('aria-hidden', 'true');
+        chip.appendChild(x);
+        chip.setAttribute('aria-label', `${text}, ${L.waitingScopeClear}`);
+        chip.title = L.waitingScopeClear;
+        chip.onclick = () => this.clearWaitingScope();
+        box.appendChild(chip);
+        if (none) box.appendChild(el('p', 'research-overview__muted research-overview__scope-none', L.waitingScopeNone));
+        return box;
+    },
+
+    /**
+     * "Awaiting action" of a direction or a person (spec 150 K1.2, K2.3): the overview opens (or comes to the
+     * front, its own window too) at the section, narrowed until ✕ or until it closes.
+     */
+    openWaitingScope(scope: WaitingScope): void {
+        const s = liveSession();
+        if (!s || s.ended || s.treeId !== DataManager.getCurrentTreeId()) return;
+        s.waitingScope = { ...scope };
+        // The place groups unfold as a chip's filter unfolds them.
+        for (const key of [...s.waitingView.open.keys()]) if (key.startsWith('group:')) s.waitingView.open.delete(key);
+        if (overviewInWindow()) {
+            this.renderLivePanel();
+            focusOverviewWindow();
+            return;
+        }
+        if (this.isResearchOverviewOpen()) this.showOverviewWaiting();
+        else this.openResearchOverview({ showWaiting: true });
+    },
+
+    /** ✕ of the scope's chip: all of "Awaiting action" again. */
+    clearWaitingScope(): void {
+        const s = liveSession();
+        if (!s?.waitingScope) return;
+        s.waitingScope = null;
+        this.renderLivePanel();
+    },
+
+    /**
      * Awaiting action: compact rows, one detail open at a time. From a
      * research with `waiting.groups`: chips by kind, To do (open) and
      * Awaiting a reply (folded), each by the place it is done at (folded
@@ -1329,11 +1382,14 @@ export const researchOverviewMethods = uiModule({
         const r = strings.research;
         const L = strings.live;
         const view = s.waitingView;
+        // Narrowed to a direction or a person (spec 150 K1.2, K2.3): before the kinds, phases and places.
+        const scope = s.waitingScope ?? null;
+        const waiting = scopedWaiting(s.waiting, scope);
         const todo = waitingTodoCount(s.waiting);
         const replies = s.waiting.length - todo;
         // The section's search (spec 083 §1): its field from ten items, or while a text is typed; folded,
         // the heading says the text in place of its summary.
-        const total = s.waiting.length;
+        const total = waiting.length;
         const typed = overviewSearches.text('waiting');
         const showField = !fold.collapsed && fieldVisible(total, typed);
         const search: SectionSearch | null = showField ? overviewSearches.ensure({
@@ -1366,24 +1422,24 @@ export const researchOverviewMethods = uiModule({
         const groupOpts: WaitingGroupOpts = books ? { ...(groupsShown === 'book' ? { by: 'book' as const } : {}), books: s.books } : {};
         setWaitingDrawn(order, flat);
         const orderRow = total >= 2 ? this.overviewWaitingOrderEl(order, grouped, mode, books, { gain }) : null;
-        const chips = grouped ? waitingChips(s.waiting) : [];
+        const chips = grouped ? waitingChips(waiting) : [];
         const chosen = storedWaitingFilter();
-        const filter = grouped ? effectiveWaitingFilter(s.waiting, chosen) : 'all';
+        const filter = grouped ? effectiveWaitingFilter(waiting, chosen) : 'all';
         // A filter whose last item went falls back to all (and stays there).
         if (grouped && filter !== chosen) storeWaitingFilter(filter);
         // The index is built when the items change (or the people's names, the language), not at each key.
-        waitingIndex = searchIndex(waitingIndex, s.waiting, [DataManager.getData().persons, getCurrentLanguage(), books ? s.books : null], w => this.waitingSearchDoc(s, w));
+        waitingIndex = searchIndex(waitingIndex, waiting, [DataManager.getData().persons, getCurrentLanguage(), books ? s.books : null], w => this.waitingSearchDoc(s, w));
         const res = searchSection(waitingIndex, toks, waitingSection, chips.length > 0 ? filter : 'all');
         const searching = res.searching;
         // Its guessed height in the own window's columns: phases and places without the search (rows when ungrouped).
         if (grouped) {
-            const all = waitingPhases(s.waiting, filter, order, !flat, groupOpts);
+            const all = waitingPhases(waiting, filter, order, !flat, groupOpts);
             // Without groups a phase's rows count, else its bands (a wrapped title, a book's archive, facts and actions,
             // a place's actions and what it misses; spec 105 U4 §1, §2), "No book" and the parts of "Most tasks" (U4 §4).
             const lines = (p: WaitingPhase): number => waitingPhaseLines(all[p], g => this.waitingGroupBandRows(g, s, p, mode));
             noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + lines(p) : 0), 0)
                 + (orderRow && order === 'most' ? 1 : 0) + this.overviewBooksOfferRows(s, filter) + this.waitingRetryOpenRows(s, mode));
-        } else noteOverviewSectionRows('waiting', s.waiting.length + this.overviewBooksOfferRows(s, 'all') + this.waitingRetryOpenRows(s, mode));
+        } else noteOverviewSectionRows('waiting', waiting.length + this.overviewBooksOfferRows(s, 'all') + this.waitingRetryOpenRows(s, mode));
         // The hypotheses the search shows (the picked ones outside it stay picked) and what matched each by its number.
         const hypoSearch: HypothesisListSearch | null = searching ? {
             found: new Set(res.shown.filter(w => w.kind === 'hypothesis').map(w => w.id)),
@@ -1414,6 +1470,7 @@ export const researchOverviewMethods = uiModule({
             const foot = this.hypothesisAcceptFootEl(rid, 'waiting', hypoSearch);
             if (foot) host.appendChild(foot);
         };
+        if (scope) host.appendChild(this.waitingScopeChip(scope, waiting.length === 0));
         // An older research: no kinds, places or phases.
         if (!grouped) {
             if (orderRow) host.appendChild(orderRow);
@@ -1430,7 +1487,7 @@ export const researchOverviewMethods = uiModule({
             bar.setAttribute('role', 'radiogroup');
             bar.setAttribute('aria-label', L.waitingFilterLabel);
             const all: { f: WaitingFilter; label: string; count: number }[] = [
-                { f: 'all', label: L.filterAll, count: s.waiting.length },
+                { f: 'all', label: L.filterAll, count: waiting.length },
                 ...chips.map(c => ({ f: c.section as WaitingFilter, label: L.waitingChips[c.section], count: c.count })),
             ];
             for (const c of all) {

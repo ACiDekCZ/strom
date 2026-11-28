@@ -9,6 +9,7 @@
  * already has such a direction. Bridge text is set as text, never HTML.
  */
 
+import { scopedWaiting, waitingForImages } from '../research-waiting.js';
 import { deviceComputerName, inDeviceMode } from './device-mode-ui.js';
 import { researchMarkFlags, setResearchActionLabel } from './research-open-mark.js';
 import { workingWhyText } from './research-offline-ui.js';
@@ -545,7 +546,7 @@ export type LineRunOffer =
     | { kind: 'running'; run: LiveRun | null; id: string }
     | { kind: 'starting' }
     | { kind: 'offer'; n: number }
-    | { kind: 'held'; why: string; limit: boolean; n: number };
+    | { kind: 'held'; why: string; limit: boolean; n: number; waiting?: number };
 
 /**
  * The arc beside a worked direction's name: spinning while its agent works; still, in the warning colour, while the
@@ -1036,7 +1037,7 @@ export const researchDirectionsMethods = uiModule({
             else if (isEmpty(d)) meta.appendChild(el('span', 'research-direction__empty', L.dirEmpty));
             else {
                 if (d.tasks) meta.appendChild(el('span', undefined, L.dirTasks(d.tasks)));
-                if (d.waiting) meta.appendChild(el('span', 'research-direction__waiting', L.dirWaiting(d.waiting)));
+                if (d.waiting) meta.appendChild(this.directionWaitingEl(s, d));
                 const last = d.last ? relativeDay(d.last.at) : '';
                 if (last) meta.appendChild(el('span', undefined, L.dirLastShort(last)));
             }
@@ -1151,6 +1152,25 @@ export const researchDirectionsMethods = uiModule({
         return detail;
     },
 
+    /**
+     * "N awaiting an answer" of a direction's row: with the research's direction at its items (`research`,
+     * spec 150 K1.2, K1.3) a link to them in Awaiting action; an older research: text as before.
+     */
+    directionWaitingEl(s: LiveSession, d: LiveDirection): HTMLElement {
+        const L = strings.live;
+        const n = d.waiting ?? 0;
+        if (scopedWaiting(s.waiting, { kind: 'line', id: d.id, name: d.name }).length === 0) {
+            return el('span', 'research-direction__waiting', L.dirWaiting(n));
+        }
+        const link = el('button', 'link-button research-direction__waiting is-link', L.dirWaitingOpen(n));
+        link.type = 'button';
+        link.onclick = (e) => {
+            e.stopPropagation();
+            this.openWaitingScope({ kind: 'line', id: d.id, name: d.name });
+        };
+        return link;
+    },
+
     /** Its own run as the direction shows it (spec 126 U10 §1; null: not offered, see LineRunOffer). */
     lineRunOffer(s: LiveSession, d: LiveDirection): LineRunOffer | null {
         if (!runLinesOn(s.features) || d.state === 'done' || this.activeResearchNoAgent()) return null;
@@ -1168,6 +1188,15 @@ export const researchDirectionsMethods = uiModule({
         const n = s.queueCounts?.research[d.id] ?? d.tasks ?? 0;
         if (!block) return { kind: 'offer', n };
         if (block === 'running') return { kind: 'running', run: null, id: d.run ?? '' };
+        // Its queue empty while its tasks wait on the user (spec 150 K1.1): why it stands, the way to them.
+        if (block === 'empty') {
+            const waits = scopedWaiting(s.waiting, { kind: 'line', id: d.id, name: d.name });
+            if (waits.length > 0) {
+                const L = strings.live;
+                const why = waits.every(waitingForImages) ? L.lineRunStandsImages(waits.length) : L.lineRunStands(waits.length);
+                return { kind: 'held', why, limit: false, n, waiting: waits.length };
+            }
+        }
         const why = lineRunWhy(block, runs);
         return why ? { kind: 'held', why, limit: block === 'limit', n } : null;
     },
@@ -1239,7 +1268,16 @@ export const researchDirectionsMethods = uiModule({
             btn.onclick = (e) => e.preventDefault();
             why.id = `research-direction-run-why-${d.id}`;
             btn.setAttribute('aria-describedby', why.id);
-            why.appendChild(el('span', undefined, offer.why));
+            if (offer.waiting) {
+                // "Direction stalled: N tasks await action ›": its items in Awaiting action (spec 150 K1.2).
+                const open = el('button', 'link-button research-direction__run-waiting', offer.why);
+                open.type = 'button';
+                open.onclick = (e) => {
+                    e.stopPropagation();
+                    this.openWaitingScope({ kind: 'line', id: d.id, name: d.name });
+                };
+                why.appendChild(open);
+            } else why.appendChild(el('span', undefined, offer.why));
             if (offer.limit) {
                 const settings = el('button', 'link-button research-direction__run-settings', L.runsSettingsLink);
                 settings.type = 'button';
@@ -1793,7 +1831,7 @@ export const researchDirectionsMethods = uiModule({
                 meta.appendChild(el('span', 'research-direction__empty', phone && !inDeviceMode() ? L.dirEmptyPhone : L.dirEmpty));
             } else {
                 if (d.tasks) meta.appendChild(el('span', undefined, L.dirTasks(d.tasks)));
-                if (d.waiting) meta.appendChild(el('span', 'research-direction__waiting', L.dirWaiting(d.waiting)));
+                if (d.waiting) meta.appendChild(this.directionWaitingEl(s, d));
             }
         }
         if (meta.childElementCount > 0) main.appendChild(meta);

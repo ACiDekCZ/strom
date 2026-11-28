@@ -86,6 +86,7 @@ import {
 import { drawRowMoreBusy } from './row-busy.js';
 import { directionPlacesKept, type TaskOrderDo, type DirectionPlaces } from '../research-directions-write.js';
 import { agentMirror } from '../windows/agent-mirror.js';
+import { type WaitingScope } from '../research-waiting.js';
 import { FLAT_GROUP, OTHER_GROUP, listedBook, panelWaiting, panelWaitingGroups, textWithLinks, todoWaiting, waitingSection, waitingTodoCount, type WaitingGroupOpts } from '../research-waiting.js';
 import { bookHeadTitle, bookTitle, urgentBooks } from '../research-books.js';
 import { agoShort } from '../research-others.js';
@@ -372,6 +373,11 @@ export interface LiveSession {
     overviewShown: Set<string>;
     /** How the overview shows "Awaiting action" (kept until it closes). */
     waitingView: WaitingView;
+    /**
+     * "Awaiting action" narrowed to a direction or a person (spec 150), until ✕ or the overview closes. The main
+     * window's: it crosses to the overview's own window, whose ✕ asks the main window to drop it.
+     */
+    waitingScope?: WaitingScope | null;
     /** Changes seen with the Changes section open (for "N new"). */
     seenInSection: number;
     /** A backup of the tree was taken before following first replaced it. */
@@ -1054,7 +1060,11 @@ function researchCardInfo(): Map<string, ResearchCardInfo> {
     };
     // What was sent and waits for a reply asks nothing of the user now.
     for (const w of todoWaiting(waiting)) {
-        if (w.kind !== 'story') { note(w.person, 'waiting', w.what); continue; }
+        if (w.kind !== 'story') {
+            // Everyone the task is about (spec 150 K2.2: `persons`), its `person` with an older research.
+            for (const ref of new Set([w.person, ...(w.personIds ?? [])])) note(ref, 'waiting', w.what);
+            continue;
+        }
         // A story's new version: the app's own words, on both partners of a couple.
         for (const ref of [w.person, w.partner]) {
             if (!ref || out.get(ref)?.waiting) continue;

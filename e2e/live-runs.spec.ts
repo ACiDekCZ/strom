@@ -171,6 +171,61 @@ test.describe('a direction\'s own run', () => {
         await expect(runBox(page, 'G0002').locator('.research-direction__run-why')).toHaveText('Nothing in the direction\'s queue.');
     });
 
+    test('its tasks awaiting action (spec 150 K1.1, K1.2): "Direction stalled" opens Awaiting action of the direction, ✕ shows all', async ({ page }) => {
+        const waiting = [
+            { id: 'T0201', what: 'Odpovědět na dopis farnosti', at: at(-90), kind: 'letter', research: 'G0002', person: 'P0002' },
+            { id: 'T0202', what: 'Snímky matriky Horní Ves', at: at(-60), kind: 'images', research: 'G0002' },
+            { id: 'T0203', what: 'Rozhodnout o sňatku', at: at(-30), kind: 'decide', research: 'G0001', person: 'P0001' },
+        ];
+        await followRuns(page, {
+            researches: directions('G0002', { canStart: false, why: 'empty', waiting: 2 }), waiting,
+        });
+        await openOverview(page);
+        // The count in the row is a link to them.
+        const count = directionRow(page, 'G0002').locator('.research-direction__waiting');
+        await expect(count).toHaveText('2 awaiting an answer ›');
+        await expect(count).toHaveJSProperty('tagName', 'BUTTON');
+        await unfold(page, 'G0002');
+        const stands = runBox(page, 'G0002').locator('.research-direction__run-waiting');
+        await expect(stands).toHaveText('Direction stalled: 2 tasks await action ›');
+        await stands.click();
+        const ov = overview(page);
+        const chip = ov.locator('.research-overview__scope-chip');
+        await expect(chip).toHaveText('Direction: Malí z Horní Vsi✕');
+        await expect(chip).toHaveAttribute('aria-label', 'Direction: Malí z Horní Vsi, Remove filter');
+        await expect(chip).toBeInViewport();
+        await expect(ov.locator('.research-overview__waiting-item')).toHaveCount(2);
+        await expect(ov.locator('.research-overview__waiting-item')).not.toContainText(['Rozhodnout o sňatku']);
+        await chip.click();
+        await expect(chip).toHaveCount(0);
+        await expect(ov.locator('.research-overview__waiting-item')).toHaveCount(3);
+        // The direction's count opens it too.
+        await count.click();
+        await expect(chip).toHaveText('Direction: Malí z Horní Vsi✕');
+        await expect(ov.locator('.research-overview__waiting-item')).toHaveCount(2);
+    });
+
+    test('its tasks all waiting for images (spec 150 K1.1): "… wait for images ›"', async ({ page }) => {
+        const waiting = [{ id: 'T0202', what: 'Snímky matriky Horní Ves', at: at(-60), kind: 'images', research: 'G0002' }];
+        // The kinds of items come with waiting.groups.
+        await followRuns(page, { researches: directions('G0002', { canStart: false, why: 'empty', waiting: 1 }), waiting, features: [...RUN_FEATURES, 'waiting.groups'] });
+        await openOverview(page);
+        await unfold(page, 'G0002');
+        await expect(runBox(page, 'G0002').locator('.research-direction__run-waiting')).toHaveText('Direction stalled: 1 task waits for images ›');
+    });
+
+    test('an older research (no research at its items, spec 150 K1.3): the reason and the count as text, as before', async ({ page }) => {
+        const waiting = [{ id: 'T0201', what: 'Odpovědět na dopis farnosti', at: at(-90), kind: 'letter', person: 'P0002' }];
+        await followRuns(page, { researches: directions('G0002', { canStart: false, why: 'empty', waiting: 1 }), waiting });
+        await openOverview(page);
+        const count = directionRow(page, 'G0002').locator('.research-direction__waiting');
+        await expect(count).toHaveText('1 awaiting an answer');
+        await expect(count).toHaveJSProperty('tagName', 'SPAN');
+        await unfold(page, 'G0002');
+        await expect(runBox(page, 'G0002').locator('.research-direction__run-why')).toHaveText('Nothing in the direction\'s queue.');
+        await expect(runBox(page, 'G0002').locator('.research-direction__run-waiting')).toHaveCount(0);
+    });
+
     for (const [why, text] of [
         ['noAgent', 'This computer has no agent installed that the research can start.'],
         ['oldRun', 'An agent started by an older version of the research is working on the tree; a direction\'s agent cannot start beside it. It can once that one ends.'],

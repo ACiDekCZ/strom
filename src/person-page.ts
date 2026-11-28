@@ -224,6 +224,8 @@ export interface PersonPageContext {
     history?: { payload: HistoryPayload; env?: PersonHistoryEnv };
     /** Texts of research tasks about the person waiting outside the queue. */
     waiting?: readonly string[];
+    /** How many items of "Awaiting action" name the person, while the research is followed (spec 150 K2.3). */
+    waitingOpen?: number;
     /** Last change of the tree (ISO), for the window's footer. */
     changedAt?: string;
     /** Read-only mode or a locked person: no links into the research. */
@@ -266,6 +268,8 @@ export interface PersonPageData {
     /** The research is still looking for a place's history. */
     historyPending: boolean;
     waiting: readonly string[];
+    /** "Awaiting action · N ›" in the app (spec 150 K2.3); 0: not drawn. */
+    waitingOpen: number;
     storyDraft: boolean;
     changedAt?: string;
     readOnly: boolean;
@@ -573,7 +577,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
     if (!src) {
         return {
             personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree,
-            living: new Set(), history: [], historyPending: false, waiting: [], storyDraft: false,
+            living: new Set(), history: [], historyPending: false, waiting: [], waitingOpen: 0, storyDraft: false,
             readOnly: !!ctx.readOnly, counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
             participations: [], places: [], geo: {}, rod: null, ancestors: null,
         };
@@ -700,6 +704,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree, living,
         history, historyPending: groups.research && historyPending,
         waiting: groups.research ? [...(ctx.waiting ?? [])] : [],
+        waitingOpen: groups.research ? ctx.waitingOpen ?? 0 : 0,
         storyDraft: groups.research && prot.drafts.has(id) && !!person.story?.text?.trim(),
         ...(ctx.changedAt ? { changedAt: ctx.changedAt } : {}),
         readOnly: !!ctx.readOnly,
@@ -1164,6 +1169,10 @@ function researchItems(page: PersonPageData, lang: Language, c?: Ctx): ResearchI
         out.tips.push(`<strong>${esc(item.yearLabel ?? String(item.year))} · ${esc(kind)}:</strong> <span${item.tipLang && item.tipLang !== lang ? ` lang="${esc(item.tipLang)}"` : ''}>${esc(stripResearchIds(item.tip).text)}</span>`);
     }
     if (page.historyPending) out.pending.push(esc(P.historyPending));
+    // Into the overview's "Awaiting action", narrowed to the person (spec 150 K2.3): it stays in the app, no mark.
+    if (c && c.app && page.waitingOpen > 0) {
+        out.pending.push(`<button type="button" class="pp-act pp-waiting-open" data-pp-action="research:waiting">${esc(P.waitingOpen(page.waitingOpen))}</button>`);
+    }
     for (const w of page.waiting) out.pending.push(`${esc(P.waiting)} ${esc(stripResearchIds(w).text)}`);
     if (page.storyDraft) out.pending.push(esc(P.storyDraft));
     const edge = person.research?.edge;

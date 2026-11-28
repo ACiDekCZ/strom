@@ -22,6 +22,7 @@
  *   so the UI asks here without importing the windows' start.
  */
 
+import type { WaitingScope } from '../research-waiting.js';
 import type { TreeId } from '../types.js';
 import type { LiveSession, OverviewViewing } from '../ui/research-ui.js';
 import { QUEUE_TASK_KINDS, RESEARCH_LINK_ACTIONS, imageNumber, type QueueTaskKind, type ResearchLinkAction } from '../research-link.js';
@@ -401,6 +402,8 @@ export type OverviewAction =
     | { action: 'waiting-unsent'; args: { itemId: string } }
     /** Mark a whole place's items sent (`day`: the one day all of them went out). */
     | { action: 'waiting-group-sent'; args: { group: string; day?: string } }
+    /** "Awaiting action" narrowed to a direction or a person (spec 150), or all of it again (`scope: null`, ✕). */
+    | { action: 'waiting-scope'; args: { scope: WaitingScope | null } }
     /** "Try again" in a row whose write was refused (§7). */
     | { action: 'waiting-retry'; args: { itemId: string } }
     /** "Retry with the agent" at an item (spec 089 §1.3): written by the main window (its toast), the outcome back (WaitingRetryResult | null). */
@@ -453,7 +456,7 @@ export const OVERVIEW_ACTION_IDS = [
     'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings', 'runs-settings',
     'hover-person', 'verify-stop', 'run-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'follow-run', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
-    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-agent-retry', 'waiting-group-agent-retry', 'waiting-file', 'waiting-audit', 'waiting-aside',
+    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-scope', 'waiting-retry', 'waiting-agent-retry', 'waiting-group-agent-retry', 'waiting-file', 'waiting-audit', 'waiting-aside',
     'waiting-import', 'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
     'queue-list', 'queue-order',
 ] as const satisfies readonly OverviewActionId[];
@@ -594,6 +597,14 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
         }
         case 'waiting-group-agent-retry':
             return str(a.group) ? { action, args: { group: a.group } } : null;
+        case 'waiting-scope': {
+            if (a.scope === null) return { action, args: { scope: null } };
+            const sc = a.scope as Record<string, unknown> | undefined;
+            if (!sc || typeof sc !== 'object' || typeof sc.name !== 'string' || sc.name.length > 200) return null;
+            if (sc.kind === 'line' && typeof sc.id === 'string' && /^G\d{1,9}$/.test(sc.id)) return { action, args: { scope: { kind: 'line', id: sc.id, name: sc.name } } };
+            if (sc.kind === 'person' && typeof sc.ref === 'string' && /^P\d{1,9}$/.test(sc.ref)) return { action, args: { scope: { kind: 'person', ref: sc.ref, name: sc.name } } };
+            return null;
+        }
         case 'waiting-audit':
             if (!str(a.itemId)) return null;
             if (a.do === 'fix') return str(a.expect) && a.expect.length <= 120 ? { action, args: { itemId: a.itemId, do: 'fix', expect: a.expect } } : null;

@@ -59,7 +59,11 @@ export const overviewWindowMethods = uiModule({
             return;
         }
         const s = liveSession();
-        if (s) s.overview = false;
+        if (s) {
+            s.overview = false;
+            // Its scope of Awaiting action went with it (spec 150).
+            s.waitingScope = null;
+        }
         this.closeOverviewViewing();
         this.renderLivePanel();
     },
@@ -301,6 +305,11 @@ export const overviewWindowMethods = uiModule({
             case 'waiting-group-sent':
                 if (!s) return false;
                 void this.markWaitingGroupSent(s, a.args.group, a.args.day);
+                return true;
+            case 'waiting-scope':
+                if (!s) return false;
+                if (a.args.scope) this.openWaitingScope(a.args.scope);
+                else this.clearWaitingScope();
                 return true;
             case 'waiting-retry':
                 return !!s && this.retryWaitingRow(s, a.args.itemId);

@@ -387,7 +387,43 @@ export function panelWaitingGroups<T extends LiveWaiting>(items: readonly T[], o
  */
 export function personWaiting<T extends LiveWaiting>(items: readonly T[], refn: string | undefined): T[] {
     if (!refn) return [];
-    return orderWaiting(todoWaiting(items)).filter(w => w.person === refn || (w.kind === 'story' && w.partner === refn));
+    return orderWaiting(todoWaiting(items)).filter(w => waitingNames(w, refn) || (w.kind === 'story' && w.partner === refn));
+}
+
+/**
+ * The item names the person (their REFN): as its `person`, or among everyone the task is about
+ * (`personIds`, spec 150 K2.2; an older research says only `person`). One item counts once.
+ */
+export function waitingNames(w: Pick<LiveWaiting, 'person' | 'personIds'>, refn: string | undefined): boolean {
+    return !!refn && (w.person === refn || !!w.personIds?.includes(refn));
+}
+
+/**
+ * "Awaiting action" narrowed to a direction or a person (spec 150 K1.2, K2.3): the chip "Direction: … ✕" /
+ * "Person: … ✕" over the list, applied before the grouping; it lasts until ✕ or the overview closes.
+ */
+export type WaitingScope =
+    | { kind: 'line'; id: string; name: string }
+    | { kind: 'person'; ref: string; name: string };
+
+/**
+ * An item within the scope: a direction's by its `research` (an item without it, of an older research, never);
+ * a person's when it names them (`person`, `personIds`) or a story's new version of their couple.
+ */
+export function waitingInScope(w: LiveWaiting, scope: WaitingScope): boolean {
+    if (scope.kind === 'line') return !!w.research && w.research === scope.id;
+    return waitingNames(w, scope.ref) || (w.kind === 'story' && w.partner === scope.ref);
+}
+
+/** The items of the scope (all of them without one). */
+export function scopedWaiting<T extends LiveWaiting>(items: readonly T[], scope: WaitingScope | null | undefined): readonly T[] {
+    return scope ? items.filter(w => waitingInScope(w, scope)) : items;
+}
+
+/** The same scope (a direction's id, a person's REFN), whatever its name. */
+export function sameWaitingScope(a: WaitingScope | null | undefined, b: WaitingScope | null | undefined): boolean {
+    if (!a || !b) return !a && !b;
+    return a.kind === b.kind && (a.kind === 'line' ? a.id === (b as typeof a).id : a.ref === (b as Extract<WaitingScope, { kind: 'person' }>).ref);
 }
 
 /** The order the actions stand in: Chat right next to Answer, never tucked away. */

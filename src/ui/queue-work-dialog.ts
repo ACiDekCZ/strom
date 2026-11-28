@@ -707,7 +707,8 @@ export const queueWorkMethods = uiModule({
         const d = s.researches.find(x => x.id === id);
         const offer = d ? this.lineRunOffer(s, d) : null;
         const why = !d ? strings.live.lineRunCannot
-            : offer?.kind === 'held' ? offer.why
+            // A stalled direction's sentence without its "›": no link to its waiting items in the dialog (spec 150).
+            : offer?.kind === 'held' ? (offer.waiting ? offer.why.replace(/\s*›$/, '') : offer.why)
             : offer?.kind === 'running' ? strings.live.lineRunWorkingMeta(offer.run?.agentName || d.agent || '')
             : !offer ? strings.live.lineRunCannot : '';
         const held = !!why && offer?.kind !== 'starting';

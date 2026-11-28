@@ -18,7 +18,7 @@ import type { DirectionMove } from '../research-directions.js';
 import type { DirectionStateDo, TaskOrderDo } from '../research-directions-write.js';
 import type { FollowView } from '../live-follow-prefs.js';
 import { PLACES_ANSWER_FEATURE, PLACES_UNDO_FEATURE } from '../places-bridge.js';
-import { todoWaiting } from '../research-waiting.js';
+import { sameWaitingScope, todoWaiting, type WaitingScope } from '../research-waiting.js';
 import { replacePendingHypotheses, type PendingHypothesis } from '../research-hypothesis-wait.js';
 import { setAcceptBatch, type AcceptBatch } from '../research-hypothesis-waiting.js';
 import { moveQueueItemFirst, noteQueueRev, placeQueueItemInLists, onQueueListsChange, readQueuePage, resetQueueLists, setQueueRemote } from '../research-queue-pages.js';
@@ -132,6 +132,11 @@ export function overviewWindowDrawn(state: OverviewResearchState, prev: LiveSess
         const rec = s as unknown as Record<string, unknown>;
         const old = prev as unknown as Record<string, unknown>;
         for (const k of VIEW_FIELDS) rec[k] = old[k];
+        // A new scope of Awaiting action (spec 150): the section shown, its place groups unfolded.
+        if (s.waitingScope && !sameWaitingScope(prev.waitingScope, s.waitingScope)) {
+            s.overviewShown.add('waiting');
+            for (const key of [...s.waitingView.open.keys()]) if (key.startsWith('group:')) s.waitingView.open.delete(key);
+        }
         fresh = s.waiting.filter(w => !s.seenWaiting.has(w.id));
         for (const w of fresh) s.seenWaiting.add(w.id);
     }
@@ -407,6 +412,9 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         },
         async markWaitingUnsent(_s: LiveSession, id: string): Promise<undefined> { run('waiting-unsent', { itemId: id }); return undefined; },
         async markWaitingGroupSent(_s: LiveSession, key: string, day?: string): Promise<void> { run('waiting-group-sent', { group: key, ...(day ? { day } : {}) }); },
+        // The scope of Awaiting action is the main window's (spec 150): it sets it, its next snapshot draws it here.
+        openWaitingScope(scope: WaitingScope): void { run('waiting-scope', { scope }); },
+        clearWaitingScope(): void { run('waiting-scope', { scope: null }); },
         // A row's own write (§7) as the main window has it: "saving", or refused with its sentence; Try again asks it.
         waitingRowNote(_s: LiveSession, id: string): RowNote | null {
             const ww = extras().waitingWrite;

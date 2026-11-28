@@ -3236,6 +3236,12 @@ export interface LiveWaiting {
     /** The research direction of the task ("G0002"; a newer research). */
     research?: string;
     /**
+     * Everyone a task is about (`persons`, spec 150 K2.1, `waiting.persons`): REFNs in the task's order, no
+     * duplicates, `person` among them when it names one. Absent from an older research (only `person` counts then).
+     * (Not `persons`: a branch's `persons` is its count of people.)
+     */
+    personIds?: string[];
+    /**
      * 'story': a new version of an approved story (the person's, or with `partner` the couple's), not a task.
      * 'permission': the research asks how it may download from an archive (`host`); `on` carries its terms.
      * 'houseStory' (spec 145 T4): a house's story (or its new version) waits for approval — the research's `story`
@@ -5416,6 +5422,18 @@ export function waitingPlaceFields(r: Record<string, unknown>): Partial<LiveWait
  * announces `waiting.groups` (kind, section, group, phase … are read only then).
  * A place question (kind 'place') is read with or without them.
  */
+/** A task's people (`persons`, spec 150; kept on this device as `personIds`): valid REFNs only, once each, at most 50; none valid: null. */
+function waitingPersonIds(value: unknown): string[] | null {
+    if (!Array.isArray(value)) return null;
+    const out: string[] = [];
+    for (const v of value.slice(0, 200)) {
+        const ref = researchPersonRef(v);
+        if (ref && !out.includes(ref)) out.push(ref);
+        if (out.length >= 50) break;
+    }
+    return out.length ? out : null;
+}
+
 export function sanitizeWaiting(value: unknown, groups = false, branches = false, audit = false, gain = false, retry = false,
     imports = false): LiveWaiting[] {
     if (!Array.isArray(value)) return [];
@@ -5451,9 +5469,10 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
         // A hypothesis to decide (spec 074, V13): it names the hypothesis by its id; without a valid one it is "other".
         const hypo = groups && !story && !host && r.kind === 'hypothesis' ? researchHypothesisRef(r.id) : null;
         const kind: LiveWaiting['kind'] = story ? 'story' : houseStory ? 'houseStory' : host ? 'permission' : placeQ ? 'place' : branch ? 'branch' : hypo ? 'hypothesis' : task ?? undefined;
+        const personIds = !story && !houseStory && !host && !placeQ && !branch && !hypo ? waitingPersonIds(Array.isArray(r.persons) ? r.persons : r.personIds) : null;
         out.push({
             id: host ? `permission:${host}` : cleanText(r.id, 40), what, on: cleanText(r.on, MAX_WAITING_ON), at: cleanText(r.at ?? r.since, 40),
-            ...(person ? { person } : {}), ...(research ? { research } : {}),
+            ...(person ? { person } : {}), ...(research ? { research } : {}), ...(personIds ? { personIds } : {}),
             ...(story ? { kind: 'story' as const } : {}), ...(partner && partner !== person ? { partner } : {}),
             ...(houseStory ? { kind: 'houseStory' as const, house: houseStory } : {}),
             ...(host ? { kind: 'permission' as const, host } : {}),

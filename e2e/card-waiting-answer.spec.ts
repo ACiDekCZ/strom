@@ -167,7 +167,7 @@ test.describe('the card\'s ! answers (1109)', () => {
     });
 
     /** Following the research: its bridge says what waits and takes the links. */
-    async function follow(page: Page, size = { width: 1440, height: 900 }): Promise<void> {
+    async function follow(page: Page, size = { width: 1440, height: 900 }, waiting: Record<string, unknown>[] = WAITING): Promise<void> {
         await page.setViewportSize(size);
         await page.addInitScript((links) => {
             if (sessionStorage.getItem('seeded')) return;
@@ -177,7 +177,7 @@ test.describe('the card\'s ! answers (1109)', () => {
         const status = () => ({
             tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 4,
             working: [{ who: 'agent-matriky', since: new Date().toISOString(), task: 'T0101 Matriky', person: 'P0001' }],
-            waiting: WAITING, queue: [], links: LINKS,
+            waiting, queue: [], links: LINKS,
         });
         await page.route(`${BRIDGE}/**`, async (route) => {
             const path = new URL(route.request().url()).pathname;
@@ -209,6 +209,36 @@ test.describe('the card\'s ! answers (1109)', () => {
         await card(page, 'Jan').locator('.card-signal').click();
         await expect(panel(page)).not.toHaveClass(/collapsed/);
         await expectJanLit(page);
+    });
+
+    test('everyone a task is about (spec 150 K2.2, K2.3): the ! and Answer · N count persons once; the person page leads to their items', async ({ page }) => {
+        await follow(page, undefined, [
+            { id: 'T0021', what: 'Potvrďte otce Jana', person: 'P0012', persons: ['P0012'] },
+            { id: 'T0022', what: 'Sourozenci Jan a Eva v jednom zápisu', persons: ['P0013', 'P0012'] },
+            { id: 'T0023', what: 'Josefův úkol', person: 'P0001' },
+        ]);
+        // Eva only in persons: her ! all the same.
+        await expect(card(page, 'Eva').locator('.card-signal')).toBeVisible();
+        await card(page, 'Jan').locator('.name').click();
+        await expect(page.locator('.context-menu [data-action="signal-waiting"]')).toHaveText(/Answer · 2 waiting/);
+        await page.locator('.context-menu .context-menu-header--page').click();
+        const pp = page.locator('#person-page-modal');
+        await expect(pp).toBeVisible();
+        const row = pp.locator('[data-pp-action="research:waiting"]');
+        await expect(row).toHaveText('Awaiting action · 2 ›');
+        // The research's part folded at first.
+        await pp.locator('#pp-sec-research .pp-fold-h').first().click();
+        await row.click();
+        await expect(pp).toBeHidden();
+        const ov = page.locator('#research-overview');
+        await expect(ov).toBeVisible();
+        const chip = ov.locator('.research-overview__scope-chip');
+        await expect(chip).toHaveText('Person: Jan Fíšek✕');
+        await expect(chip).toBeInViewport();
+        await expect(ov.locator('.research-overview__waiting-item')).toHaveCount(2);
+        await chip.click();
+        await expect(ov.locator('.research-overview__waiting-item')).toHaveCount(3);
+        expect(await launched(page)).toEqual([]);
     });
 
     test('following on a phone: the panel is a strip, so the overview opens at the person\'s items, lit', async ({ page }) => {
