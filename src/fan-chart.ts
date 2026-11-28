@@ -30,7 +30,7 @@ import {
     FanColorMode, FanTheme, FanPalette, FanStyle, FanPatternId, FAN_PATTERNS, fanPalette, fanFillLook, fanLegend, fanHasRepeats,
     fanMixWhite, FAN_PRINT_DIM, FAN_PRINT_EDGE, FanRodGroup, fanRodOtherSwatch, fanPatternMarks, fanStyleFont,
 } from './fan-colors.js';
-import { assignFanRodColors, fanRodLegend, FanRodAssignment } from './fan-rod-assign.js';
+import { assignFanRodColors, fanRodLegend, fanRodSides, FanRodAssignment } from './fan-rod-assign.js';
 import {
     FanLabelSizes, FanMeasure, fanScreenSizes, fanPrintSizes, fanBaseSize, defaultFanMeasure, fanLabelBox, fitFanLabel, fitFanSectorLabel,
     fanLabelSvg, fanCenteredRowsSvg, fanFocusFallbackRows, fanRadialRotation, fanYears, FanLabelBox, FanContent,
@@ -1198,14 +1198,47 @@ interface PosterLayout {
     subtitle: string;
 }
 
-function posterLayout(model: FanModel, mode: FanColorMode, meta: PosterFooterMeta, measure: FanMeasure,
-    rods: PosterRodOptions, protect?: (p: Person) => boolean): PosterLayout {
-    const s = posterScale(model);
-    const b = model.bounds;
+/**
+ * The model as the poster's title, subtitle and legend see it under "Hide
+ * others" (spec 098 §11b): the people outside the kept set (the focus always
+ * kept) left out, so no name or count of theirs reaches the text around the
+ * fan. The drawing itself keeps their places as outlines (buildFanSvg).
+ */
+function keptFanModel(model: FanModel, keepOnly: ReadonlySet<PersonId> | null | undefined): FanModel {
+    if (!keepOnly) return model;
+    const kept = (p: Person | null) => !!p && (p.id === model.focus.id || keepOnly.has(p.id));
+    return {
+        ...model,
+        sectors: model.sectors.map(s => {
+            if (kept(s.person)) return s;
+            const { repeatOf: _r, ...rest } = s;
+            return { ...rest, person: null };
+        }),
+        desc: model.desc.map(s => {
+            if (kept(s.person)) return s;
+            const { repeatOfKey: _r, ...rest } = s;
+            return { ...rest, person: null };
+        }),
+    };
+}
+
+/** A line assignment counted over the kept people only (their slots as drawn): the lines of hidden people leave the legend. */
+function keptRodAssignment(a: FanRodAssignment, kept: FanModel): FanRodAssignment {
+    const { rods, noRod } = fanRodSides(kept, a.index);
+    return { ...a, noRod, rods: a.rods.filter(r => rods.has(r.id)).map(r => ({ ...r, count: rods.get(r.id)!.count })) };
+}
+
+function posterLayout(full: FanModel, mode: FanColorMode, meta: PosterFooterMeta, measure: FanMeasure,
+    rods: PosterRodOptions, protect?: (p: Person) => boolean, keepOnly?: ReadonlySet<PersonId> | null): PosterLayout {
+    const s = posterScale(full);
+    const b = full.bounds;
     const fanW = b.w * s, fanH = b.h * s;
     const S = strings.fan;
-    // The family lines' colours once for the subtitle and the legend.
-    if (mode === 'rod') rods = { ...rods, rodColors: fanRodColorsOf(model, rods) };
+    // The family lines' colours once for the subtitle and the legend (as the drawing has them).
+    if (mode === 'rod') rods = { ...rods, rodColors: fanRodColorsOf(full, rods) };
+    // The text around the fan names and counts only the people it draws (spec 098 §11b).
+    const model = keptFanModel(full, keepOnly);
+    if (model !== full && rods.rodColors) rods = { ...rods, rodColors: keptRodAssignment(rods.rodColors, model) };
     const title = S.posterTitle(protect?.(model.focus) ? S.living : shownName(model.focus), model.shape === 'two');
     const subtitleParts = [
         S.posterGenerations(model.generations, model.shape === 'two' ? model.descGenerations : null),
@@ -1280,8 +1313,8 @@ function posterOccupancy(model: FanModel, L: PosterLayout): FanOccupancy {
  * for tile skipping.
  */
 export function fanPosterGeometry(model: FanModel, meta: PosterFooterMeta,
-    opts?: Pick<FanSvgOptions, 'colorMode' | 'measure' | 'rodIndex' | 'rodColors' | 'protect' | 'highlight' | 'style'>): FanPosterGeometry {
-    const L = posterLayout(model, opts?.colorMode ?? 'gender', meta, opts?.measure ?? defaultFanMeasure, opts ?? {}, opts?.protect);
+    opts?: Pick<FanSvgOptions, 'colorMode' | 'measure' | 'rodIndex' | 'rodColors' | 'protect' | 'highlight' | 'style' | 'keepOnly'>): FanPosterGeometry {
+    const L = posterLayout(model, opts?.colorMode ?? 'gender', meta, opts?.measure ?? defaultFanMeasure, opts ?? {}, opts?.protect, opts?.keepOnly);
     return { width: L.width, height: L.height, hasContent: posterOccupancy(model, L) };
 }
 
@@ -1297,7 +1330,7 @@ export function buildFanPosterSvg(model: FanModel, opts: FanPosterOptions, meta:
     const measure = opts.measure ?? defaultFanMeasure;
     // The family lines' colours once for the drawing, the subtitle and the legend.
     if (mode === 'rod' && !opts.rodColors) opts = { ...opts, rodColors: fanRodColorsOf(model, opts) };
-    const L = posterLayout(model, mode, meta, measure, opts, opts.protect);
+    const L = posterLayout(model, mode, meta, measure, opts, opts.protect, opts.keepOnly);
     const { esc } = opts;
 
     // Never editable (no "+" slots), always self-contained print colours.

@@ -397,9 +397,12 @@ function buildCurrentPoster(look?: FanLook): PosterBuild | null {
         // A highlighted family line prints as it is seen (spec 114 §7).
         const highlight = view?.getPrintHighlight() ?? null;
         const measure = fanMeasureFor(fanStyleFont(style));
+        // "Hide others" of a selection (spec 098 §11b): the sectors outside it as empty outlines, as on screen.
+        const keepOnly = TreeRenderer.getFanKeepOnly();
         const svg = buildFanPosterSvg(model, {
             ...(rodColors ? { rodColors } : {}),
             ...(highlight ? { highlight } : {}),
+            ...(keepOnly ? { keepOnly } : {}),
             esc: escapeXml,
             editable: false,
             addParentLabel: '',
@@ -413,7 +416,8 @@ function buildCurrentPoster(look?: FanLook): PosterBuild | null {
             mmPerPx: MM_PER_PX,
             fontFaceCss: appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]),
         }, meta);
-        const geom = fanPosterGeometry(model, meta, { colorMode, style, measure, ...(rodColors ? { rodColors } : {}), ...(highlight ? { highlight } : {}) });
+        const geom = fanPosterGeometry(model, meta, { colorMode, style, measure, ...(rodColors ? { rodColors } : {}), ...(highlight ? { highlight } : {}),
+            ...(keepOnly ? { keepOnly } : {}) });
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
     }
 

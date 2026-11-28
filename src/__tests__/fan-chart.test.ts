@@ -251,6 +251,50 @@ describe('buildFanPosterSvg', () => {
     });
 });
 
+describe('fan poster under "Hide others" (098 §11b, 1128)', () => {
+    // The father's side hidden: its names must not reach the poster (sectors, titles, legend, counts).
+    const fam = () => data([
+        person('me', 'male', ['f', 'm'], { firstName: 'Teodor', lastName: 'Pětikvět' }),
+        person('f', 'male', ['ff', 'fm'], { firstName: 'Kvirin', lastName: 'Pastvinář', birthDate: '1901', deathDate: '1971' }),
+        person('m', 'female', ['mf', 'mm'], { firstName: 'Rozálie', lastName: 'Pětikvětová', birthDate: '1906', deathDate: '1982' }),
+        person('ff', 'male', [], { firstName: 'Bonifác', lastName: 'Pastvinář' }),
+        person('fm', 'female', [], { firstName: 'Ludmila', lastName: 'Bodláčková' }),
+        person('mf', 'male', [], { firstName: 'Vendelín', lastName: 'Pětikvět' }),
+        person('mm', 'female', [], { firstName: 'Apolena', lastName: 'Šuplátková' }),
+    ]);
+    const hidden = ['Kvirin', 'Bonifác', 'Ludmila', 'Pastvinář', 'Bodláčková', '1901'];
+    const keepOnly = new Set(['m', 'mf', 'mm'] as PersonId[]);
+
+    for (const colorMode of ['gender', 'line', 'rod'] as const) {
+        it(`${colorMode}: no name of a hidden person anywhere, their sectors outlines; without it every name`, () => {
+            const model = buildFanModel(fam(), 'me' as PersonId, 3)!;
+            const opts = { ...svgOpts, editable: false, measure: estimate, colorMode, mmPerPx: 0.1 };
+            const all = buildFanPosterSvg(model, opts, { viewLabel: 'Fan' });
+            const kept = buildFanPosterSvg(model, { ...opts, keepOnly }, { viewLabel: 'Fan' });
+            for (const name of ['Kvirin', 'Bonifác', 'Ludmila', 'Rozálie', 'Vendelín', 'Apolena']) expect(all).toContain(name);
+            for (const name of hidden) expect(kept).not.toContain(name);
+            for (const name of ['Rozálie', 'Vendelín', 'Apolena', 'Teodor']) expect(kept).toContain(name);
+            const off = [...kept.matchAll(/data-fan-off="(a\d+)"/g)].map(m => m[1]).sort();
+            expect(off).toEqual(['a2', 'a4', 'a5'].sort());
+            expect(all).not.toContain('data-fan-off');
+            // The poster's size follows the text it carries.
+            const g = fanPosterGeometry(model, { viewLabel: 'Fan' }, { colorMode, measure: estimate, keepOnly });
+            expect(kept).toContain(`width="${g.width.toFixed(2)}" height="${g.height.toFixed(2)}"`);
+        });
+    }
+
+    it('rod: the counts of the legend count the drawn people only', () => {
+        const model = buildFanModel(fam(), 'me' as PersonId, 3)!;
+        const opts = { ...svgOpts, editable: false, measure: estimate, colorMode: 'rod' as const };
+        const legend = (svg: string) => /<g class="fan-poster-legend"[\s\S]*?<\/g>/.exec(svg)?.[0] ?? '';
+        const kept = legend(buildFanPosterSvg(model, { ...opts, keepOnly }, {}));
+        expect(kept).not.toMatch(/Pastvin/);
+        const counts = [...kept.matchAll(/· (\d+)×/g)].reduce((n, m) => n + Number(m[1]), 0);
+        // The focus and the three kept people.
+        expect(counts).toBe(4);
+    });
+});
+
 describe('fanPosterGeometry (tile skipping)', () => {
     const model = () => buildFanModel(data([
         person('me', 'male', ['f']), person('f', 'male'),

@@ -8,6 +8,7 @@
  */
 
 import { test, expect, Page, Locator } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { openApp } from './helpers.js';
 import { rodsTree } from './rods-fixture.js';
 
@@ -87,6 +88,39 @@ test.describe('the selection in the Fan', () => {
         await hide(page).click();
         await expect(page.locator('#fan-chart .fan-sector--off')).toHaveCount(0);
         await expect(page.locator('#fan-chart [data-fan-person="b12"]')).toHaveCount(1);
+    });
+
+    test('ancestors: the poster under Hide others draws the others as outlines, without their names (1128)', async ({ page }) => {
+        await setup(page, 'b13');
+        const pop = await openPicker(page);
+        await pop.locator('.sp-rodpick-q').fill('dagny');
+        await expect(pop.locator('button.sp-rodpick-first')).toContainText('Ancestors: Dagny');
+        await pop.locator('.sp-rodpick-q').press('Enter');
+        await page.locator('#view-mode-fan').click();
+        await expect(fan(page)).toBeVisible();
+        const posterSvg = async (): Promise<string> => {
+            await page.evaluate(() => window.Strom.UI.showPosterDialog());
+            const poster = page.locator('#poster-modal');
+            await expect(poster).toBeVisible();
+            const [download] = await Promise.all([
+                page.waitForEvent('download'),
+                poster.locator('.menu-option', { hasText: 'SVG' }).click(),
+            ]);
+            const svg = readFileSync(await download.path(), 'utf-8');
+            // The dialog closes with the download.
+            await expect(poster).toBeHidden();
+            return svg;
+        };
+        // Without Hide others: everyone, as before.
+        const all = await posterSvg();
+        expect(all).not.toContain('fan-sector--off');
+        expect(all).toContain('Viktor');
+        await hide(page).click();
+        await expect(hide(page)).toHaveAttribute('aria-pressed', 'true');
+        const kept = await posterSvg();
+        expect(kept).toContain('fan-sector--off');
+        for (const name of ['Viktor', 'Gustaf', '1860']) expect(kept).not.toContain(name);
+        for (const name of ['Dagny', 'Anton', 'Axel']) expect(kept).toContain(name);
     });
 
     test('a family line: no switch in the Fan; its Hide others of the Family view has no effect there and stays', async ({ page }) => {

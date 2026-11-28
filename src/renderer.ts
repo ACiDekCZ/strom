@@ -2208,6 +2208,11 @@ class TreeRendererClass {
         return this.personFilterFan && this.personFilter ? this.personFilter : null;
     }
 
+    /** The Fan's "Hide others" set for an output of the view (the poster draws as the screen does); null: all. */
+    getFanKeepOnly(): ReadonlySet<PersonId> | null {
+        return this.fanKeepOnly();
+    }
+
     /**
      * Laid out anew for "Hide others": the card nearest the screen's middle
      * stays in its place when it is still drawn, else the focus (always
